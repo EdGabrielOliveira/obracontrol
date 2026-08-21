@@ -50,7 +50,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		enabled: Boolean(session && user),
 	});
 	const authorization = authorizationQuery.data ?? null;
-	const authorizationReady = Boolean(session && user && authorization?.user.role);
+	const authorizationReady = Boolean(
+		session && user && authorization?.user.role,
+	);
 	const value: AuthContextValue = {
 		session,
 		user,
