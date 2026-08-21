@@ -1,0 +1,24 @@
+Options -Indexes
+
+RewriteEngine On
+
+# Permite que o AutoSSL/Let's Encrypt do cPanel valide o certificado antes do
+# redirecionamento obrigatório para HTTPS.
+RewriteRule ^\.well-known/acme-challenge/ - [L]
+
+# Mantém uma única origem pública e força HTTPS quando o Apache/cPanel servir
+# o domínio diretamente. Em modo proxy Docker, o VirtualHost do Apache aplica
+# a mesma regra antes de encaminhar a requisição ao Nginx.
+RewriteCond %{HTTPS} !=on [OR]
+RewriteCond %{HTTP_HOST} !^obracontrol\.engpac\.com\.br$ [NC]
+RewriteRule ^ https://obracontrol.engpac.com.br%{REQUEST_URI} [R=301,L,NE]
+
+# Impede a exposição acidental de artefatos e arquivos de configuração caso o
+# document root seja atendido pelo Apache em vez do container Nginx.
+RewriteRule ^(?:\.env(?:\..*)?|\.git(?:/|$)|Dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml|package(?:-lock)?\.json|bun\.lock|tsconfig\.json)$ - [F,L,NC]
+
+# Fallback da SPA: arquivos e diretórios reais continuam acessíveis; as rotas
+# do TanStack Router são entregues pelo index.html.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]

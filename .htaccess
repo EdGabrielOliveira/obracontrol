@@ -1,0 +1,24 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Permite a validação do AutoSSL/Let's Encrypt.
+    RewriteRule ^\.well-known/acme-challenge/ - [L]
+
+    # Nunca exponha código-fonte, segredos, dependências ou configurações.
+    RewriteRule ^(?:\.git(?:/|$)|node_modules(?:/|$)|apps/backend(?:/|$)|(?:\.env(?:\..*)?)|Dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml|package(?:-lock)?\.json|bun\.lock|tsconfig\.json) - [F,L,NC]
+
+    # Se o document root for a raiz do monorepo, entrega o build estático do
+    # frontend sem exigir que o cPanel aponte diretamente para apps/frontend.
+    RewriteCond %{DOCUMENT_ROOT}/apps/frontend/dist%{REQUEST_URI} -f
+    RewriteRule ^(.+)$ apps/frontend/dist/$1 [L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ apps/frontend/dist/index.html [L]
+</IfModule>
+
+<FilesMatch "^(?:\.env(?:\..*)?|Dockerfile|docker-compose(?:\.[^.]+)?\.ya?ml|package(?:-lock)?\.json|bun\.lock|tsconfig\.json)$">
+    Require all denied
+</FilesMatch>

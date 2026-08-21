@@ -1,0 +1,38 @@
+{
+	"version": "0.2",
+	"language": "pt_BR,en",
+	"import": ["./node_modules/cspell-dict-pt-br/cspell-ext.json"],
+	"files": [
+		"src/**/*.{ts,tsx}",
+		"tests/**/*.{ts,tsx}",
+		"scripts/**/*.ts",
+		"prisma/**/*.ts"
+	],
+	"ignorePaths": [
+		"src/generated/**",
+		"generated/**",
+		".prisma/**",
+		"node_modules/**",
+		"coverage/**",
+		"runtime/**",
+		"release-*"
+	],
+	"words": [
+		"API",
+		"BI",
+		"CPI",
+		"DTO",
+		"Elysia",
+		"EVM",
+		"IDP",
+		"OpenAPI",
+		"PTBR",
+		"Prisma",
+		"TypeScript",
+		"UUID",
+		"VIGENTE",
+		"bun",
+		"fflate",
+		"xlsx"
+	]
+}

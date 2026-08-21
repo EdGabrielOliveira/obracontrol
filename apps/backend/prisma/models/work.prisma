@@ -1,0 +1,83 @@
+model ConstructionWork {
+  id                  String    @id @default(uuid())
+  ownerId             String
+  code                String
+  name                String
+  costCenterId        String
+  address             String?
+  structuredAddressId String?
+  clientName          String?
+  baseDate            DateTime?
+  plannedStart        DateTime?
+  plannedEnd          DateTime?
+  activeImportId      String?
+  areaM2              Decimal?
+  operationalStatus   String?
+  responsibleName     String?
+  bdiPercentage       Decimal?  @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  costCenter             CostCenter                     @relation(fields: [costCenterId], references: [id], onDelete: Restrict)
+  structuredAddress      Address?                       @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
+  imports                ConstructionImport[]
+  importBatches          ImportBatch[]
+  items                  ConstructionBudgetItem[]
+  budgetVersions         BudgetVersion[]
+  budgetIdentities       BudgetItemIdentity[]
+  scheduleVersions       ScheduleVersion[]
+  baselineSchedules      ConstructionBaselineSchedule[]
+  scheduleRevisions      ConstructionScheduleRevision[]
+  measurements           ConstructionMeasurement[]
+  actualCosts            ConstructionActualCost[]
+  workMeasurements       WorkMeasurement[]
+  photoReports           PhotoReport[]
+  contracts              Contract[]
+  auditComments          AuditComment[]
+  supplierLinks          ConstructionWorkSupplier[]
+  memberships            WorkMembership[]
+  ledgerEvents           ConstructionLedgerEvent[]
+  budgetImpacts          ConstructionBudgetImpact[]
+  contractRequests       ContractRequest[]
+  creationIdempotency    WorkCreationIdempotency?
+  budgetProjectionState  BudgetProjectionState?
+  budgetProjectionOutbox BudgetProjectionOutbox[]
+
+  @@unique([ownerId, code])
+  @@index([ownerId])
+  @@index([ownerId, name])
+  @@index([costCenterId])
+  @@index([structuredAddressId])
+}
+
+model WorkCreationIdempotency {
+  id        String   @id @default(cuid())
+  ownerId   String
+  key       String
+  workId    String   @unique
+  createdAt DateTime @default(now())
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, key])
+  @@index([ownerId])
+}
+
+model PhotoReport {
+  id        String   @id @default(uuid())
+  ownerId   String
+  workId    String
+  title     String
+  fileName  String
+  fileSize  Int
+  mimeType  String
+  storageId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, workId])
+  @@index([workId])
+  @@index([createdAt])
+}

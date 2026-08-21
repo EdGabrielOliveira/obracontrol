@@ -1,0 +1,93 @@
+model Company {
+  id                      String   @id @default(cuid())
+  ownerId                 String
+  name                    String
+  document                String?
+  tradeName               String?
+  addressCity             String?
+  addressState            String?
+  structuredAddressId     String?
+  contactEmail            String?
+  contactPhone            String?
+  managerName             String?
+  contractTemplate        String? // PDF/DOCX do modelo contratual padrao
+  contractTemplateType    String?
+  contractTemplateBlob    Bytes?
+  contractTemplateStorageKey String?
+  contractTemplateSha256  String?
+  contractTemplateVersion Int      @default(1)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  organizations     Organization[]
+  structuredAddress Address?       @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+  @@index([structuredAddressId])
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  zipCode    String
+  street     String
+  district   String
+  number     String
+  city       String
+  state      String
+  complement String?
+  latitude   Decimal?
+  longitude  Decimal?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  companies     Company[]
+  organizations Organization[]
+  costCenters   CostCenter[]
+  works         ConstructionWork[]
+
+  @@index([zipCode])
+}
+
+model Organization {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  name                String
+  companyId           String?
+  managerName         String?
+  address             String?
+  structuredAddressId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  costCenters       CostCenter[]
+  memberships       OrganizationMembership[]
+  apiKeys           ApiKey[]
+  company           Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  structuredAddress Address?                 @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId])
+  @@index([companyId])
+  @@index([structuredAddressId])
+}
+
+model CostCenter {
+  id                  String   @id @default(cuid())
+  name                String
+  organizationId      String
+  ownerId             String
+  managerName         String?
+  address             String?
+  structuredAddressId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  structuredAddress Address?               @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
+  works             ConstructionWork[]
+  memberships       CostCenterMembership[]
+
+  @@index([organizationId, ownerId])
+  @@index([organizationId])
+  @@index([structuredAddressId])
+}

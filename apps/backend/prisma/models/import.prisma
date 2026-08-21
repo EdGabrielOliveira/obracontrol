@@ -1,0 +1,87 @@
+model ConstructionImport {
+  id               String   @id @default(uuid())
+  ownerId          String
+  workId           String?
+  fileName         String
+  sheetName        String
+  rowCount         Int
+  importedSections Json @default("[]")
+  status           String   @default("PENDING")
+  errorSummary     Json?
+  reprocessOfId    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  work              ConstructionWork?              @relation(fields: [workId], references: [id], onDelete: Cascade)
+  items             ConstructionBudgetItem[]
+  baselineSchedules ConstructionBaselineSchedule[]
+  scheduleRevisions ConstructionScheduleRevision[]
+  measurements      ConstructionMeasurement[]
+  actualCosts       ConstructionActualCost[]
+
+  @@index([ownerId])
+  @@index([workId])
+  @@index([createdAt])
+  @@index([ownerId, workId, reprocessOfId])
+}
+
+model ImportBatch {
+  id                String    @id @default(cuid())
+  ownerId           String
+  workId            String?
+  model             String
+  title             String?
+  version           String
+  fileName          String
+  fileSha256        String
+  storageKey        String
+  status            String    @default("PARSING")
+  rowCount          Int       @default(0)
+  validCount        Int       @default(0)
+  invalidCount      Int       @default(0)
+  warningCount      Int       @default(0)
+  batchVersion      Int       @default(1)
+  reprocessOfId     String?
+  quotationId       String?
+  contractRequestId String?
+  errorSummary      Json?
+  parsedWorkbook    Json?
+  // Preview imutavel da importacao de orcamento/aditivo: origem, papel e
+  // comparacao calculados no staging, para auditoria e reproducao do preview.
+  preview           Json?
+  expiresAt         DateTime
+  confirmedAt       DateTime?
+  confirmedImportId String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  work            ConstructionWork?         @relation(fields: [workId], references: [id], onDelete: SetNull)
+  quotation       Quotation?                @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  contractRequest ContractRequest?          @relation(fields: [contractRequestId], references: [id], onDelete: SetNull)
+  rows            ImportRow[]
+  proposals       ContractRequestProposal[]
+
+  @@index([ownerId, status])
+  @@index([ownerId, workId])
+  @@index([fileSha256])
+  @@index([reprocessOfId])
+  @@index([ownerId, quotationId])
+  @@index([ownerId, contractRequestId])
+}
+
+model ImportRow {
+  id        String   @id @default(cuid())
+  batchId   String
+  sheet     String
+  rowNumber Int
+  values    Json
+  status    String   @default("VALID")
+  issues    Json?
+  seq       Int      @default(0)
+  createdAt DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId, status])
+  @@index([batchId, sheet, rowNumber])
+}

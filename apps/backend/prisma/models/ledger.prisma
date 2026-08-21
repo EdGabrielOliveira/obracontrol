@@ -1,0 +1,87 @@
+model ConstructionLedgerEvent {
+  id                   String   @id @default(cuid())
+  ownerId              String
+  workId               String
+  budgetItemIdentityId String
+  budgetVersionItemId  String
+  eventType            String
+  sourceType           String
+  sourceId             String
+  componentId          String
+  amount               Decimal
+  competence           String
+  occurredAt           DateTime
+  approvalDecisionId   String?
+  budgetImpactId       String?
+  createdAt            DateTime @default(now())
+
+  work             ConstructionWork          @relation(fields: [workId], references: [id], onDelete: Cascade)
+  budgetItem       BudgetItemIdentity        @relation(fields: [budgetItemIdentityId], references: [id], onDelete: Cascade)
+  versionItem      BudgetVersionItem         @relation(fields: [budgetVersionItemId], references: [id], onDelete: Cascade)
+  approvalDecision ApprovalDecision?         @relation(fields: [approvalDecisionId], references: [id], onDelete: SetNull)
+  budgetImpact     ConstructionBudgetImpact? @relation(fields: [budgetImpactId], references: [id], onDelete: SetNull)
+
+  @@unique([eventType, sourceType, sourceId, componentId])
+  @@index([ownerId, workId, competence])
+  @@index([sourceType, sourceId])
+  @@index([budgetItemIdentityId])
+  @@index([budgetVersionItemId])
+  @@index([approvalDecisionId])
+  @@index([budgetImpactId])
+}
+
+model ConstructionBudgetImpact {
+  id                     String    @id @default(cuid())
+  ownerId                String
+  workId                 String
+  budgetItemIdentityId   String
+  budgetVersionItemId    String
+  sourceType             String
+  sourceId               String
+  componentId            String
+  impactType             String
+  status                 String    @default("PENDING")
+  quantity               Decimal?
+  budgetUnitCostSnapshot Decimal?
+  operationUnitCost      Decimal?
+  amount                 Decimal
+  approvalRequestId      String?
+  parentImpactId         String?
+  createdAt              DateTime  @default(now())
+  effectiveAt            DateTime?
+  reversedAt             DateTime?
+
+  work         ConstructionWork           @relation(fields: [workId], references: [id], onDelete: Cascade)
+  budgetItem   BudgetItemIdentity         @relation(fields: [budgetItemIdentityId], references: [id], onDelete: Cascade)
+  versionItem  BudgetVersionItem          @relation(fields: [budgetVersionItemId], references: [id], onDelete: Cascade)
+  parentImpact ConstructionBudgetImpact?  @relation("BudgetImpactReversal", fields: [parentImpactId], references: [id], onDelete: SetNull)
+  reversals    ConstructionBudgetImpact[] @relation("BudgetImpactReversal")
+  ledgerEvents ConstructionLedgerEvent[]
+
+  @@unique([sourceType, sourceId, componentId, impactType, budgetVersionItemId])
+  @@index([ownerId, workId, budgetItemIdentityId, status])
+  @@index([sourceType, sourceId])
+  @@index([budgetItemIdentityId])
+  @@index([budgetVersionItemId])
+}
+
+model ConstructionMonthlyFact {
+  id          String   @id @default(cuid())
+  ownerId     String
+  workId      String
+  competencia String
+  origem      String
+  version     Int
+  status      String   @default("RASCUNHO")
+  valores     Json?
+  fingerprint String
+  reason      String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([ownerId, workId, competencia, origem, version])
+  @@index([ownerId, workId, competencia])
+  @@index([ownerId, status])
+  @@index([fingerprint])
+}

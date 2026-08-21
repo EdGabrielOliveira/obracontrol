@@ -1,0 +1,229 @@
+model Contract {
+  id                        String    @id @default(uuid())
+  ownerId                   String
+  workId                    String
+  code                      String
+  supplierName              String
+  supplierId                String?
+  serviceType               String?
+  objectDescription         String?
+  title                     String?
+  contractValue             Decimal
+  // DEC-001: multa de 20% sobre o valor da empreitada (secao 14.3).
+  penaltyPercent            Decimal   @default(20)
+  startDate                 DateTime?
+  endDate                   DateTime?
+  status                    String    @default("RASCUNHO")
+  createdBy                 String?
+  notes                     String?
+  // Origem unica do fluxo de solicitacao de contratacao (aceite cria um
+  // contrato RASCUNHO por solicitacao).
+  contractRequestId         String?   @unique
+  // REL-004 (DEC-001/012): geracao do instrumento contratual registra
+  // versao e actor; exige template da empresa e penalidade 20% validada.
+  instrumentGeneratedAt     DateTime?
+  instrumentGeneratedBy     String?
+  instrumentTemplateVersion String?
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
+
+  work                ConstructionWork                @relation(fields: [workId], references: [id], onDelete: Cascade)
+  supplier            ConstructionSupplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  services            ContractService[]
+  measurements        ContractMeasurement[]
+  payments            ContractPayment[]
+  folders             ContractFolder[]
+  amendments          ConstructionContractAmendment[]
+  quotations          Quotation[]
+  contractRequest     ContractRequest?                @relation(fields: [contractRequestId], references: [id], onDelete: SetNull)
+  instrumentArtifacts ContractInstrumentArtifact[]
+
+  @@unique([ownerId, workId, code])
+  @@index([ownerId, workId])
+  @@index([ownerId])
+}
+
+model ContractInstrumentArtifact {
+  id             String   @id @default(cuid())
+  ownerId        String
+  contractId     String
+  version        Int
+  filename       String
+  mimeType       String
+  bytes          Bytes?
+  storageKey     String?
+  sha256         String
+  templateSha256 String
+  catalogVersion String
+  generatedBy    String
+  generatedAt    DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId])
+  @@index([ownerId, contractId])
+  @@index([ownerId, sha256])
+}
+
+model ContractService {
+  id           String   @id @default(uuid())
+  contractId   String
+  parentId     String?
+  type         String   @default("ITEM")
+  description  String
+  unit         String?
+  quantity     Decimal?
+  unitCost     Decimal?
+  totalCost    Decimal?
+  budgetItemId String?
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  contract         Contract                  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  parent           ContractService?          @relation("ServiceHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children         ContractService[]         @relation("ServiceHierarchy")
+  budgetItem       ConstructionBudgetItem?   @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  measurementItems ContractMeasurementItem[]
+
+  @@index([contractId])
+  @@index([parentId])
+}
+
+model ContractMeasurement {
+  id              String   @id @default(uuid())
+  ownerId         String
+  contractId      String
+  number          Int
+  date            DateTime
+  title           String?
+  discountValue   Decimal?
+  retentionValue  Decimal?
+  taxValue        Decimal?
+  balanceOverride Boolean  @default(false)
+  evidenceNote    String?
+  createdBy       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contract   Contract                       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  items      ContractMeasurementItem[]
+  payments   ContractPayment[]
+  amendments ContractAmendmentMeasurement[]
+
+  @@unique([ownerId, contractId, number])
+  @@index([ownerId, contractId])
+}
+
+model ContractMeasurementItem {
+  id                    String   @id @default(uuid())
+  measurementId         String
+  serviceId             String
+  measuredQuantity      Decimal?
+  measuredValue         Decimal?
+  measuredPercentage    Decimal?
+  accumulatedQuantity   Decimal?
+  accumulatedValue      Decimal?
+  accumulatedPercentage Decimal?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  measurement ContractMeasurement               @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+  service     ContractService                   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  coverages   ConstructionMeasurementCoverage[]
+
+  @@unique([measurementId, serviceId])
+  @@index([measurementId])
+  @@index([serviceId])
+}
+
+model ContractPayment {
+  id              String   @id @default(uuid())
+  ownerId         String
+  contractId      String
+  measurementId   String?
+  date            DateTime
+  value           Decimal
+  description     String?
+  retentionValue  Decimal?
+  discountValue   Decimal?
+  paidValue       Decimal
+  status          String   @default("EM_ABERTO")
+  balanceOverride Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  contract    Contract             @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  measurement ContractMeasurement? @relation(fields: [measurementId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, contractId])
+  @@index([contractId])
+  @@index([measurementId])
+}
+
+model ContractFolder {
+  id         String   @id @default(uuid())
+  contractId String
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  contract Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  files    ContractFile[]
+
+  @@index([contractId])
+}
+
+model ContractFile {
+  id        String   @id @default(uuid())
+  folderId  String
+  name      String
+  url       String
+  size      Int?
+  mimeType  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  folder ContractFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@index([folderId])
+}
+
+model ConstructionContractAmendment {
+  id                String    @id @default(cuid())
+  ownerId           String
+  contractId        String
+  kind              String    @default("ADITIVO")
+  value             Decimal
+  reason            String
+  date              DateTime
+  createdBy         String
+  approvalStatus    String    @default("PENDING_GESTOR")
+  gestorReviewedBy  String?
+  gestorReviewedAt  DateTime?
+  gerenteReviewedBy String?
+  gerenteReviewedAt DateTime?
+  effectiveAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  contract     Contract                       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  measurements ContractAmendmentMeasurement[]
+
+  @@index([ownerId, contractId])
+}
+
+model ContractAmendmentMeasurement {
+  id            String   @id @default(cuid())
+  ownerId       String
+  amendmentId   String
+  measurementId String
+  createdAt     DateTime @default(now())
+
+  amendment   ConstructionContractAmendment @relation(fields: [amendmentId], references: [id], onDelete: Cascade)
+  measurement ContractMeasurement           @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+
+  @@unique([amendmentId, measurementId])
+  @@index([ownerId, amendmentId])
+  @@index([ownerId, measurementId])
+}

@@ -1,0 +1,95 @@
+model ConstructionBaselineSchedule {
+  id            String    @id @default(uuid())
+  ownerId       String
+  workId        String
+  importId      String
+  budgetItemId  String
+  rowNumber     Int?
+  index         String
+  plannedStart  DateTime?
+  plannedEnd    DateTime?
+  plannedWeight Decimal?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  work       ConstructionWork       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import     ConstructionImport     @relation(fields: [importId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, workId])
+  @@index([workId, importId])
+  @@index([importId])
+  @@index([budgetItemId])
+}
+
+model ConstructionScheduleRevision {
+  id             String    @id @default(uuid())
+  ownerId        String
+  workId         String
+  importId       String
+  budgetItemId   String
+  rowNumber      Int?
+  index          String
+  version        String?
+  replannedStart DateTime?
+  replannedEnd   DateTime?
+  revisionDate   DateTime?
+  reason         String?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  work       ConstructionWork       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import     ConstructionImport     @relation(fields: [importId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, workId])
+  @@index([workId, importId])
+  @@index([importId])
+  @@index([budgetItemId])
+}
+
+model ScheduleVersion {
+  id            String    @id @default(cuid())
+  ownerId       String
+  workId        String
+  versionNumber Int
+  label         String
+  status        String    @default("RASCUNHO")
+  isActive      Boolean   @default(false)
+  revisionDate  DateTime?
+  reason        String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  items ScheduleVersionItem[]
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, versionNumber])
+  @@unique([workId, label])
+  @@index([ownerId, workId])
+}
+
+model ScheduleVersionItem {
+  id             String    @id @default(cuid())
+  versionId      String
+  budgetItemId   String
+  index          String
+  baselineStart  DateTime?
+  baselineEnd    DateTime?
+  baselineWeight Decimal?
+  replannedStart DateTime?
+  replannedEnd   DateTime?
+  deltaDays      Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  version    ScheduleVersion        @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, index])
+  @@index([versionId])
+  @@index([budgetItemId])
+}

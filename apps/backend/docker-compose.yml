@@ -1,0 +1,41 @@
+# Um único Compose para desenvolvimento via Docker e produção no cPanel.
+# Ajuste apenas o arquivo .env de cada ambiente. Em produção, o Apache/cPanel
+# encaminha o subdomínio da API para 127.0.0.1:${API_PORT}.
+# No monorepo, prefira executar o Compose pela raiz.
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: apps/backend/Dockerfile
+      # Usa a rede do host apenas durante o build para resolver o DNS da VPS.
+      network: host
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: 0.0.0.0
+      PORT: 7001
+      DATABASE_URL: ${DATABASE_URL:-file:/data/obracontrol.db}
+      OBJECT_STORAGE_DIR: ${OBJECT_STORAGE_DIR:-/data/objects}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no arquivo .env}
+      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:?Defina ADMIN_REGISTRATION_KEY no arquivo .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Defina BETTER_AUTH_URL no arquivo .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Defina FRONTEND_ORIGIN no arquivo .env}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-}
+      TRUSTED_PROXY: ${TRUSTED_PROXY:-127.0.0.1,::1}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${API_PORT:-7001}:7001"
+    volumes:
+      - obracontrol_api_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:7001/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  obracontrol_api_data:
+    name: obracontrol_api_data

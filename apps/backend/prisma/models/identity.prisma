@@ -1,0 +1,191 @@
+// Better Auth core tables
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  role          String    @default("SUPERVISOR")
+  banned        Boolean   @default(false)
+  banReason     String?
+  banExpires    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions                Session[]
+  accounts                Account[]
+  apiKeys                 ApiKey[]
+  organizationMemberships OrganizationMembership[]
+  workMemberships         WorkMembership[]
+  costCenterMemberships   CostCenterMembership[]
+  invitationsCreated      UserInvitation[]         @relation("UserInvitationCreator")
+  approvalRequests        ApprovalRequest[]
+  approvalDecisions       ApprovalDecision[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  auditComments           AuditComment[]
+  scopeGrants             UserScopeGrant[]
+}
+
+model UserScopeGrant {
+  id        String    @id @default(cuid())
+  userId    String
+  scopeType String
+  scopeId   String
+  role      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scopeType, scopeId])
+  @@index([userId, revokedAt])
+  @@index([scopeType, scopeId])
+}
+
+model UserInvitation {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  scopeType  String
+  scopeId    String
+  scopeJson  Json?
+  role       String
+  email      String
+  expiresAt  DateTime
+  createdBy  String
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  creator User @relation("UserInvitationCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([scopeType, scopeId])
+  @@index([email])
+  @@index([revokedAt])
+}
+
+model Session {
+  id        String   @id
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  issuer                String?
+  accessToken           String?
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([providerId, accountId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@index([expiresAt])
+}
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  ownerId        String
+  userId         String
+  name           String
+  keyPrefix      String
+  keyHash        String
+  // Escopo opcional: quando preenchido a key so acessa dados desta org (CRIT-1)
+  organizationId String?
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([keyPrefix])
+  @@index([ownerId])
+  @@index([userId])
+}
+
+model OrganizationMembership {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String    @default("GERENTE")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  revokedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model CostCenterMembership {
+  id           String    @id @default(cuid())
+  costCenterId String
+  userId       String
+  role         String    @default("GERENTE")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  revokedAt    DateTime?
+
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([costCenterId, userId])
+  @@index([costCenterId])
+  @@index([userId])
+}
+
+model WorkMembership {
+  id        String    @id @default(cuid())
+  workId    String
+  userId    String
+  role      String    @default("GERENTE")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  revokedAt DateTime?
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, userId])
+  @@index([workId])
+  @@index([userId])
+}

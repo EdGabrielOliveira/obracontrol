@@ -1,0 +1,171 @@
+model GovernanceRecord {
+  id         String   @id @default(cuid())
+  ownerId    String
+  entityType String
+  entityId   String
+  status     String   @default("RASCUNHO")
+  version    Int      @default(1)
+  reason     String?
+  changedBy  String
+  changedAt  DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([ownerId, entityType, entityId])
+  @@index([ownerId, status])
+  @@index([entityType, entityId])
+  @@index([changedBy])
+}
+
+model ApprovalPolicy {
+  id           String   @id @default(cuid())
+  ownerId      String
+  scopeType    String
+  scopeId      String
+  subjectType  String
+  subjectId    String?
+  action       String
+  mode         String
+  approverRole String?
+  valueLimit   Decimal?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([scopeType, scopeId, subjectType, subjectId, action, mode])
+  @@index([scopeType, scopeId, action, active])
+  @@index([subjectType, subjectId])
+  @@index([ownerId])
+}
+
+model ApprovalRequest {
+  id                   String    @id @default(cuid())
+  ownerId              String
+  actorId              String
+  actorRole            String
+  organizationId       String
+  costCenterId         String?
+  resourceType         String
+  resourceId           String?
+  commandId            String?
+  effectAction         String
+  payloadJson          Json
+  payloadHash          String
+  expectedVersion      Int       @default(1)
+  idempotencyKey       String
+  requiredApproverRole String
+  status               String    @default("PENDING")
+  decidedAt            DateTime?
+  executedAt           DateTime?
+  conflictReason       String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  actor     User                      @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  decisions ApprovalDecision[]
+  reversals ApprovalReversalRequest[]
+
+  @@unique([effectAction, resourceId, idempotencyKey])
+  @@index([ownerId, status])
+  @@index([resourceType, resourceId])
+  @@index([actorId])
+  @@index([status, requiredApproverRole, organizationId, costCenterId])
+}
+
+model ApprovalReversalRequest {
+  id              String   @id @default(cuid())
+  requestId       String   @unique
+  actorId         String
+  reason          String
+  expectedVersion Int
+  status          String   @default("EXECUTED")
+  resultJson      Json?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  request ApprovalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([actorId])
+}
+
+model ApprovalDecision {
+  id           String   @id @default(cuid())
+  requestId    String
+  approverId   String?
+  decisionMode String
+  decision     String
+  reason       String?
+  createdAt    DateTime @default(now())
+
+  request      ApprovalRequest           @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver     User?                     @relation(fields: [approverId], references: [id], onDelete: SetNull)
+  ledgerEvents ConstructionLedgerEvent[]
+
+  @@unique([requestId])
+  @@index([approverId])
+}
+
+model Notification {
+  id          String    @id @default(cuid())
+  recipientId String
+  eventType   String
+  referenceId String
+  version     Int       @default(1)
+  title       String
+  body        String?
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  readAt      DateTime?
+  dismissedAt DateTime?
+
+  recipient User @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, eventType, referenceId, version])
+  @@index([recipientId, status])
+  @@index([referenceId])
+}
+
+model AuditLog {
+  id                String   @id @default(cuid())
+  userId            String
+  action            String
+  entityType        String
+  entityId          String
+  entityDescription String?
+  previousState     Json?
+  newState          Json?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  ownerId String
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments AuditComment[]
+
+  @@index([ownerId])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+  @@index([entityDescription])
+}
+
+model AuditComment {
+  id         String   @id @default(cuid())
+  ownerId    String
+  workId     String
+  auditLogId String?
+  authorId   String
+  body       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  work     ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  author   User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  auditLog AuditLog?        @relation(fields: [auditLogId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, workId, createdAt])
+  @@index([ownerId, auditLogId])
+  @@index([authorId])
+}

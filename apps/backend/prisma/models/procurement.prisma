@@ -1,0 +1,226 @@
+model ConstructionSupplier {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  name                String
+  document            String?
+  responsibleName     String?
+  responsibleDocument String?
+  contact             String?
+  pixKey              String?
+  pixKeyType          String?
+  bankCode            String?
+  bankName            String?
+  bankBranch          String?
+  bankAccount         String?
+  bankAccountType     String?
+  addressZipCode      String?
+  addressStreet       String?
+  addressNumber       String?
+  addressComplement   String?
+  addressDistrict     String?
+  addressCity         String?
+  addressState        String?
+  notes               String?
+  status              String   @default("APPROVED")
+  approvalRequestId   String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  contracts   Contract[]
+  actualCosts ConstructionActualCost[]
+  workLinks   ConstructionWorkSupplier[]
+
+  @@unique([ownerId, document])
+  @@index([ownerId, name])
+}
+
+model ConstructionWorkSupplier {
+  id                String   @id @default(cuid())
+  ownerId           String
+  workId            String
+  supplierId        String
+  status            String   @default("ACTIVE")
+  approvalRequestId String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  work     ConstructionWork     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  supplier ConstructionSupplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, supplierId])
+  @@index([ownerId, workId])
+  @@index([ownerId, supplierId])
+}
+
+model Quotation {
+  id           String    @id @default(uuid())
+  ownerId      String
+  workId       String
+  contractCode String?
+  serviceType  String?
+  title        String
+  observation  String?
+  startDate    DateTime?
+  endDate      DateTime?
+  status       String    @default("EM_COTACAO") // EM_COTACAO | NEGOCIACAO | ESCOLHIDA | CONTRATADA
+  maxSuppliers Int       @default(3)
+  contractId   String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  proposals     QuotationProposal[]
+  rounds        QuotationRound[]
+  budgetItems   QuotationBudgetItem[]
+  importBatches ImportBatch[]
+  contract      Contract?             @relation(fields: [contractId], references: [id], onDelete: SetNull)
+
+  @@unique([ownerId, workId, title])
+  @@index([ownerId, workId])
+}
+
+model QuotationBudgetItem {
+  id           String   @id @default(uuid())
+  ownerId      String
+  workId       String
+  quotationId  String
+  budgetItemId String
+  quantity     Decimal
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  quotation  Quotation              @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Restrict)
+
+  @@unique([quotationId, budgetItemId])
+  @@index([ownerId, workId])
+  @@index([quotationId])
+  @@index([budgetItemId])
+}
+
+model QuotationProposal {
+  id                  String    @id @default(uuid())
+  quotationId         String
+  supplierId          String?
+  supplierDocument    String?
+  supplierName        String
+  value               Decimal
+  supplierAddress     String?
+  supplierPhone       String?
+  supplierEmail       String?
+  supplierResponsible String?
+  serviceDescription  String?
+  serviceStartDate    DateTime?
+  executionTermDays   Int?
+  paymentTerms        String?
+  notes               String?
+  justification       String?
+  isWinner            Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  quotation         Quotation                  @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  negotiationEvents ProposalNegotiationEvent[]
+
+  @@unique([quotationId, supplierName])
+  @@index([quotationId, supplierDocument])
+}
+
+model QuotationRound {
+  id          String   @id @default(cuid())
+  quotationId String
+  roundNumber Int
+  status      String   @default("OPEN")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  quotation Quotation                  @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  events    ProposalNegotiationEvent[]
+
+  @@unique([quotationId, roundNumber])
+  @@index([quotationId, createdAt])
+}
+
+model ProposalNegotiationEvent {
+  id            String   @id @default(cuid())
+  roundId       String
+  proposalId    String
+  previousValue Decimal
+  newValue      Decimal
+  actorId       String
+  reason        String
+  createdAt     DateTime @default(now())
+
+  round    QuotationRound    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  proposal QuotationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([roundId, createdAt])
+  @@index([proposalId, createdAt])
+}
+
+model ContractRequest {
+  id                 String    @id @default(cuid())
+  ownerId            String
+  workId             String
+  title              String
+  serviceType        String
+  description        String?
+  startDate          DateTime?
+  endDate            DateTime?
+  status             String    @default("EM_ESPERA") // EM_ESPERA | ACEITA
+  confirmedBatchId   String?
+  acceptedProposalId String?
+  acceptedAt         DateTime?
+  acceptedBy         String?
+  createdBy          String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  contract      Contract?
+  contractId    String?                     @unique
+  work          ConstructionWork            @relation(fields: [workId], references: [id], onDelete: Cascade)
+  items         ContractRequestBudgetItem[]
+  importBatches ImportBatch[]
+
+  @@index([ownerId, workId, status])
+  @@index([ownerId, workId])
+}
+
+model ContractRequestBudgetItem {
+  id           String   @id @default(cuid())
+  ownerId      String
+  workId       String
+  requestId    String
+  budgetItemId String
+  quantity     Decimal
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  request    ContractRequest        @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, budgetItemId])
+  @@index([ownerId, workId])
+  @@index([budgetItemId])
+}
+
+model ContractRequestProposal {
+  id                    String   @id @default(cuid())
+  ownerId               String
+  workId                String
+  batchId               String
+  normalizedCnpj        String
+  supplierName          String
+  originalProposalValue Decimal?
+  proposalValue         Decimal
+  notes                 String?
+  suggestedWinner       Boolean  @default(false)
+  rowNumber             Int
+  createdAt             DateTime @default(now())
+
+  batch ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, normalizedCnpj])
+  @@index([ownerId, workId])
+  @@index([batchId])
+}

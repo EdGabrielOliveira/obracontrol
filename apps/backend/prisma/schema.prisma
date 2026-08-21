@@ -1,0 +1,17 @@
+generator client {
+	provider  = "prisma-client-js"
+	engineType = "library"
+}
+
+// Generated client nodejs usado pelos adapters (PrismaLibSQL) e pela API.
+generator prismaClient {
+  provider   = "prisma-client"
+  engineType = "client"
+  runtime    = "nodejs"
+  output     = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}

@@ -1,0 +1,194 @@
+model ConstructionBudgetItem {
+  id                   String    @id @default(uuid())
+  ownerId              String
+  workId               String
+  importId             String
+  identityId           String?
+  parentId             String?
+  index                String
+  type                 String
+  description          String
+  unit                 String?
+  quantity             Decimal?
+  laborUnitCost        Decimal?
+  materialUnitCost     Decimal?
+  equipmentUnitCost    Decimal?
+  otherUnitCost        Decimal?
+  unitCostTotal        Decimal?
+  totalBudget          Decimal?
+  unitCost             Decimal?
+  totalCost            Decimal
+  plannedStart         DateTime?
+  plannedEnd           DateTime?
+  actualStart          DateTime?
+  actualEnd            DateTime?
+  completionPercentage Decimal   @default(0)
+  providedStatus       String?
+  computedStatus       String    @default("NOT_STARTED")
+  sortOrder            Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  work                  ConstructionWork               @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import                ConstructionImport             @relation(fields: [importId], references: [id], onDelete: Cascade)
+  identity              BudgetItemIdentity?            @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  parent                ConstructionBudgetItem?        @relation("BudgetItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children              ConstructionBudgetItem[]       @relation("BudgetItemHierarchy")
+  baselineSchedules     ConstructionBaselineSchedule[]
+  scheduleRevisions     ConstructionScheduleRevision[]
+  scheduleVersionItems  ScheduleVersionItem[]
+  measurements          ConstructionMeasurement[]
+  actualCosts           ConstructionActualCost[]
+  actualCostAllocations ActualCostAllocation[]
+  workMeasurementItems  WorkMeasurementItem[]
+  contractServices      ContractService[]
+  quotationBudgetItems  QuotationBudgetItem[]
+  contractRequestItems  ContractRequestBudgetItem[]
+
+  @@index([ownerId, workId])
+  @@index([importId])
+  @@index([parentId])
+  @@index([workId, sortOrder])
+  @@index([ownerId, workId, importId])
+  @@index([identityId])
+}
+
+model BudgetVersion {
+  id                String    @id @default(cuid())
+  ownerId           String
+  workId            String
+  versionNumber     Int
+  label             String
+  status            String    @default("RASCUNHO")
+  isActive          Boolean   @default(false)
+  sourceVersionId   String?
+  reason            String?
+  submittedAt       DateTime?
+  approvalRequestId String?
+  budgetImportId    String?
+  // ORC-004 (DEC-007): aditivo formal — tipo e impacto calculados no
+  // rascunho; somente status ACEITO impacta o saldo oficial.
+  kind              String? // ACRESCIMO | SUPRESSAO | MISTO
+  acrescimoBruto    Decimal?
+  supressao         Decimal?
+  impactoLiquido    Decimal?
+  percentualImpacto Decimal?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  items BudgetVersionItem[]
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@unique([workId, versionNumber])
+  @@unique([workId, label])
+  @@index([ownerId, workId])
+  @@index([workId, status])
+}
+
+model BudgetItemIdentity {
+  id        String   @id @default(cuid())
+  ownerId   String
+  workId    String
+  index     String
+  createdAt DateTime @default(now())
+
+  work             ConstructionWork           @relation(fields: [workId], references: [id], onDelete: Cascade)
+  versionItems     BudgetVersionItem[]
+  operationalItems ConstructionBudgetItem[]
+  ledgerEvents     ConstructionLedgerEvent[]
+  impacts          ConstructionBudgetImpact[]
+
+  @@unique([workId, index])
+  @@index([ownerId, workId])
+}
+
+model BudgetVersionItem {
+  id                  String    @id @default(cuid())
+  versionId           String
+  identityId          String
+  sourceVersionItemId String?
+  parentVersionId     String?
+  index               String
+  type                String
+  description         String
+  unit                String?
+  quantity            Decimal?
+  unitCost            Decimal?
+  totalCost           Decimal
+  plannedStart        DateTime?
+  plannedEnd          DateTime?
+  sortOrder           Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  version             BudgetVersion              @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  identity            BudgetItemIdentity         @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  parentVersion       BudgetVersionItem?         @relation("BudgetVersionItemHierarchy", fields: [parentVersionId], references: [id], onDelete: SetNull)
+  children            BudgetVersionItem[]        @relation("BudgetVersionItemHierarchy")
+  sourceVersionItem   BudgetVersionItem?         @relation("BudgetVersionItemLineage", fields: [sourceVersionItemId], references: [id], onDelete: SetNull)
+  derivedVersionItems BudgetVersionItem[]        @relation("BudgetVersionItemLineage")
+  ledgerEvents        ConstructionLedgerEvent[]
+  versionImpacts      ConstructionBudgetImpact[]
+  actualCosts         ConstructionActualCost[]
+
+  @@unique([versionId, identityId])
+  @@unique([versionId, index])
+  @@index([identityId])
+  @@index([versionId, parentVersionId])
+  @@index([versionId, parentVersionId, index])
+}
+
+model ConstructionBudgetReconciliation {
+  id           String   @id @default(cuid())
+  ownerId      String
+  workId       String
+  sourceType   String
+  sourceId     String
+  status       String   @default("SUGGESTED")
+  budgetItemId String?
+  reason       String?
+  createdBy    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sourceType, sourceId])
+  @@index([ownerId, workId, status])
+  @@index([ownerId, status])
+}
+
+model BudgetProjectionState {
+  id              String   @id @default(cuid())
+  ownerId         String
+  workId          String   @unique
+  status          String   @default("READY")
+  sourceVersionId String?
+  lastError       String?
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, status])
+}
+
+model BudgetProjectionOutbox {
+  id              String    @id @default(cuid())
+  ownerId         String
+  workId          String
+  sourceVersionId String
+  idempotencyKey  String    @unique
+  status          String    @default("PENDING")
+  attempts        Int       @default(0)
+  availableAt     DateTime  @default(now())
+  lockedAt        DateTime?
+  processedAt     DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  work ConstructionWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, status, availableAt])
+  @@index([workId, sourceVersionId])
+}

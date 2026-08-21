@@ -1,0 +1,32 @@
+{
+  "version": "0.2",
+  "language": "pt_BR,en",
+  "import": ["./node_modules/cspell-dict-pt-br/cspell-ext.json"],
+  "files": ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}"],
+  "ignorePaths": [
+    "src/routeTree.gen.ts",
+    "node_modules/**",
+    "dist/**",
+    "test-results/**",
+    "playwright-report/**"
+  ],
+  "words": [
+    "API",
+    "BI",
+    "CPI",
+    "DTO",
+    "Elysia",
+    "EVM",
+    "IDP",
+    "Lucide",
+    "OpenAPI",
+    "PTBR",
+    "React",
+    "SPI",
+    "TanStack",
+    "TypeScript",
+    "Vite",
+    "Zod",
+    "shadcn"
+  ]
+}

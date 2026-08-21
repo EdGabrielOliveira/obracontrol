@@ -1,0 +1,70 @@
+name: obracontrol
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      network: host
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      HOST: 0.0.0.0
+      PORT: 7001
+      DATABASE_URL: file:/data/obracontrol.db
+      OBJECT_STORAGE_DIR: /data/objects
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-only-change-this-secret-0123456789abcdef}
+      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:-dev-only-admin-key-0123456789}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:7001}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:7000}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://localhost:7000}
+      TRUSTED_PROXY: ${TRUSTED_PROXY:-127.0.0.1,::1}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+    ports:
+      - "${BACKEND_PORT:-7001}:7001"
+    volumes:
+      - obracontrol_api_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent http://127.0.0.1:7001/health > /dev/null",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      network: host
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL:-}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+    ports:
+      - "${FRONTEND_PORT:-7000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'wget -qO- http://127.0.0.1/healthz | grep -q ''"status":"ok"''',
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+# O banco atual é SQLite e fica persistido no volume acima; SQLite não abre
+# uma porta TCP. A porta 7711 fica reservada para uma futura migração para um
+# banco cliente-servidor, sem criar um serviço fictício que a API não utiliza.
+volumes:
+  obracontrol_api_data:
+    name: obracontrol_api_data

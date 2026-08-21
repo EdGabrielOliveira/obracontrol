@@ -1,0 +1,169 @@
+model ConstructionMeasurement {
+  id                            String    @id @default(uuid())
+  ownerId                       String
+  workId                        String
+  importId                      String?
+  budgetItemId                  String
+  rowNumber                     Int?
+  index                         String
+  title                         String?
+  measurementDate               DateTime?
+  measuredPercentageAccumulated Decimal?
+  measuredQuantityAccumulated   Decimal?
+  measuredValue                 Decimal?
+  status                        String?
+  notes                         String?
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+
+  work       ConstructionWork       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import     ConstructionImport?    @relation(fields: [importId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, workId])
+  @@index([workId, importId])
+  @@index([importId])
+  @@index([budgetItemId])
+}
+
+model ConstructionActualCost {
+  id                  String    @id @default(uuid())
+  ownerId             String
+  workId              String
+  importId            String?
+  budgetItemId        String?
+  budgetVersionItemId String?
+  rowNumber           Int?
+  costDate            DateTime?
+  budgetIndex         String?
+  category            String
+  categoryDetail      String?
+  description         String?
+  amount              Decimal
+  costType            String
+  sourceDocument      String?
+  appropriationStatus String
+  supplierName        String?
+  supplierId          String?
+  costGroup           String?
+  paymentStatus       String    @default("OPEN")
+  competenceDate      DateTime?
+  dueDate             DateTime?
+  paymentDate         DateTime?
+  documentNumber      String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  work                ConstructionWork        @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import              ConstructionImport?     @relation(fields: [importId], references: [id], onDelete: Cascade)
+  budgetItem          ConstructionBudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
+  budgetVersionItem   BudgetVersionItem?      @relation(fields: [budgetVersionItemId], references: [id], onDelete: SetNull)
+  supplier            ConstructionSupplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  allocations         ActualCostAllocation[]
+  migrationSources    CostMigrationLineage[]  @relation("CostMigrationSource")
+  migrationSuccessors CostMigrationLineage[]  @relation("CostMigrationSuccessor")
+
+  @@index([ownerId, workId])
+  @@index([workId, importId])
+  @@index([importId])
+  @@index([budgetItemId])
+  @@index([budgetVersionItemId])
+}
+
+model CostMigrationLineage {
+  id                  String   @id @default(cuid())
+  ownerId             String
+  sourceCostId        String
+  successorCostId     String
+  budgetVersionItemId String
+  sequence            Int
+  lineageKey          String   @unique
+  amount              Decimal
+  createdAt           DateTime @default(now())
+
+  sourceCost    ConstructionActualCost @relation("CostMigrationSource", fields: [sourceCostId], references: [id], onDelete: Cascade)
+  successorCost ConstructionActualCost @relation("CostMigrationSuccessor", fields: [successorCostId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceCostId, sequence])
+  @@index([ownerId, sourceCostId])
+}
+
+model ActualCostAllocation {
+  id           String   @id @default(cuid())
+  actualCostId String
+  budgetItemId String
+  basis        String   @default("PERCENTAGE")
+  percentage   Decimal
+  value        Decimal
+  ownerId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  actualCost ConstructionActualCost @relation(fields: [actualCostId], references: [id], onDelete: Cascade)
+  budgetItem ConstructionBudgetItem @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+
+  @@index([actualCostId])
+  @@index([budgetItemId])
+  @@index([ownerId])
+}
+
+model WorkMeasurement {
+  id              String   @id @default(uuid())
+  ownerId         String
+  workId          String
+  number          Int
+  date            DateTime
+  title           String
+  discountValue   Decimal?
+  retentionValue  Decimal?
+  balanceOverride Boolean  @default(false)
+  evidenceNote    String?
+  createdBy       String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  work  ConstructionWork      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  items WorkMeasurementItem[]
+
+  @@unique([ownerId, workId, number])
+  @@index([ownerId, workId])
+}
+
+model WorkMeasurementItem {
+  id                    String   @id @default(uuid())
+  measurementId         String
+  budgetItemId          String
+  measuredQuantity      Decimal?
+  measuredValue         Decimal?
+  measuredPercentage    Decimal?
+  accumulatedQuantity   Decimal?
+  accumulatedValue      Decimal?
+  accumulatedPercentage Decimal?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  measurement WorkMeasurement                   @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+  budgetItem  ConstructionBudgetItem            @relation(fields: [budgetItemId], references: [id], onDelete: Cascade)
+  coverages   ConstructionMeasurementCoverage[]
+
+  @@unique([measurementId, budgetItemId])
+  @@index([measurementId])
+  @@index([budgetItemId])
+}
+
+model ConstructionMeasurementCoverage {
+  id                        String   @id @default(cuid())
+  ownerId                   String
+  workMeasurementItemId     String
+  contractMeasurementItemId String
+  quantity                  Decimal?
+  amount                    Decimal
+  createdAt                 DateTime @default(now())
+
+  workMeasurementItem     WorkMeasurementItem     @relation(fields: [workMeasurementItemId], references: [id], onDelete: Cascade)
+  contractMeasurementItem ContractMeasurementItem @relation(fields: [contractMeasurementItemId], references: [id], onDelete: Cascade)
+
+  @@unique([workMeasurementItemId, contractMeasurementItemId])
+  @@index([ownerId])
+}

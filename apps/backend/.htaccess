@@ -1,0 +1,11 @@
+Options -Indexes
+
+# O backend é uma API: não há página pública no document root. A proteção de
+# rotas é feita pela aplicação (Better Auth, autorização e CORS); estas regras
+# bloqueiam somente a exposição acidental dos arquivos enviados ao cPanel.
+RewriteEngine On
+RewriteRule ^(?:\.env(?:\..*)?|\.git(?:/|$)|Dockerfile|docker-compose(?:\.[^/]+)?\.ya?ml|package(?:-lock)?\.json|bun\.lock|tsconfig\.json|prisma(?:/|$)|src(?:/|$)|scripts(?:/|$)|tests(?:/|$)|generated(?:/|$)) - [F,L,NC]
+
+<FilesMatch "^(?:\.env(?:\..*)?|Dockerfile|docker-compose(?:\.[^.]+)?\.ya?ml|package(?:-lock)?\.json|bun\.lock|tsconfig\.json)$">
+    Require all denied
+</FilesMatch>

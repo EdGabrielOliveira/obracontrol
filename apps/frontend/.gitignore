@@ -1,0 +1,17 @@
+node_modules/
+dist/
+obracontrol-backend/
+.tanstack/tmp/
+temp/
+*.log
+.env
+.env.*
+!.env.example
+cookies.txt
+
+.superpowers/
+
+test-results/
+playwright-report/
+
+medicao-response.json
