@@ -12,11 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { signIn } from "@/lib/auth-client";
-import { authorizationSessionQueryOptions } from "@/lib/authorization-session-query";
-import { authQueryKeys, clearAuthSessionCache } from "@/lib/query-cache";
+import {
+	authClient,
+	fetchAuthorizationSession,
+	signIn,
+} from "@/lib/auth-client";
+import { authQueryKeys } from "@/lib/query-cache";
 import { queryClient } from "@/lib/query-client";
-import { sessionQueryOptions } from "@/lib/session-query";
 import { safeRedirectPath } from "@/utils/safeRedirectPath";
 
 export const Route = createFileRoute("/auth/login/")({
@@ -52,21 +54,15 @@ function RouteComponent() {
 				toast.error("Credenciais invalidas");
 				return;
 			}
-
-			// The root provider can still have anonymous session or authorization
-			// requests in flight. Cancel both before replacing the auth cache: a
-			// late authorization response can otherwise replace the freshly loaded
-			// role and leave the app without its permissions until a page reload.
 			await queryClient.cancelQueries({ queryKey: authQueryKeys.all });
-			clearAuthSessionCache(queryClient);
-			await queryClient.fetchQuery({
-				...sessionQueryOptions(),
-				staleTime: 0,
-			});
-			await queryClient.fetchQuery({
-				...authorizationSessionQueryOptions(),
-				staleTime: 0,
-			});
+			const session = await authClient.getSession();
+			if (!session.data?.session || !session.data.user) {
+				throw new Error("Sessão não disponível após o login.");
+			}
+
+			const authorization = await fetchAuthorizationSession();
+			queryClient.setQueryData(authQueryKeys.session, session);
+			queryClient.setQueryData(authQueryKeys.authorization, authorization);
 			toast.success("Login realizado com sucesso");
 			await navigate({ to: safeRedirectPath(redirect?.redirect) });
 		} catch {

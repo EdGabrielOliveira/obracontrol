@@ -11,6 +11,10 @@ const backendTarget =
 	process.env.VITE_SERVER_URL ||
 	`http://127.0.0.1:${backendPort}`;
 const isE2E = process.env.E2E === "1";
+const usePolling =
+	process.env.VITE_USE_POLLING === "true" ||
+	process.env.CHOKIDAR_USEPOLLING === "true";
+const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "7000");
 const apiProxy = {
 	"/api": {
 		target: backendTarget,
@@ -66,6 +70,10 @@ export default defineConfig({
 		host: true,
 		port: 7000,
 		strictPort: true,
+		watch: usePolling ? { usePolling: true, interval: 250 } : undefined,
+		hmr: {
+			clientPort: hmrClientPort,
+		},
 		allowedHosts: [".ngrok-free.app"],
 		proxy: apiProxy,
 	},

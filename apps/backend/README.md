@@ -98,6 +98,12 @@ SQLite alvo.
 
 O seed e destrutivo por design (truncate de todas as tabelas publicas). O fixture de fornecedores vive em `prisma/fixtures/suppliers.ts`; os demais fixtures permanecem em `prisma/fixtures/`.
 
+Quando a aplicacao estiver em Docker, o backend usa o SQLite persistido no
+volume `/data`, e nao `prisma/dev.db` da maquina. Recrie o backend apos mudar o
+seed (`docker compose up -d --build backend`) e execute, a partir da raiz do
+repositorio, `bun run db:seed:container`. Esse comando tambem e destrutivo e
+deve ser usado apenas no ambiente de demonstracao/desenvolvimento.
+
 ## Arquitetura
 
 ```text

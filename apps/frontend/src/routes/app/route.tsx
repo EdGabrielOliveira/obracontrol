@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { LoadingSpinner } from "@/components/atoms/loading-spinner";
 import { AppShell } from "@/components/organisms/layout/app-shell";
 import { useAuth } from "@/lib/auth-context";
+import { authorizationSessionQueryOptions } from "@/lib/authorization-session-query";
 import { queryClient } from "@/lib/query-client";
 import { sessionQueryOptions } from "@/lib/session-query";
 import { safeRedirectPath } from "@/utils/safeRedirectPath";
@@ -18,6 +19,12 @@ export const Route = createFileRoute("/app")({
 				search: { redirect: redirectTo },
 			});
 		}
+
+		// The session alone is not enough to enter the application. Resolve the
+		// authorization payload before TanStack Router starts child loaders and
+		// renders the shell; otherwise role-dependent UI can briefly use null
+		// permissions and appear as if the user were a low-privilege user.
+		await queryClient.fetchQuery(authorizationSessionQueryOptions());
 	},
 	component: AppLayout,
 	head: () => ({

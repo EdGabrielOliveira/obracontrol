@@ -6,6 +6,8 @@
 	"scripts": {
 		"dev:backend": "bun run --cwd apps/backend dev",
 		"dev:frontend": "bun run --cwd apps/frontend dev",
+		"dev:docker": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+		"dev:docker:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
 		"build:frontend": "bun run --cwd apps/frontend build",
 		"check:backend": "bun run --cwd apps/backend check",
 		"check:frontend": "bun run --cwd apps/frontend check",

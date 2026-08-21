@@ -69,13 +69,17 @@ export async function applySqliteMigrations(options: {
 
 	try {
 		const files = await migrationFiles(options.migrationsDirectory);
-		const hadMigrationsTable = database
-			.query<{ count: number }, []>(
-				"SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = '_obracontrol_migrations'",
+		ensureMigrationsTable(database);
+		const appliedRows = database
+			.query<AppliedMigration, []>(
+				`SELECT name, checksum FROM "${MIGRATIONS_TABLE}" ORDER BY name`,
 			)
-			.get()?.count;
+			.all();
 
-		if (!hadMigrationsTable) {
+		// A previous bootstrap may have created the history table before failing.
+		// An empty history is still an unversioned database, so baseline it after
+		// validating that its schema already matches the image template.
+		if (appliedRows.length === 0) {
 			if (
 				databaseSchemaFingerprint(database) !==
 				databaseSchemaFingerprint(template)
@@ -105,12 +109,6 @@ export async function applySqliteMigrations(options: {
 			return { baselineCreated: true, applied: [] };
 		}
 
-		ensureMigrationsTable(database);
-		const appliedRows = database
-			.query<AppliedMigration, []>(
-				`SELECT name, checksum FROM "${MIGRATIONS_TABLE}" ORDER BY name`,
-			)
-			.all();
 		const appliedByName = new Map(
 			appliedRows.map((migration) => [migration.name, migration.checksum]),
 		);

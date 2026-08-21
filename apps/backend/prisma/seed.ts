@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { strToU8, zipSync } from "fflate";
 import { Prisma } from "../generated/prisma/client";
 import { createLocalPrisma } from "../src/lib/prisma-local";
 
@@ -17,6 +18,65 @@ const hashPassword = (password: string) =>
 		algorithm: "bcrypt",
 		cost: 10,
 	});
+
+const encodeXml = (value: string) => strToU8(value);
+
+function buildDefaultContractTemplate(): Uint8Array<ArrayBuffer> {
+	const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:rPr><w:b/></w:rPr><w:t>MODELO DE CONTRATO</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Contratante: {{empresa.nome}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Contratada: {{fornecedor.nome}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>CNPJ da contratada: {{fornecedor.documento}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Endereço da contratada: {{fornecedor.endereco}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Responsável legal: {{fornecedor.responsavel_nome}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>CPF do responsável: {{fornecedor.responsavel_cpf}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Contato: {{fornecedor.contato}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Obra: {{obra.nome}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Endereço da obra: {{obra.endereco}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Contrato: {{contrato.codigo}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Objeto: {{contrato.objeto}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Valor: R$ {{contrato.valor}} ({{contrato.valor_extenso}})</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Início: {{contrato.inicio}} | Término: {{contrato.fim}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Multa: R$ {{contrato.multa}} ({{contrato.multa_extenso}})</w:t></w:r></w:p>
+    <w:p><w:r><w:t>{{contrato.atividades}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Foro: {{empresa.foro}}</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Data de emissão: {{data.emissao}}</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>`;
+
+	return new Uint8Array(
+		zipSync({
+			"[Content_Types].xml": encodeXml(`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`),
+			"_rels/.rels": encodeXml(`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`),
+			"word/document.xml": encodeXml(documentXml),
+		}),
+	);
+}
+
+async function loadContractTemplate(
+	file: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+	try {
+		return new Uint8Array(await readFile(resolve(seedDir, "templates", file)));
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		console.warn(
+			`Template ${file} não encontrado; usando o modelo DOCX padrão do seed.`,
+		);
+		return buildDefaultContractTemplate();
+	}
+}
 
 type WorkSeed = {
 	code: string;
@@ -892,9 +952,7 @@ export async function runSeed() {
 		"Financeiro EngPac",
 		"GESTOR",
 	);
-	const templateBytes = await readFile(
-		resolve(seedDir, "templates", "engpac.docx"),
-	);
+	const templateBytes = await loadContractTemplate("engpac.docx");
 	const templateSha256 = createHash("sha256")
 		.update(templateBytes)
 		.digest("hex");
@@ -934,7 +992,7 @@ export async function runSeed() {
 			file: "gennesis.docx",
 		},
 	]) {
-		const bytes = await readFile(resolve(seedDir, "templates", item.file));
+		const bytes = await loadContractTemplate(item.file);
 		await prisma.company.create({
 			data: {
 				ownerId: admin.id,

@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		enabled: Boolean(session && user),
 	});
 	const authorization = authorizationQuery.data ?? null;
+	const authorizationReady = Boolean(session && user && authorization?.user.role);
 	const value: AuthContextValue = {
 		session,
 		user,
@@ -58,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		role: authorization?.user.role ?? null,
 		loading:
 			sessionQuery.isPending ||
-			(Boolean(session && user) && authorizationQuery.isPending),
+			(Boolean(session && user) && !authorizationReady),
 	};
 
 	return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

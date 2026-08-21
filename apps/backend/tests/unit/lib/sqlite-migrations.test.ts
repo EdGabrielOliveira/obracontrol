@@ -50,6 +50,24 @@ describe("applySqliteMigrations", () => {
 		expect(count).toBe(1);
 	});
 
+	test("baselines a database with an empty migration history", async () => {
+		const paths = await fixture();
+		const database = new Database(paths.databasePath);
+		database.exec(`
+			CREATE TABLE "_obracontrol_migrations" (
+				"name" TEXT NOT NULL PRIMARY KEY,
+				"checksum" TEXT NOT NULL,
+				"appliedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+			)
+		`);
+		database.close();
+
+		expect(await applySqliteMigrations(paths)).toEqual({
+			baselineCreated: true,
+			applied: [],
+		});
+	});
+
 	test("applies a pending migration once", async () => {
 		const paths = await fixture();
 		await applySqliteMigrations(paths);

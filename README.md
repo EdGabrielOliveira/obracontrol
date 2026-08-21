@@ -60,6 +60,20 @@ docker compose up -d --build
 - Backend: `http://localhost:7001`
 - Banco: SQLite persistido no volume Docker `obracontrol_api_data`
 
+### Desenvolvimento com hot reload
+
+O Compose principal representa produção e serve o build estático pelo Nginx.
+Para desenvolver o frontend no Docker com Vite e atualização automática, use o
+override local:
+
+```bash
+bun run dev:docker
+```
+
+O código de `apps/frontend` é montado no container; alterações em `src/`,
+configs e estilos atualizam o navegador via HMR. O polling fica ativo somente
+nesse override para detectar mudanças em bind mounts no Docker Desktop/Windows.
+
 SQLite é um banco embutido em arquivo e não escuta uma porta TCP; por isso não
 há um mapeamento `7711:7711` no Compose atual. Essa porta fica reservada para
 uma futura migração para um banco cliente-servidor.

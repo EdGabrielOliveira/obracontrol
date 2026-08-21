@@ -6,11 +6,11 @@ FROM node:22-bookworm-slim AS dependencies
 
 WORKDIR /app
 
-COPY apps/backend/package.json ./
+COPY apps/backend/package.json apps/backend/package-lock.json ./
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends openssl \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& npm install --ignore-scripts --include=optional --no-package-lock
+	&& npm install --ignore-scripts --include=optional --package-lock=false
 
 FROM dependencies AS prisma-build
 
@@ -23,6 +23,13 @@ RUN npx prisma generate \
 FROM prisma-build AS production-dependencies
 
 RUN npm prune --omit=dev
+
+# The lockfile is generated on Windows, so npm omits the Linux native
+# packages even though they are declared as optional dependencies. Install
+# both libsql copies explicitly after pruning to keep the Bun runtime usable.
+RUN npm install --prefix /app --no-save --ignore-scripts @libsql/linux-x64-gnu@0.5.29 \
+	&& npm install --prefix /app/node_modules/@prisma/adapter-libsql/node_modules/@libsql/client/node_modules/libsql \
+		--no-save --ignore-scripts @libsql/linux-x64-gnu@0.3.19
 
 FROM oven/bun:1.3.14-slim AS production
 
@@ -50,6 +57,7 @@ COPY --chown=bun:bun --from=production-dependencies /app/node_modules /app/node_
 COPY --chown=bun:bun --from=prisma-build /app/generated /app/generated
 COPY --chown=bun:bun --from=prisma-build /app/prisma/dev.db /app/schema.db
 COPY --chown=bun:bun --from=prisma-build /app/prisma/migrations /app/prisma/migrations
+COPY --chown=bun:bun apps/backend/prisma/seed.ts /app/prisma/seed.ts
 COPY --chown=bun:bun apps/backend/src /app/src
 COPY --chown=bun:bun apps/backend/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --chown=bun:bun apps/backend/scripts/prepare-sqlite-database.ts /app/scripts/prepare-sqlite-database.ts
