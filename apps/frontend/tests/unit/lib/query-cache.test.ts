@@ -14,3 +14,8 @@ test("removes cached authentication data without clearing domain queries", () =>
 	expect(client.getQueryData(authQueryKeys.authorization)).toBeUndefined();
 	expect(client.getQueryData(["works", "list"])).toEqual({ data: [] });
 });
+
+test("groups every authentication query under one cache key", () => {
+	expect(authQueryKeys.session.slice(0, 1)).toEqual(authQueryKeys.all);
+	expect(authQueryKeys.authorization.slice(0, 1)).toEqual(authQueryKeys.all);
+});

@@ -53,10 +53,11 @@ function RouteComponent() {
 				return;
 			}
 
-			// The root provider may still have an anonymous get-session request in
-			// flight. Cancel it before replacing the auth cache, otherwise the
-			// router can consume that stale response and redirect back to login.
-			await queryClient.cancelQueries({ queryKey: authQueryKeys.session });
+			// The root provider can still have anonymous session or authorization
+			// requests in flight. Cancel both before replacing the auth cache: a
+			// late authorization response can otherwise replace the freshly loaded
+			// role and leave the app without its permissions until a page reload.
+			await queryClient.cancelQueries({ queryKey: authQueryKeys.all });
 			clearAuthSessionCache(queryClient);
 			await queryClient.fetchQuery({
 				...sessionQueryOptions(),

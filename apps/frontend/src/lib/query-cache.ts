@@ -7,10 +7,11 @@ export const queryCacheDuration = {
 } as const;
 
 export const authQueryKeys = {
+	all: ["auth"] as const,
 	session: ["auth", "session"] as const,
 	authorization: ["auth", "authorization"] as const,
 };
 
 export function clearAuthSessionCache(client: QueryClient) {
-	client.removeQueries({ queryKey: ["auth"] });
+	client.removeQueries({ queryKey: authQueryKeys.all });
 }
