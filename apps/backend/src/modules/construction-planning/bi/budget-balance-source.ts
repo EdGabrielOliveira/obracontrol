@@ -20,15 +20,25 @@ export type WorkBalanceDto = {
 	items: BudgetBalance[];
 };
 
+export type OfficialWorkBalanceContext = {
+	work?: { items?: Array<{ id: string }> } | null;
+	summary?: Awaited<ReturnType<typeof summarizeLedger>> | null;
+};
+
 export async function getOfficialWorkBalance(
 	ownerId: string,
 	workId: string,
 	asOfDate?: Date,
+	context: OfficialWorkBalanceContext = {},
 ): Promise<WorkBalanceDto> {
-	const [work, summary] = await Promise.all([
-		getWorkWithItems(ownerId, workId),
-		summarizeLedger(ownerId, workId, asOfDate ?? new Date()),
-	]);
+	const work =
+		context.work !== undefined
+			? context.work
+			: await getWorkWithItems(ownerId, workId);
+	const summary =
+		context.summary !== undefined
+			? context.summary
+			: await summarizeLedger(ownerId, workId, asOfDate ?? new Date());
 
 	if (!work) {
 		return {
@@ -90,8 +100,8 @@ export async function getOfficialWorkBalance(
 
 	return {
 		...totals,
-		dueOpen: Number(summary.dueOpen ?? 0),
-		paid: Number(summary.paid ?? 0),
+		dueOpen: Number(summary?.dueOpen ?? 0),
+		paid: Number(summary?.paid ?? 0),
 		sourceMode: "LIVE",
 		coverage: items.length === 0 ? "PARTIAL" : "AVAILABLE",
 		items,

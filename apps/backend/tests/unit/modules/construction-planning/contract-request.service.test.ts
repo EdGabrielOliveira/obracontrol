@@ -624,13 +624,113 @@ describe("contract request service", () => {
 			classification: {
 				profit: { count: 0, amount: 0 },
 				neutral: { count: 0, amount: 0 },
-				expense: { count: 2, amount: 103_000 },
+				expense: { count: 1, amount: 54_000 },
 			},
-			negotiatedReductionTotal: 15_000,
-			originalProposalTotal: 120_000,
-			negotiatedReductionPercent: 12.5,
+			negotiatedReductionTotal: 10_000,
+			originalProposalTotal: 60_000,
+			negotiatedReductionPercent: (10_000 / 60_000) * 100,
 		});
 		expect(comparison.permissions).toEqual({ canAccept: true });
+	});
+
+	it("classifies each financial card from one relevant proposal", async () => {
+		contractRequestFindFirst.mockResolvedValue({
+			...pendingRequest,
+			confirmedBatchId: "batch-1",
+		});
+		proposalFindMany.mockResolvedValue([
+			{
+				...eligibleProposal,
+				proposalValue: new Decimal(800),
+				originalProposalValue: new Decimal(900),
+			},
+			{
+				...eligibleProposal,
+				id: "proposal-2",
+				normalizedCnpj: "52998224725",
+				supplierName: "Fornecedor neutro",
+				proposalValue: new Decimal(950),
+				originalProposalValue: new Decimal(1_000),
+			},
+			{
+				...eligibleProposal,
+				id: "proposal-3",
+				normalizedCnpj: "39000000000190",
+				supplierName: "Fornecedor acima do orçamento",
+				proposalValue: new Decimal(1_200),
+				originalProposalValue: new Decimal(1_300),
+			},
+		]);
+		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
+		workSupplierFindFirst.mockResolvedValue({ id: "ws-1" });
+		getBudgetItemReferencesMock.mockResolvedValue({
+			found: [
+				{
+					budgetItemId: "budget-1",
+					index: "1.1",
+					identityId: "identity-1",
+					versionItemId: "vitem-1",
+					quantity: new Decimal(10),
+					unitCost: new Decimal(100),
+				},
+			],
+			missing: [],
+		});
+
+		const { getContractRequestComparison } = await import(
+			"../../../../src/modules/construction-planning/contract-request.service"
+		);
+		const comparison = await getContractRequestComparison(
+			"user-1",
+			"work-1",
+			"request-1",
+			"GERENTE",
+		);
+
+		expect(comparison.statistics.classification).toEqual({
+			profit: {
+				count: 1,
+				amount: 200,
+				supplier: {
+					name: "Construtora Modelo",
+					proposalValue: 800,
+					costRatioPercent: 80,
+				},
+			},
+			neutral: {
+				count: 1,
+				amount: 50,
+				supplier: {
+					name: "Fornecedor neutro",
+					proposalValue: 950,
+					costRatioPercent: 95,
+				},
+			},
+			expense: {
+				count: 1,
+				amount: 200,
+				supplier: {
+					name: "Fornecedor acima do orçamento",
+					proposalValue: 1_200,
+					costRatioPercent: 120,
+				},
+			},
+		});
+		expect(comparison.statistics.bestSupplier).toEqual({
+			name: "Construtora Modelo",
+			proposalValue: 800,
+			costRatioPercent: 80,
+		});
+		expect(comparison.statistics.worstSupplier).toEqual({
+			name: "Fornecedor acima do orçamento",
+			proposalValue: 1_200,
+			costRatioPercent: 120,
+		});
+		expect(comparison.statistics.negotiatedReductionTotal).toBe(100);
+		expect(comparison.statistics.originalProposalTotal).toBe(900);
+		expect(comparison.proposals.map((proposal) => proposal.costStatus)).toEqual(
+			["PROFIT", "NEUTRAL", "EXPENSE"],
+		);
 	});
 
 	it("selects a proposal without creating a contract and opens final approval", async () => {

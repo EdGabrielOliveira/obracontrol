@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+import { mapSequentialBatches } from "../../../lib/map-sequential-batches";
 import { prisma } from "../../../lib/prisma";
 
 export function buildActiveImportWhere(
@@ -101,25 +103,63 @@ export async function loadActiveWorkChildren(
 			: Promise.resolve([]),
 	]);
 	const activeItemIds = items.map((item) => item.id);
-	const operationalWhere = {
-		OR: [
-			...(activeImportWhere ? [activeImportWhere] : []),
-			{ ownerId, workId, importId: null },
-			...(activeItemIds.length > 0
-				? [{ budgetItemId: { in: activeItemIds } }]
-				: []),
-		],
-	};
-	const [measurements, actualCosts] = await Promise.all([
-		prisma.constructionMeasurement.findMany({
-			where: operationalWhere,
-			orderBy: { measurementDate: "asc" },
-		}),
-		prisma.constructionActualCost.findMany({
-			where: operationalWhere,
-			orderBy: { costDate: "asc" },
-		}),
-	]);
+	const baseOperationalConditions = [
+		...(activeImportWhere ? [activeImportWhere] : []),
+		{ ownerId, workId, importId: null },
+	];
+	const measurementConditions =
+		baseOperationalConditions as Prisma.ConstructionMeasurementWhereInput[];
+	const costConditions =
+		baseOperationalConditions as Prisma.ConstructionActualCostWhereInput[];
+	const batchingIds = activeItemIds.length > 0 ? activeItemIds : ["__none__"];
+	const operationalBatches = await mapSequentialBatches(
+		batchingIds,
+		200,
+		(batch) =>
+			Promise.all([
+				prisma.constructionMeasurement.findMany({
+					where: {
+						OR: [
+							...measurementConditions,
+							...(activeItemIds.length > 0
+								? [{ budgetItemId: { in: batch } }]
+								: []),
+						],
+					},
+					orderBy: { measurementDate: "asc" },
+				}),
+				prisma.constructionActualCost.findMany({
+					where: {
+						OR: [
+							...costConditions,
+							...(activeItemIds.length > 0
+								? [{ budgetItemId: { in: batch } }]
+								: []),
+						],
+					},
+					orderBy: { costDate: "asc" },
+				}),
+			]),
+	);
+	const measurements = Array.from(
+		new Map(
+			operationalBatches.flatMap(([rows]) => rows).map((row) => [row.id, row]),
+		).values(),
+	) as Awaited<ReturnType<typeof prisma.constructionMeasurement.findMany>>;
+	measurements.sort(
+		(a, b) =>
+			(a.measurementDate?.getTime() ?? 0) - (b.measurementDate?.getTime() ?? 0),
+	);
+	const actualCosts = Array.from(
+		new Map(
+			operationalBatches
+				.flatMap(([, rows]) => rows)
+				.map((row) => [row.id, row]),
+		).values(),
+	) as Awaited<ReturnType<typeof prisma.constructionActualCost.findMany>>;
+	actualCosts.sort(
+		(a, b) => (a.costDate?.getTime() ?? 0) - (b.costDate?.getTime() ?? 0),
+	);
 
 	return {
 		items: items as Array<Record<string, unknown>>,

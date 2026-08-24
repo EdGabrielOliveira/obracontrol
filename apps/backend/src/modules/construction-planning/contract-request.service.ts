@@ -460,10 +460,45 @@ export type ContractRequestComparison = {
 		negotiatedReductionTotal: number;
 		originalProposalTotal: number;
 		negotiatedReductionPercent: number | null;
+		negotiatedReductionSupplierName: string | null;
+		bestSupplier: {
+			name: string;
+			proposalValue: number;
+			costRatioPercent: number;
+		} | null;
+		worstSupplier: {
+			name: string;
+			proposalValue: number;
+			costRatioPercent: number;
+		} | null;
 		classification: {
-			profit: { count: number; amount: number };
-			neutral: { count: number; amount: number };
-			expense: { count: number; amount: number };
+			profit: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
+			neutral: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
+			expense: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
 		};
 	};
 	quotation: {
@@ -686,34 +721,101 @@ export async function getContractRequestComparison(
 		? proposalValues.reduce((sum, value) => sum + value, 0) /
 			proposalValues.length
 		: null;
-	const classification = proposalsWithSuppliers.reduce(
-		(result, proposal) => {
-			if (proposal.costStatus === "PROFIT") {
-				result.profit.count += 1;
-				result.profit.amount += proposal.costDifferenceAmount;
-			} else if (proposal.costStatus === "NEUTRAL") {
-				result.neutral.count += 1;
-				result.neutral.amount += proposal.costDifferenceAmount;
-			} else {
-				result.expense.count += 1;
-				result.expense.amount += Math.abs(proposal.costDifferenceAmount);
+	type ComparisonProposal = (typeof proposalsWithSuppliers)[number];
+	const bestProposal = proposalsWithSuppliers.reduce<
+		(typeof proposalsWithSuppliers)[number] | null
+	>((best, proposal) => {
+		if (best === null || proposal.proposalValue < best.proposalValue) {
+			return proposal;
+		}
+		return best;
+	}, null);
+	const worstProposal =
+		proposalsWithSuppliers.reduce<ComparisonProposal | null>(
+			(worst, proposal) => {
+				if (worst === null || proposal.proposalValue > worst.proposalValue) {
+					return proposal;
+				}
+				return worst;
+			},
+			null,
+		);
+	const toMetricSupplier = (proposal: ComparisonProposal | null) =>
+		proposal
+			? {
+					name: proposal.supplier.name,
+					proposalValue: proposal.proposalValue,
+					costRatioPercent: proposal.costRatioPercent,
+				}
+			: null;
+	type MetricSupplier = ReturnType<typeof toMetricSupplier>;
+	const selectProposal = (
+		candidates: ComparisonProposal[],
+		isBetter: (
+			candidate: ComparisonProposal,
+			current: ComparisonProposal,
+		) => boolean,
+	) =>
+		candidates.reduce<ComparisonProposal | null>((selected, proposal) => {
+			if (selected === null || isBetter(proposal, selected)) {
+				return proposal;
 			}
-			return result;
-		},
-		{
-			profit: { count: 0, amount: 0 },
-			neutral: { count: 0, amount: 0 },
-			expense: { count: 0, amount: 0 },
-		},
+			return selected;
+		}, null);
+	const bestProfitProposal = selectProposal(
+		proposalsWithSuppliers.filter(
+			(proposal) => proposal.costStatus === "PROFIT",
+		),
+		(candidate, current) =>
+			candidate.costDifferenceAmount > current.costDifferenceAmount,
 	);
-	const negotiatedReductionTotal = proposalsWithSuppliers.reduce(
-		(sum, proposal) => sum + proposal.negotiationReductionAmount,
-		0,
+	const bestNeutralProposal = selectProposal(
+		proposalsWithSuppliers.filter(
+			(proposal) => proposal.costStatus === "NEUTRAL",
+		),
+		(candidate, current) =>
+			candidate.costDifferenceAmount > current.costDifferenceAmount,
 	);
-	const originalProposalTotal = proposalsWithSuppliers.reduce(
-		(sum, proposal) => sum + proposal.originalProposalValue,
-		0,
+	const worstExpenseProposal = selectProposal(
+		proposalsWithSuppliers.filter(
+			(proposal) => proposal.costStatus === "EXPENSE",
+		),
+		(candidate, current) =>
+			candidate.costDifferenceAmount < current.costDifferenceAmount,
 	);
+	const classification: {
+		profit: { count: number; amount: number; supplier: MetricSupplier };
+		neutral: { count: number; amount: number; supplier: MetricSupplier };
+		expense: { count: number; amount: number; supplier: MetricSupplier };
+	} = {
+		profit: { count: 0, amount: 0, supplier: null },
+		neutral: { count: 0, amount: 0, supplier: null },
+		expense: { count: 0, amount: 0, supplier: null },
+	};
+	if (bestProfitProposal) {
+		classification.profit = {
+			count: 1,
+			amount: bestProfitProposal.costDifferenceAmount,
+			supplier: toMetricSupplier(bestProfitProposal),
+		};
+	}
+	if (bestNeutralProposal) {
+		classification.neutral = {
+			count: 1,
+			amount: bestNeutralProposal.costDifferenceAmount,
+			supplier: toMetricSupplier(bestNeutralProposal),
+		};
+	}
+	if (worstExpenseProposal) {
+		classification.expense = {
+			count: 1,
+			amount: Math.abs(worstExpenseProposal.costDifferenceAmount),
+			supplier: toMetricSupplier(worstExpenseProposal),
+		};
+	}
+	const negotiatedReductionTotal =
+		bestProposal?.negotiationReductionAmount ?? 0;
+	const originalProposalTotal = bestProposal?.originalProposalValue ?? 0;
 
 	return {
 		request: {
@@ -747,10 +849,13 @@ export async function getContractRequestComparison(
 					: ((budgetTotalNumber - supplierAverage) / budgetTotalNumber) * 100,
 			negotiatedReductionTotal,
 			originalProposalTotal,
+			negotiatedReductionSupplierName: bestProposal?.supplier.name ?? null,
 			negotiatedReductionPercent:
 				originalProposalTotal === 0
 					? null
 					: (negotiatedReductionTotal / originalProposalTotal) * 100,
+			bestSupplier: toMetricSupplier(bestProposal),
+			worstSupplier: toMetricSupplier(worstProposal),
 			classification,
 		},
 		quotation: request.confirmedBatchId

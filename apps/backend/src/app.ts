@@ -1,7 +1,6 @@
 import cors from "@elysiajs/cors";
 import { swagger } from "@elysiajs/swagger";
 import { Elysia, type ElysiaAdapter } from "elysia";
-import { env } from "./env";
 import { auth, authTrustedOrigins, expireLegacyAuthCookies } from "./lib/auth";
 import { bruteForceAfter, bruteForceGuard } from "./lib/brute-force";
 import { handleConstructionError } from "./lib/construction-error-handler";
@@ -13,6 +12,7 @@ import { enrichOpenApiDocument } from "./lib/openapi-documentation";
 import { prisma } from "./lib/prisma";
 import { rateLimitApi } from "./lib/rate-limit";
 import { requestContextPlugin } from "./lib/request-context";
+import { requestPath } from "./lib/request-path";
 import { securityHeaders } from "./lib/security-headers";
 import { decimalToNumber } from "./lib/serialize-helpers";
 import { apiKeyRoutes } from "./modules/api-keys/routes";
@@ -40,13 +40,12 @@ export function createApp(options?: {
 			if (startedAt === undefined) return;
 			const duration = performance.now() - startedAt;
 			const status = response instanceof Response ? response.status : 200;
-			const routeName = route || new URL(request.url).pathname;
+			const routeName = route || requestPath(request);
 			metrics.timing(`http.${request.method}.${routeName}`, duration);
 			metrics.increment(`http.status.${status}`);
 		})
 		.onAfterHandle({ as: "global" }, async ({ request, response }) => {
-			if (!new URL(request.url).pathname.endsWith("/openapi/json"))
-				return response;
+			if (!requestPath(request).endsWith("/openapi/json")) return response;
 			if (response instanceof Response) {
 				const document = await response.clone().json();
 				const enriched = enrichOpenApiDocument(document);
@@ -163,9 +162,9 @@ export function createApp(options?: {
 				],
 			}),
 		)
-		.use(rateLimitApi({ windowMs: 60 * 1000, max: 300 }))
 		.use(securityHeaders)
 		.use(globalAuth)
+		.use(rateLimitApi({ windowMs: 60 * 1000, max: 300 }))
 		.use(authorizationSessionRoutes)
 		.use(adminRegistrationRoutes)
 		.all("/api/auth/*", async ({ request }) => {

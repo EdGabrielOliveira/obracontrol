@@ -6,6 +6,7 @@ import { isAuthorizationRole } from "./authorization";
 import { ConstructionError } from "./errors";
 import { prisma } from "./prisma";
 import { requestContext } from "./request-context";
+import { requestPath } from "./request-path";
 import { isTenantApiRouteAllowed } from "./tenant-api-allowlist";
 
 type AuthUser = Session["user"] & { role?: string | null };
@@ -45,7 +46,7 @@ export async function resolveAuthenticatedUser(
 			throw new ConstructionError("UNAUTHORIZED", "Usuario desativado", 401);
 		}
 		assertAuthorizedRole(user.role);
-		const pathname = new URL(request.url).pathname;
+		const pathname = requestPath(request);
 		if (!isTenantApiRouteAllowed(request.method, pathname)) {
 			throw new ConstructionError(
 				request.method.toUpperCase() === "GET"

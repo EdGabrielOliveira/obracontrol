@@ -1,4 +1,5 @@
 import { ConstructionError } from "../../lib/errors";
+import { mapSequentialBatches } from "../../lib/map-sequential-batches";
 import { roundCurrency } from "../../lib/math-utils";
 import { prisma } from "../../lib/prisma";
 import { resolveResourceScope } from "../../lib/resource-scope";
@@ -87,20 +88,24 @@ export async function listCurrentCostBudgetItems(
 		},
 	});
 	const operationalItems = prisma.constructionBudgetItem
-		? await prisma.constructionBudgetItem.findMany({
-				where: {
-					ownerId,
-					workId,
-					...(version.budgetImportId
-						? { importId: version.budgetImportId }
-						: {}),
-					OR: [
-						{ identityId: { in: items.map((item) => item.identityId) } },
-						{ index: { in: items.map((item) => item.index) } },
-					],
-				},
-				select: { id: true, identityId: true, index: true },
-			})
+		? (
+				await mapSequentialBatches(items, 200, (batch) =>
+					prisma.constructionBudgetItem.findMany({
+						where: {
+							ownerId,
+							workId,
+							...(version.budgetImportId
+								? { importId: version.budgetImportId }
+								: {}),
+							OR: [
+								{ identityId: { in: batch.map((item) => item.identityId) } },
+								{ index: { in: batch.map((item) => item.index) } },
+							],
+						},
+						select: { id: true, identityId: true, index: true },
+					}),
+				)
+			).flat()
 		: [];
 	const operationalByIdentity = new Map(
 		operationalItems.map((item) => [item.identityId, item.id]),

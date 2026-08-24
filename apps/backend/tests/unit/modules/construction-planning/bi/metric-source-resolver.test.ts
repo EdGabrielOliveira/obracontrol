@@ -159,6 +159,27 @@ function makeDeps(overrides: Partial<MetricSourceResolverDependencies> = {}) {
 }
 
 describe("MetricSourceResolver LIVE", () => {
+	it("shares an in-flight resolution for the same work and cutoff", async () => {
+		const deps = makeDeps();
+		deps.getWork.mockResolvedValue(workFixture());
+		const resolver = new MetricSourceResolver(deps.dependencies);
+		const request = {
+			ownerId: "owner-1",
+			workId: "work-1",
+			asOfDate: new Date("2026-01-10T00:00:00.000Z"),
+		};
+
+		const [first, second] = await Promise.all([
+			resolver.resolve(request),
+			resolver.resolve(request),
+		]);
+
+		expect(first.fingerprint).toBe(second.fingerprint);
+		expect(deps.getWork).toHaveBeenCalledTimes(1);
+		expect(deps.getLedgerSummary).toHaveBeenCalledTimes(1);
+		expect(deps.getBudgetBalance).toHaveBeenCalledTimes(1);
+	});
+
 	it("resolves work with active children and returns the full envelope", async () => {
 		const deps = makeDeps();
 		deps.getWork.mockResolvedValue(workFixture());

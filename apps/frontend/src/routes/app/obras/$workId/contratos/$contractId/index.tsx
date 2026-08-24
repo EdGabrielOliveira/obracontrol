@@ -286,7 +286,6 @@ function RouteComponent() {
 		queryKey: contractKeys.services(workId, contractId),
 		queryFn: () => listContractServices(workId, contractId),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const {
@@ -298,14 +297,12 @@ function RouteComponent() {
 		queryKey: contractKeys.measurementsList(workId, contractId, measFilter),
 		queryFn: () => listContractMeasurements(workId, contractId, measFilter),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: payments, isLoading: isPaymentsLoading } = useQuery({
 		queryKey: contractKeys.paymentsList(workId, contractId, payFilter),
 		queryFn: () => listContractPayments(workId, contractId, payFilter),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: paymentMeasurements } = useQuery({
@@ -316,20 +313,17 @@ function RouteComponent() {
 		queryFn: () =>
 			listContractMeasurements(workId, contractId, { page: 1, limit: 100 }),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: effectiveBudgetVersion } = useQuery({
 		queryKey: workKeys.budgetVersion(workId),
 		queryFn: () => getEffectiveBudgetVersion(workId),
-		retry: 1,
 	});
 
 	const activeBudgetVersionQuery = useQuery({
 		queryKey: budgetVersionKeys.history(workId),
 		queryFn: () => listBudgetVersions(workId),
 		staleTime: 5 * 60 * 1000,
-		retry: 1,
 	});
 
 	const activeBudgetVersion = useMemo(
@@ -347,7 +341,6 @@ function RouteComponent() {
 			return getBudgetVersion(workId, activeBudgetVersion.id);
 		},
 		enabled: !!activeBudgetVersion,
-		retry: 1,
 	});
 
 	const sourceBudgetDetailQuery = useQuery({
@@ -359,7 +352,6 @@ function RouteComponent() {
 			return getBudgetVersion(workId, activeBudgetVersion.sourceVersionId);
 		},
 		enabled: !!activeBudgetVersion?.sourceVersionId,
-		retry: 1,
 	});
 
 	const budgetVersionChanges = useMemo(() => {
@@ -384,14 +376,12 @@ function RouteComponent() {
 		queryKey: contractKeys.aggregate(workId, contractId),
 		queryFn: () => getContractAggregate(workId, contractId),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: amendments, isLoading: isAmendmentsLoading } = useQuery({
 		queryKey: contractKeys.amendments(workId, contractId),
 		queryFn: () => listContractAmendments(workId, contractId),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const hasAmendments = (amendments?.length ?? 0) > 0;

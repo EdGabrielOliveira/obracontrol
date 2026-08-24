@@ -99,7 +99,6 @@ function RouteComponent() {
 		),
 		queryFn: () => listWorkMeasurements(workId, searchParams),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: mapData, isLoading: isMapLoading } = useQuery({
@@ -127,7 +126,6 @@ function RouteComponent() {
 		queryKey: measurementCoverageKeys.list(workId),
 		queryFn: () => listMeasurementCoverages(workId),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const coveredItemIds = useMemo(() => {

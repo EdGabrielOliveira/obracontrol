@@ -3,6 +3,7 @@ import { env } from "../env";
 import { logger } from "./logger";
 import { metrics } from "./metrics";
 import { MemoryRateLimitStore, type RateLimitStore } from "./rate-limit-store";
+import { requestContext } from "./request-context";
 
 interface RateLimitOptions {
 	windowMs: number;
@@ -53,7 +54,11 @@ export function rateLimitApi(options: RateLimitOptions) {
 			// Rotas autenticadas usam o userId como identidade do bucket.
 			// Rotas anonimas usam o IP observado pelo servidor ou, quando atras de
 			// proxy, o primeiro IP do header somente com TRUSTED_PROXY configurado.
-			const clientId = user?.id ?? clientIp(request, server) ?? "anonymous";
+			const clientId =
+				user?.id ??
+				requestContext.getUserId() ??
+				clientIp(request, server) ??
+				"anonymous";
 
 			const result = await (await resolveStore()).check(scopeKey, clientId, {
 				windowMs: options.windowMs,

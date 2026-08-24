@@ -74,7 +74,6 @@ function RouteComponent() {
 		queryKey: supplierKeys.list(searchParams as Record<string, unknown>),
 		queryFn: () => listSuppliers(searchParams as SupplierFilter),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const deleteMutation = useMutation({

@@ -40,6 +40,26 @@ function deriveEntityType(path: string | undefined): string {
 	return segments.slice(0, 2).join(".") || "root";
 }
 
+function normalizeMetricRoute(path: string | undefined): string {
+	return (path ?? "unknown").replace(
+		/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+		":id",
+	);
+}
+
+function safePrismaMessage(message: string): string {
+	return message.replace(/[\r\n\t]+/g, " ").slice(0, 1000);
+}
+
+function safePrismaMeta(meta: unknown): string | null {
+	if (meta == null) return null;
+	try {
+		return JSON.stringify(meta).slice(0, 1000);
+	} catch {
+		return null;
+	}
+}
+
 export function handleConstructionError(context: ErrorHandlerContext) {
 	const { error, code, path } = context;
 	const user = context.user;
@@ -128,6 +148,8 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 		);
 	}
 	if (error instanceof Prisma.PrismaClientKnownRequestError) {
+		metrics.increment(`db.error.${error.code}`);
+		metrics.increment(`db.error.route.${normalizeMetricRoute(path)}`);
 		if (error.code === "P2002") {
 			const target = (error.meta?.target as string[]) ?? [];
 			const field = target.includes("code") ? "codigo" : target.join(", ");
@@ -149,7 +171,12 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 				},
 			);
 		}
-		logger.error("db.error", { prismaCode: error.code, path });
+		logger.error("db.error", {
+			prismaCode: error.code,
+			prismaMessage: safePrismaMessage(error.message),
+			prismaMeta: safePrismaMeta(error.meta),
+			path,
+		});
 		reportException(error);
 		return new Response(
 			JSON.stringify({

@@ -102,6 +102,11 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	trustedOrigins: authTrustedOrigins,
 	advanced: {
+		ipAddress: {
+			// Only values explicitly configured as trusted reverse proxies may
+			// influence the client IP used by Better Auth rate limiting.
+			trustedProxies: env.TRUSTED_PROXY ?? undefined,
+		},
 		cookies: {
 			session_token: { name: authCookieNames.sessionToken },
 			session_data: { name: authCookieNames.sessionData },

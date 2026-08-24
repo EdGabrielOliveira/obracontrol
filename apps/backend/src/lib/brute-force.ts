@@ -15,7 +15,7 @@ function isAuthAction(url: URL): boolean {
 export async function bruteForceGuard(
 	request: Request,
 ): Promise<Response | null> {
-	const url = new URL(request.url);
+	const url = new URL(request.url, "http://internal.invalid");
 
 	if (request.method !== "POST" || !isAuthAction(url)) return null;
 
@@ -50,7 +50,7 @@ export async function bruteForceGuard(
 }
 
 export async function bruteForceAfter(request: Request, response: Response) {
-	const url = new URL(request.url);
+	const url = new URL(request.url, "http://internal.invalid");
 
 	if (request.method !== "POST" || !isAuthAction(url)) return;
 

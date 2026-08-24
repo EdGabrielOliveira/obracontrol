@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import { requestPath } from "./request-path";
 import { resolveAuthenticatedUser } from "./resolve-auth";
 
 const PUBLIC_PREFIXES = ["/health", "/api/auth/"];
@@ -17,7 +18,7 @@ export const globalAuth = new Elysia({ name: "global-auth" }).onBeforeHandle(
 	{ as: "global" },
 	async ({ request }) => {
 		if (request.method === "OPTIONS") return;
-		const pathname = new URL(request.url).pathname;
+		const pathname = requestPath(request);
 		if (isPublicPath(pathname) && !isApiKeyRequest(request)) return;
 		await resolveAuthenticatedUser(request);
 	},

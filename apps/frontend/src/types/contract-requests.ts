@@ -77,10 +77,45 @@ export type ContractRequestComparison = {
 		negotiatedReductionTotal: number;
 		originalProposalTotal: number;
 		negotiatedReductionPercent: number | null;
+		negotiatedReductionSupplierName: string | null;
+		bestSupplier: {
+			name: string;
+			proposalValue: number;
+			costRatioPercent: number;
+		} | null;
+		worstSupplier: {
+			name: string;
+			proposalValue: number;
+			costRatioPercent: number;
+		} | null;
 		classification: {
-			profit: { count: number; amount: number };
-			neutral: { count: number; amount: number };
-			expense: { count: number; amount: number };
+			profit: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
+			neutral: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
+			expense: {
+				count: number;
+				amount: number;
+				supplier: {
+					name: string;
+					proposalValue: number;
+					costRatioPercent: number;
+				} | null;
+			};
 		};
 	};
 	quotation: {

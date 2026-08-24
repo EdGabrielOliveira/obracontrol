@@ -155,7 +155,6 @@ function RouteComponent() {
 		),
 		queryFn: () => listActualCosts(workId, searchParams),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const {
@@ -165,7 +164,6 @@ function RouteComponent() {
 	} = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
 		queryFn: () => getCurrentCostBudgetItems(workId),
-		retry: 1,
 	});
 
 	const handleExport = async () => {

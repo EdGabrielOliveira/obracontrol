@@ -53,7 +53,8 @@ export const securityHeaders = new Elysia({
 		?.trim()
 		.toLowerCase();
 	const isHttps =
-		forwardedProto === "https" || new URL(request.url).protocol === "https:";
+		forwardedProto === "https" ||
+		new URL(request.url, "http://internal.invalid").protocol === "https:";
 	const headers = buildSecurityHeaders({ isSecure: isHttps });
 
 	if (response instanceof Response) {

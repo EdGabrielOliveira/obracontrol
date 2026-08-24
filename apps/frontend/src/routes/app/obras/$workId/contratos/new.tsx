@@ -80,7 +80,6 @@ function RouteComponent() {
 	} = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
 		queryFn: () => getCurrentCostBudgetItems(workId),
-		retry: 1,
 	});
 
 	const createMutation = useMutation({

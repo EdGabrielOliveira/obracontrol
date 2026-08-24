@@ -84,7 +84,6 @@ function RouteComponent() {
 		queryKey: workKeys.detail(workId),
 		queryFn: () => getWork(workId),
 		staleTime: 5 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data, isLoading, error } = useQuery({

@@ -7,6 +7,5 @@ export function authorizationSessionQueryOptions() {
 		queryKey: authQueryKeys.authorization,
 		queryFn: fetchAuthorizationSession,
 		staleTime: queryCacheDuration.sessionStale,
-		retry: 1,
 	});
 }

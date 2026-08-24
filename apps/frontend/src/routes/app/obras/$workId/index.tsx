@@ -130,7 +130,6 @@ function RouteComponent() {
 		queryFn: () => getSchedule(workId),
 		enabled: tab === "resumo",
 		staleTime: 60_000,
-		retry: 1,
 	});
 
 	const auditQuery = useQuery({

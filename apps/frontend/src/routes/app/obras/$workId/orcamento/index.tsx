@@ -132,7 +132,6 @@ function RouteComponent() {
 		queryKey: workKeys.budget(workId),
 		queryFn: () => getBudgetItems(workId),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const {
@@ -142,14 +141,12 @@ function RouteComponent() {
 	} = useQuery({
 		queryKey: workKeys.budgetVersion(workId),
 		queryFn: () => getEffectiveBudgetVersion(workId),
-		retry: 1,
 	});
 
 	const { data: versionHistory, isLoading: versionHistoryLoading } = useQuery({
 		queryKey: budgetVersionKeys.history(workId),
 		queryFn: () => listBudgetVersions(workId),
 		enabled: tab === "itens",
-		retry: 1,
 	});
 
 	const [expandedVersionId, setExpandedVersionId] = useState<string | null>(
@@ -179,7 +176,6 @@ function RouteComponent() {
 				? getBudgetVersion(workId, expandedVersionId)
 				: Promise.resolve(null),
 		enabled: tab === "itens" && expandedVersionId !== null,
-		retry: 1,
 	});
 	const sourceDetailQuery = useQuery({
 		queryKey: budgetVersionKeys.detail(workId, expandedSourceId ?? ""),
@@ -188,7 +184,6 @@ function RouteComponent() {
 				? getBudgetVersion(workId, expandedSourceId)
 				: Promise.resolve(null),
 		enabled: tab === "itens" && expandedSourceId !== null,
-		retry: 1,
 	});
 
 	const versionDetails = new Map<string, BudgetVersionDetail | null>();
@@ -216,7 +211,6 @@ function RouteComponent() {
 		queryFn: () => getSchedule(workId),
 		enabled: tab === "cronograma",
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const [physFinPeriod, setPhysFinPeriod] = useState<
@@ -228,7 +222,6 @@ function RouteComponent() {
 		queryFn: () => getPhysicalFinancialSchedule(workId, physFinPeriod),
 		enabled: tab === "fisico-financeiro",
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 
 	const { data: workDetail } = useQuery({

@@ -1,3 +1,4 @@
+import { mapSequentialBatches } from "../../lib/map-sequential-batches";
 import { roundCurrency } from "../../lib/math-utils";
 import { toFiniteNumber } from "../../lib/number-utils";
 import type { SchedulePeriod } from "../../lib/period-utils";
@@ -260,17 +261,27 @@ export async function getCostCenterReport(ownerId: string, ccId: string) {
 		}),
 	]);
 	const activeItemIds = activeItems.map((item) => item.id);
-	const actualCosts = await prisma.constructionActualCost.findMany({
-		where: {
-			OR: [
-				{ ownerId, workId: { in: workIds }, importId: null },
-				...(activeItemIds.length > 0
-					? [{ budgetItemId: { in: activeItemIds } }]
-					: []),
-			],
-		},
-		select: { workId: true, amount: true },
-	});
+	const actualCostBatches = await mapSequentialBatches(
+		activeItemIds.length > 0 ? activeItemIds : ["__none__"],
+		200,
+		(batch) =>
+			prisma.constructionActualCost.findMany({
+				where: {
+					OR: [
+						{ ownerId, workId: { in: workIds }, importId: null },
+						...(activeItemIds.length > 0
+							? [{ budgetItemId: { in: batch } }]
+							: []),
+					],
+				},
+				select: { id: true, workId: true, amount: true },
+			}),
+	);
+	const actualCosts = Array.from(
+		new Map(
+			actualCostBatches.flatMap((batch) => batch.map((row) => [row.id, row])),
+		).values(),
+	);
 
 	const budgetByWork = new Map<string, number>();
 	for (const bi of budgetItems) {

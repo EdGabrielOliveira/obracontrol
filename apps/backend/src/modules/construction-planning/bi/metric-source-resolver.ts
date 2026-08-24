@@ -5,6 +5,7 @@ import { deriveWorkIdentity } from "../identity";
 import { summarizeLedger } from "../ledger/ledger.service";
 import { getWorkMeasurementsForBI } from "../work-measurement.repository";
 import { getWorkWithItems } from "../works/works.repository";
+import type { OfficialWorkBalanceContext } from "./budget-balance-source";
 import { getOfficialWorkBalance } from "./budget-balance-source";
 import type {
 	WorkForBIInput,
@@ -45,6 +46,7 @@ export type MetricSourceResolverDependencies = {
 		ownerId: string,
 		workId: string,
 		asOfDate?: Date,
+		context?: OfficialWorkBalanceContext,
 	) => Promise<import("./budget-balance-source").WorkBalanceDto | null>;
 };
 
@@ -186,8 +188,8 @@ const defaultDependencies: MetricSourceResolverDependencies = {
 		listContractSnapshotRows(ownerId, workId, asOfDate),
 	getLedgerSummary: (ownerId, workId, asOfDate) =>
 		summarizeLedger(ownerId, workId, asOfDate ?? new Date()),
-	getBudgetBalance: (ownerId, workId, asOfDate) =>
-		getOfficialWorkBalance(ownerId, workId, asOfDate),
+	getBudgetBalance: (ownerId, workId, asOfDate, context) =>
+		getOfficialWorkBalance(ownerId, workId, asOfDate, context),
 };
 
 export class MetricSourceResolver {
@@ -195,9 +197,24 @@ export class MetricSourceResolver {
 		private readonly dependencies: MetricSourceResolverDependencies = defaultDependencies,
 	) {}
 
+	private readonly inFlight = new Map<string, Promise<ResolvedMetricSource>>();
+
 	async resolve(request: MetricSourceRequest): Promise<ResolvedMetricSource> {
 		const { ownerId, workId, asOfDate } = request;
-		return this.resolveLive(ownerId, workId, asOfDate);
+		const key = `${ownerId}:${workId}:${asOfDate?.toISOString() ?? "current"}`;
+		const existing = this.inFlight.get(key);
+		if (existing) return existing;
+		const pending = this.resolveLive(ownerId, workId, asOfDate);
+		this.inFlight.set(key, pending);
+		void pending.then(
+			() => {
+				if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
+			},
+			() => {
+				if (this.inFlight.get(key) === pending) this.inFlight.delete(key);
+			},
+		);
+		return pending;
 	}
 
 	private async resolveLive(
@@ -209,13 +226,17 @@ export class MetricSourceResolver {
 		if (!work) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}
-		const [manualMeasurements, contracts, ledger, budgetBalance] =
-			await Promise.all([
-				this.dependencies.getManualMeasurements(ownerId, workId),
-				this.dependencies.listContracts(ownerId, workId, asOfDate),
-				this.dependencies.getLedgerSummary(ownerId, workId, asOfDate),
-				this.dependencies.getBudgetBalance(ownerId, workId, asOfDate),
-			]);
+		const [manualMeasurements, contracts, ledger] = await Promise.all([
+			this.dependencies.getManualMeasurements(ownerId, workId),
+			this.dependencies.listContracts(ownerId, workId, asOfDate),
+			this.dependencies.getLedgerSummary(ownerId, workId, asOfDate),
+		]);
+		const budgetBalance = await this.dependencies.getBudgetBalance(
+			ownerId,
+			workId,
+			asOfDate,
+			{ work: { items: work.items }, summary: ledger },
+		);
 		const snapshot = buildWorkMetricsSnapshot({
 			work,
 			manualMeasurements,

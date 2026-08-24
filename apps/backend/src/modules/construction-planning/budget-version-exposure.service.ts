@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { ConstructionError } from "../../lib/errors";
+import { mapSequentialBatches } from "../../lib/map-sequential-batches";
 import { prisma } from "../../lib/prisma";
 import { resolveResourceScope } from "../../lib/resource-scope";
 import type { BudgetExposure } from "./budget-version-comparison";
@@ -25,21 +26,27 @@ export async function loadBudgetExposure(
 	});
 	if (items.length === 0) return new Map();
 
-	const impacts = await prisma.constructionBudgetImpact.findMany({
-		where: {
-			ownerId: actorId,
-			workId,
-			budgetItemIdentityId: { in: items.map((item) => item.identityId) },
-			reversedAt: null,
-			status: { not: "REJECTED" },
-		},
-		select: {
-			budgetItemIdentityId: true,
-			sourceType: true,
-			impactType: true,
-			quantity: true,
-		},
-	});
+	const impactBatches = await mapSequentialBatches(
+		items.map((item) => item.identityId),
+		200,
+		(identityIds) =>
+			prisma.constructionBudgetImpact.findMany({
+				where: {
+					ownerId: actorId,
+					workId,
+					budgetItemIdentityId: { in: [...new Set(identityIds)] },
+					reversedAt: null,
+					status: { not: "REJECTED" },
+				},
+				select: {
+					budgetItemIdentityId: true,
+					sourceType: true,
+					impactType: true,
+					quantity: true,
+				},
+			}),
+	);
+	const impacts = impactBatches.flat();
 
 	const indexByIdentityId = new Map(
 		items.map((item) => [item.identityId, item.index]),

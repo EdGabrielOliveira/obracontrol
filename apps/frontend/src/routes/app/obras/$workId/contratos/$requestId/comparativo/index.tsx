@@ -66,7 +66,6 @@ function ComparisonRouteComponent() {
 	} = useQuery({
 		queryKey: contractRequestKeys.comparison(workId, requestId),
 		queryFn: () => getContractRequestComparison(workId, requestId),
-		retry: 1,
 	});
 
 	const selectMutation = useMutation({

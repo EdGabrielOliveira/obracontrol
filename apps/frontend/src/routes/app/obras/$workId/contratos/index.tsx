@@ -87,7 +87,6 @@ function RouteComponent() {
 		),
 		queryFn: () => listContracts(workId, searchParams as ContractFilter),
 		staleTime: 2 * 60 * 1000,
-		retry: 1,
 	});
 	const { data: pendingRequests = [] } = useQuery({
 		queryKey: ["contract-requests", workId],
