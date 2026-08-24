@@ -12,6 +12,7 @@ export type NewImportBatch = {
 	fileSha256: string;
 	storageKey: string;
 	expiresAt: Date;
+	contractRequestId?: string | null;
 	reprocessOfId?: string | null;
 	reason?: string | null;
 };
@@ -39,6 +40,7 @@ export async function createImportBatch(
 			fileSha256: input.fileSha256,
 			storageKey: input.storageKey,
 			status: "PARSING",
+			contractRequestId: input.contractRequestId ?? null,
 			reprocessOfId: input.reprocessOfId ?? null,
 			errorSummary: input.reason ? { reason: input.reason } : Prisma.DbNull,
 			expiresAt: input.expiresAt,
@@ -54,18 +56,6 @@ export async function findImportBatch(
 ) {
 	return prisma.importBatch.findFirst({
 		where: { id: batchId, ownerId, workId },
-	});
-}
-
-export async function findBatchByFingerprint(
-	ownerId: string,
-	model: string,
-	fileSha256: string,
-	statuses: string[],
-) {
-	return prisma.importBatch.findFirst({
-		where: { ownerId, model, fileSha256, status: { in: statuses } },
-		orderBy: { createdAt: "desc" },
 	});
 }
 

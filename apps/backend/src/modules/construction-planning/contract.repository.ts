@@ -21,6 +21,27 @@ import type {
 } from "./schemas/contract.schema";
 import { findSupplierByDocumentOrName } from "./suppliers/supplier.repository";
 
+type QuotationSupplierRow = {
+	supplierDocument?: unknown;
+	supplierAddress?: unknown;
+	supplierPhone?: unknown;
+	supplierEmail?: unknown;
+	supplierResponsible?: unknown;
+};
+
+function importedText(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const text = value.trim();
+	return text.length > 0 ? text : null;
+}
+
+function documentDigits(value: unknown): string | null {
+	const text = importedText(value);
+	if (!text) return null;
+	const digits = text.replace(/\D/g, "");
+	return digits.length > 0 ? digits : null;
+}
+
 export async function listContractSnapshotRows(
 	ownerId: string,
 	workId: string,
@@ -155,7 +176,15 @@ export async function getContractById(
 			},
 			folders: true,
 			contractRequest: {
-				select: { id: true, acceptedProposalId: true },
+				select: {
+					id: true,
+					acceptedProposalId: true,
+					confirmedBatchId: true,
+				},
+			},
+			quotations: {
+				select: { id: true },
+				take: 1,
 			},
 			amendments: {
 				where: { ownerId, approvalStatus: "APPROVED" },
@@ -220,6 +249,32 @@ export async function getContractById(
 					acceptedProposal.supplierName,
 				)
 			: null);
+	const importRows =
+		!resolvedSupplier &&
+		acceptedProposal &&
+		contract.contractRequest?.confirmedBatchId
+			? await prisma.importRow.findMany({
+					where: { batchId: contract.contractRequest.confirmedBatchId },
+					select: { values: true },
+				})
+			: [];
+	const importedSupplier = importRows.find((row) => {
+		const values = row.values as QuotationSupplierRow;
+		return (
+			documentDigits(values.supplierDocument) ===
+			acceptedProposal?.normalizedCnpj
+		);
+	})?.values as QuotationSupplierRow | undefined;
+	const supplierCandidate = resolvedSupplier
+		? null
+		: {
+				name: acceptedProposal?.supplierName ?? contract.supplierName,
+				document: acceptedProposal?.normalizedCnpj ?? null,
+				address: importedText(importedSupplier?.supplierAddress),
+				phone: importedText(importedSupplier?.supplierPhone),
+				email: importedText(importedSupplier?.supplierEmail),
+				responsibleName: importedText(importedSupplier?.supplierResponsible),
+			};
 	const originalProposalValue = acceptedProposal
 		? Number(
 				acceptedProposal.originalProposalValue ??
@@ -237,7 +292,9 @@ export async function getContractById(
 	}));
 	return {
 		...contract,
+		quotationId: contract.quotations[0]?.id ?? null,
 		supplier: resolvedSupplier,
+		supplierCandidate,
 		services: servicesWithCurrentIndex,
 		totalValue: contractTotal(
 			Number(contract.contractValue),
@@ -305,11 +362,20 @@ export async function createContract(
 	});
 }
 
+type LegacyContractUpdateInput = UpdateContractInput & {
+	code?: string;
+	supplierName?: string;
+	supplierId?: string | null;
+	contractValue?: number;
+	status?: string;
+	notes?: string;
+};
+
 export async function updateContract(
 	ownerId: string,
 	workId: string,
 	contractId: string,
-	input: UpdateContractInput,
+	input: LegacyContractUpdateInput,
 ) {
 	const existing = await prisma.contract.findFirst({
 		where: { id: contractId, ownerId, workId },
@@ -326,15 +392,9 @@ export async function updateContract(
 	}
 
 	const updateData = pickDefined(input, [
-		"code",
-		"supplierName",
-		"supplierId",
 		"serviceType",
 		"objectDescription",
 		"title",
-		"contractValue",
-		"status",
-		"notes",
 	] as (keyof typeof input)[]);
 	if (input.startDate !== undefined)
 		(updateData as Record<string, unknown>).startDate = input.startDate

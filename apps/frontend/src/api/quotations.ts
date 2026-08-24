@@ -48,6 +48,16 @@ export async function requoteQuotation(
 	return data;
 }
 
+export async function revertQuotationContract(
+	workId: string,
+	quotationId: string,
+): Promise<Quotation> {
+	const { data } = await api.post<Quotation>(
+		`/construction/works/${workId}/quotations/${quotationId}/revert-contract`,
+	);
+	return data;
+}
+
 export async function chooseQuotationWinner(
 	workId: string,
 	quotationId: string,

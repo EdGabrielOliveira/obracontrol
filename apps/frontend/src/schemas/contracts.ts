@@ -63,6 +63,19 @@ export type ContractFormValues = {
 	notes?: string;
 };
 
+export const contractEditFormSchema = z.object({
+	serviceType: z.string().optional(),
+	objectDescription: z
+		.string()
+		.trim()
+		.min(1, "Descrição do contrato obrigatória"),
+	title: z.string().optional(),
+	startDate: z.string().optional(),
+	endDate: z.string().optional(),
+});
+
+export type ContractEditFormValues = z.infer<typeof contractEditFormSchema>;
+
 export const contractServiceCreateSchema = z.object({
 	budgetItemId: z.string().min(1, "Item de orçamento obrigatório"),
 	quantity: z.string().optional(),

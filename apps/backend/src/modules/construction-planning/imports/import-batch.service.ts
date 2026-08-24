@@ -2,7 +2,6 @@ import type { Prisma } from "@prisma/client";
 import * as XLSX from "xlsx";
 import { ConstructionError } from "../../../lib/errors";
 import { importStorage } from "../../../lib/import-storage";
-import { prisma } from "../../../lib/prisma";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
@@ -125,58 +124,6 @@ export class ConstructionImportBatchService {
 				new Date(Date.now() + IMPORT_LIMITS.batchTtlDays * 24 * 60 * 60 * 1000),
 			);
 
-			const duplicated = input.reprocessOfId
-				? null
-				: await importBatchRepository.findBatchByFingerprint(
-						ownerId,
-						input.model,
-						stored.sha256,
-						["READY", "CONFIRMED", "PENDING_CONFIRM"],
-					);
-			if (duplicated) {
-				if (
-					duplicated.status === "READY" ||
-					duplicated.status === "PENDING_CONFIRM"
-				) {
-					await importStorage.remove(stored.storageKey);
-					return this.getPreviewPage(ownerId, workId, duplicated.id, 1);
-				}
-				const abandonedQuotationRequest =
-					input.model === "quotation-map" && duplicated.contractRequestId
-						? await prisma.contractRequest.findFirst({
-								where: {
-									id: duplicated.contractRequestId,
-									status: "EM_ESPERA",
-									confirmedBatchId: null,
-								},
-								select: { id: true },
-							})
-						: null;
-				if (abandonedQuotationRequest) {
-					await prisma.$transaction([
-						prisma.importBatch.update({
-							where: { id: duplicated.id },
-							data: {
-								status: "CANCELLED",
-								errorSummary: { reason: "ABANDONED_QUOTATION_RETRY" },
-							},
-						}),
-						prisma.contractRequest.update({
-							where: { id: abandonedQuotationRequest.id },
-							data: { status: "CANCELADA" },
-						}),
-					]);
-					await importStorage.remove(duplicated.storageKey);
-				} else {
-					await importStorage.remove(stored.storageKey);
-					throw new ConstructionError(
-						"IMPORT_FILE_DUPLICATE",
-						"Este arquivo ja foi importado nesta obra; use reprocessamento intencional para nova revisao",
-						409,
-					);
-				}
-			}
-
 			const created = await importBatchRepository.createImportBatch({
 				ownerId,
 				workId,
@@ -189,6 +136,7 @@ export class ConstructionImportBatchService {
 				expiresAt: new Date(
 					Date.now() + IMPORT_LIMITS.batchTtlDays * 24 * 60 * 60 * 1000,
 				),
+				contractRequestId: input.contractRequestId ?? null,
 				reprocessOfId: input.reprocessOfId ?? null,
 				reason: input.reason ?? null,
 			});

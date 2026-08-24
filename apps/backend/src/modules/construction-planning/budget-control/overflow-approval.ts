@@ -30,6 +30,8 @@ export async function submitOverflowApproval(input: {
 
 export async function withOverflowApproval<T>(input: {
 	ownerId: string;
+	/** The authenticated actor, never the tenant owner. */
+	actorId?: string;
 	workId: string;
 	sourceType: string;
 	commit: (tx: Prisma.TransactionClient) => Promise<{
@@ -43,7 +45,7 @@ export async function withOverflowApproval<T>(input: {
 	);
 	if (overflow?.requiresApproval) {
 		await submitOverflowApproval({
-			actorId: input.ownerId,
+			actorId: input.actorId ?? input.ownerId,
 			workId: input.workId,
 			result: overflow,
 			sourceType: input.sourceType,

@@ -113,12 +113,12 @@ describe("contract request quotation map import", () => {
 		expect(createBatchMock).toHaveBeenCalledWith(
 			"user-1",
 			"work-1",
-			expect.objectContaining({ model: "quotation-map" }),
+			expect.objectContaining({
+				model: "quotation-map",
+				contractRequestId: "request-1",
+			}),
 		);
-		expect(importBatchUpdate).toHaveBeenCalledWith({
-			where: { id: "batch-1" },
-			data: { contractRequestId: "request-1" },
-		});
+		expect(importBatchUpdate).not.toHaveBeenCalled();
 	});
 
 	it("confirms a valid batch persisting proposals and locking the request map", async () => {

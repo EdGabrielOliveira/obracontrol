@@ -105,7 +105,11 @@ export async function updateOrganization(
 		structuredAddress?: StructuredAddress | null;
 	},
 ) {
-	const org = await prisma.organization.findFirst({ where: { id, ownerId } });
+	const accessibleIds = await getAccessibleOrgIds(ownerId);
+	if (!accessibleIds.includes(id)) return null;
+	const org = await prisma.organization.findFirst({
+		where: { id },
+	});
 	if (!org) return null;
 
 	const updateData: Record<string, unknown> = {};
@@ -127,15 +131,19 @@ export async function updateOrganization(
 	}
 
 	return prisma.organization.update({
-		where: { id, ownerId },
+		where: { id },
 		data: updateData,
 	});
 }
 
 export async function deleteOrganization(ownerId: string, id: string) {
-	const org = await prisma.organization.findFirst({ where: { id, ownerId } });
+	const accessibleIds = await getAccessibleOrgIds(ownerId);
+	if (!accessibleIds.includes(id)) return null;
+	const org = await prisma.organization.findFirst({
+		where: { id },
+	});
 	if (!org) return null;
-	await prisma.organization.delete({ where: { id, ownerId } });
+	await prisma.organization.delete({ where: { id } });
 	return org;
 }
 
@@ -149,6 +157,13 @@ export async function createCostCenter(
 		structuredAddress?: StructuredAddress | null;
 	},
 ) {
+	const accessibleOrgIds = await getAccessibleOrgIds(ownerId);
+	if (!accessibleOrgIds.includes(organizationId)) return null;
+	const organization = await prisma.organization.findFirst({
+		where: { id: organizationId },
+		select: { id: true, ownerId: true },
+	});
+	if (!organization) return null;
 	return prisma.$transaction(async (tx) => {
 		const address = data.structuredAddress
 			? await tx.address.create({
@@ -157,7 +172,7 @@ export async function createCostCenter(
 			: null;
 		return tx.costCenter.create({
 			data: {
-				ownerId,
+				ownerId: organization.ownerId,
 				organizationId,
 				name: data.name,
 				managerName: data.managerName?.trim() || null,
@@ -224,8 +239,9 @@ export async function updateCostCenter(
 		structuredAddress?: StructuredAddress | null;
 	},
 ) {
+	const accessibleIds = await getAccessibleCostCenterIds(ownerId);
 	const cc = await prisma.costCenter.findFirst({
-		where: { id, organizationId, ownerId },
+		where: { id: { in: accessibleIds }, organizationId },
 	});
 	if (!cc) return null;
 
@@ -245,15 +261,17 @@ export async function updateCostCenter(
 		}
 	}
 	if (data.organizationId !== undefined) {
+		const accessibleOrgIds = await getAccessibleOrgIds(ownerId);
+		if (!accessibleOrgIds.includes(data.organizationId)) return null;
 		const targetOrg = await prisma.organization.findFirst({
-			where: { id: data.organizationId, ownerId },
+			where: { id: data.organizationId },
 		});
 		if (!targetOrg) return null;
 		updateData.organizationId = data.organizationId;
 	}
 
 	return prisma.costCenter.update({
-		where: { id, organizationId, ownerId },
+		where: { id },
 		data: updateData,
 		include: { structuredAddress: true },
 	});
@@ -264,11 +282,12 @@ export async function deleteCostCenter(
 	organizationId: string,
 	id: string,
 ) {
+	const accessibleIds = await getAccessibleCostCenterIds(ownerId);
 	const cc = await prisma.costCenter.findFirst({
-		where: { id, organizationId, ownerId },
+		where: { id: { in: accessibleIds }, organizationId },
 	});
 	if (!cc) return null;
-	await prisma.costCenter.delete({ where: { id, organizationId, ownerId } });
+	await prisma.costCenter.delete({ where: { id } });
 	return cc;
 }
 
@@ -326,8 +345,10 @@ export async function updateCostCenterByIdOnly(
 		structuredAddress?: StructuredAddress | null;
 	},
 ) {
+	const accessibleIds = await getAccessibleCostCenterIds(ownerId);
+	if (!accessibleIds.includes(ccId)) return null;
 	const cc = await prisma.costCenter.findFirst({
-		where: { id: ccId, ownerId },
+		where: { id: ccId },
 	});
 	if (!cc) return null;
 	const updateData: Record<string, unknown> = {};
@@ -346,25 +367,29 @@ export async function updateCostCenterByIdOnly(
 		}
 	}
 	if (data.organizationId !== undefined) {
+		const accessibleOrgIds = await getAccessibleOrgIds(ownerId);
+		if (!accessibleOrgIds.includes(data.organizationId)) return null;
 		const targetOrg = await prisma.organization.findFirst({
-			where: { id: data.organizationId, ownerId },
+			where: { id: data.organizationId },
 		});
 		if (!targetOrg) return null;
 		updateData.organizationId = data.organizationId;
 	}
 	return prisma.costCenter.update({
-		where: { id: ccId, ownerId },
+		where: { id: ccId },
 		data: updateData,
 		include: { structuredAddress: true },
 	});
 }
 
 export async function deleteCostCenterByIdOnly(ownerId: string, ccId: string) {
+	const accessibleIds = await getAccessibleCostCenterIds(ownerId);
+	if (!accessibleIds.includes(ccId)) return null;
 	const cc = await prisma.costCenter.findFirst({
-		where: { id: ccId, ownerId },
+		where: { id: ccId },
 	});
 	if (!cc) return null;
-	await prisma.costCenter.delete({ where: { id: ccId, ownerId } });
+	await prisma.costCenter.delete({ where: { id: ccId } });
 	return cc;
 }
 

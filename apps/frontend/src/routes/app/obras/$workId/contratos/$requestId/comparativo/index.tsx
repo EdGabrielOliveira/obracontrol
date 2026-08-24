@@ -24,6 +24,7 @@ import { ContractRequestComparisonView } from "@/components/organisms/contracts/
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/query-client";
+import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
 import type { ContractRequestComparison } from "@/types/contract-requests";
 import { getErrorMessage } from "@/utils/api-error";
 import { createIdempotencyKey } from "@/utils/idempotency-key";
@@ -77,13 +78,15 @@ function ComparisonRouteComponent() {
 				createIdempotencyKey("proposal-selection"),
 			),
 		onSuccess: async (selection) => {
-			if (selection.supplierRegistrationRequired) {
+			if (selection.status === "PENDING") {
+				const approverLabel =
+					selection.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: selection.requiredApproverRole === "GERENTE"
+							? "Gerente"
+							: "responsável definido pelo fluxo";
 				toast.success(
-					"Fornecedor selecionado. Cadastre-o antes de gerar o contrato.",
-				);
-			} else if (selection.status === "PENDING") {
-				toast.success(
-					"Fornecedor selecionado. Aguardando aprovação final do Gerente.",
+					`Fornecedor selecionado. Aguardando aprovação do ${approverLabel}.`,
 				);
 			} else {
 				toast.success("Aprovação concluída. Contrato criado.");
@@ -95,15 +98,17 @@ function ComparisonRouteComponent() {
 				queryKey: contractKeys.detailBase(workId),
 			});
 			const contractId =
+				selection.contractId ??
 				selection.data?.id ??
 				(selection.status === "EXECUTED"
 					? (await getContractRequest(workId, requestId)).contractId
 					: null);
-			if (contractId)
-				navigate({
+			if (contractId) {
+				await navigate({
 					to: "/app/obras/$workId/contratos/$contractId",
 					params: { workId, contractId },
 				});
+			}
 		},
 		onError: (error) =>
 			toast.error(getErrorMessage(error, "Erro ao selecionar a proposta.")),
@@ -179,10 +184,14 @@ function ComparisonRouteComponent() {
 				}}
 				defaultValues={
 					registerTarget
-						? {
+						? supplierImportDefaults({
 								name: registerTarget.supplier.name,
 								document: registerTarget.supplier.cnpj,
-							}
+								address: registerTarget.supplier.address,
+								phone: registerTarget.supplier.phone,
+								email: registerTarget.supplier.email,
+								responsibleName: registerTarget.supplier.responsibleName,
+							})
 						: undefined
 				}
 				onCreated={() => {

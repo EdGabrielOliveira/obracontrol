@@ -83,7 +83,9 @@ export async function resolveAuthenticatedUser(
 	if (!user || user.banned) {
 		throw new ConstructionError("UNAUTHORIZED", "Usuario desativado", 401);
 	}
-	const role = (sessionUser as AuthUser).role ?? user.role;
+	// O papel persistido é a fonte de verdade. O papel no payload da sessão
+	// pode estar desatualizado depois de uma alteração administrativa.
+	const role = user.role;
 	assertAuthorizedRole(role);
 	requestContext.setUserId(sessionUser.id);
 	return {

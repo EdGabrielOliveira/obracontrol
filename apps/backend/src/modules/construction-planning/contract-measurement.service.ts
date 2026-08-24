@@ -286,6 +286,7 @@ export class ContractMeasurementService {
 		let overflowResult: BudgetMutationResult | null = null;
 		const created = await withOverflowApproval({
 			ownerId,
+			actorId: ctx.userId,
 			workId: ledgerContext.workId,
 			sourceType: MEASUREMENT_SOURCE_TYPE,
 			commit: async (tx) => {

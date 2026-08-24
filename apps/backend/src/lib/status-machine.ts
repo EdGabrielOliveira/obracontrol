@@ -57,14 +57,22 @@ export function validateGovernanceTransition(
 			422,
 		);
 	}
-	if (currentStatus === "TRAVADO" && context.role !== "ADMIN") {
+	if (
+		currentStatus === "TRAVADO" &&
+		context.role !== "ADMIN" &&
+		context.role !== "GERENTE"
+	) {
 		throw new ConstructionError(
 			"GOVERNANCE_OVERRIDE_REQUIRED",
 			"A reabertura de um registro travado exige override administrativo",
 			403,
 		);
 	}
-	if (context.override && context.role !== "ADMIN") {
+	if (
+		context.override &&
+		context.role !== "ADMIN" &&
+		context.role !== "GERENTE"
+	) {
 		throw new ConstructionError(
 			"GOVERNANCE_OVERRIDE_REQUIRED",
 			"Somente ADMIN pode executar override administrativo",

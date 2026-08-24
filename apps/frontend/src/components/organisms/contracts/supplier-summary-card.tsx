@@ -1,11 +1,18 @@
 import { Link } from "@tanstack/react-router";
-import { Building2 } from "lucide-react";
+import { Building2, UserPlus } from "lucide-react";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { ContractSupplierSummary } from "@/types/contracts";
+import type {
+	ContractSupplierCandidate,
+	ContractSupplierSummary,
+} from "@/types/contracts";
 
 type SupplierSummaryCardProps = {
 	supplier?: ContractSupplierSummary | null;
+	candidate?: ContractSupplierCandidate | null;
+	onRegister?: () => void;
+	isRegistering?: boolean;
 };
 
 function display(value: string | null | undefined) {
@@ -26,7 +33,55 @@ function supplierAddress(supplier: ContractSupplierSummary) {
 		.join(", ");
 }
 
-export function SupplierSummaryCard({ supplier }: SupplierSummaryCardProps) {
+export function SupplierSummaryCard({
+	supplier,
+	candidate,
+	onRegister,
+	isRegistering = false,
+}: SupplierSummaryCardProps) {
+	if (!supplier && !candidate) return null;
+
+	if (!supplier && candidate) {
+		return (
+			<Card className="mb-4">
+				<CardHeaderWithIcon
+					icon={Building2}
+					title="Fornecedor da cotação"
+					description="Dados encontrados no Excel. Cadastre e vincule o fornecedor para concluir os requisitos do contrato."
+					actions={
+						onRegister ? (
+							<Button size="sm" onClick={onRegister} disabled={isRegistering}>
+								<UserPlus className="mr-1 h-4 w-4" />
+								Cadastrar fornecedor
+							</Button>
+						) : null
+					}
+				/>
+				<CardContent className="grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
+					<p>
+						<strong>Razão social:</strong> {display(candidate.name)}
+					</p>
+					<p>
+						<strong>CPF/CNPJ:</strong> {display(candidate.document)}
+					</p>
+					<p>
+						<strong>Responsável legal:</strong>{" "}
+						{display(candidate.responsibleName)}
+					</p>
+					<p>
+						<strong>Contato:</strong>{" "}
+						{display(
+							[candidate.phone, candidate.email].filter(Boolean).join(" · "),
+						)}
+					</p>
+					<p className="md:col-span-2">
+						<strong>Endereço:</strong> {display(candidate.address)}
+					</p>
+				</CardContent>
+			</Card>
+		);
+	}
+
 	if (!supplier) return null;
 
 	return (

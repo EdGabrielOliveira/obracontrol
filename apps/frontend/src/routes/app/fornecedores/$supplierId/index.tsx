@@ -148,7 +148,7 @@ function RouteComponent() {
 					</CardContent>
 				</Card>
 			</div>
-			<div className="grid gap-4 md:grid-cols-2">
+			<div className="grid gap-4 pt-4 md:grid-cols-2">
 				<Card>
 					<CardHeaderWithIcon
 						icon={BarChart3}

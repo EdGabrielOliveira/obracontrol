@@ -35,10 +35,10 @@ describe("roles (USR-003, DEC-004/DEC-005)", () => {
 		expect(canAccessAudit("ADMIN")).toBe(true);
 	});
 
-	it("GERENTE acessa administração mas não API Keys nem auditoria", () => {
+	it("GERENTE acessa administração e auditoria, mas não API Keys", () => {
 		expect(canAccessAdministration("GERENTE")).toBe(true);
 		expect(canAccessApiKeys("GERENTE")).toBe(false);
-		expect(canAccessAudit("GERENTE")).toBe(false);
+		expect(canAccessAudit("GERENTE")).toBe(true);
 	});
 
 	it("GESTOR e limitado ao centro de custo", () => {

@@ -149,16 +149,19 @@ describe("XLS - caracterizacao do excel transacional", () => {
 		expect(rows.every((row) => row.status === "VALID")).toBe(true);
 	});
 
-	it("XLS-001: arquivo repetido (mesmo sha256) e rejeitado com 409 IMPORT_FILE_DUPLICATE", async () => {
+	it("XLS-001: arquivo ja confirmado pode ser enviado novamente sem reprocessamento", async () => {
 		const bytes = obraCompletaBytes({ code: "XLS-REPETIDO" });
 		const first = await uploadBatch(bytes, "repetido.xlsx");
-		await assertStatus(first, 201);
+		const firstBody = await assertStatus(first, 201);
+		const firstBatchId = String((firstBody as { batchId?: string }).batchId);
+		await prisma.importBatch.update({
+			where: { id: firstBatchId },
+			data: { status: "CONFIRMED" },
+		});
 
 		const second = await uploadBatch(bytes, "repetido.xlsx");
-		const body = await assertStatus(second, 409);
-		expect((body as { message?: string }).message).toContain(
-			"arquivo ja foi importado",
-		);
+		const secondBody = await assertStatus(second, 201);
+		expect((secondBody as { batchId?: string }).batchId).not.toBe(firstBatchId);
 	});
 
 	it("XLS-001: workbook com mais de 20 planilhas e rejeitado (422)", async () => {

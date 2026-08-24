@@ -19,6 +19,7 @@ export type Contract = {
 	workId: string;
 	code: string;
 	contractRequestId?: string | null;
+	quotationId?: string | null;
 	supplierName: string;
 	supplierId: string | null;
 	supplier?: ContractSupplierSummary | null;
@@ -49,6 +50,15 @@ export type ContractSupplierSummary = {
 	addressState: string | null;
 };
 
+export type ContractSupplierCandidate = {
+	name: string;
+	document: string | null;
+	address: string | null;
+	phone: string | null;
+	email: string | null;
+	responsibleName: string | null;
+};
+
 export type ContractQuotationSnapshot = {
 	originalProposalValue: number | null;
 	negotiatedValue: number;
@@ -70,12 +80,18 @@ export type ContractCreateInput = {
 	notes?: string;
 };
 
-export type ContractUpdateInput = Partial<ContractCreateInput>;
+export type ContractEditInput = Pick<
+	ContractCreateInput,
+	"title" | "serviceType" | "objectDescription" | "startDate" | "endDate"
+>;
+
+export type ContractUpdateInput = ContractEditInput;
 
 export type ContractDetail = Contract & {
 	totalValue: number;
 	amendmentTotal: number;
 	quotation?: ContractQuotationSnapshot | null;
+	supplierCandidate?: ContractSupplierCandidate | null;
 };
 
 export type ContractAmendmentKind = "ADITIVO" | "REDUCAO";

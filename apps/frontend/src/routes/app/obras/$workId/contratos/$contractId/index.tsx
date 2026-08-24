@@ -5,7 +5,6 @@ import {
 	Building2,
 	ClipboardList,
 	DollarSign,
-	Download,
 	FilePlus2,
 	FileText,
 	Pencil,
@@ -44,6 +43,7 @@ import {
 	decideContractAmendment,
 	deleteContractAmendment,
 	getContract,
+	linkContractSupplier,
 	listContractAmendments,
 	updateContractAmendment,
 } from "@/api/contracts";
@@ -52,8 +52,11 @@ import {
 	contractKeys,
 	contractRequestKeys,
 	governanceKeys,
+	quotationKeys,
 	workKeys,
 } from "@/api/query-keys";
+import { revertQuotationContract } from "@/api/quotations";
+import { linkSupplierToWork } from "@/api/work-suppliers";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { KpiCard } from "@/atoms/kpi-card";
@@ -67,19 +70,20 @@ import {
 } from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { AmendmentsTab } from "@/components/organisms/contracts/amendments-tab";
-import { ContractMeasurementImportAction } from "@/components/organisms/contracts/contract-measurement-import-action";
 import { ContractReportTab } from "@/components/organisms/contracts/contract-report-tab";
 import { InstrumentReadinessCard } from "@/components/organisms/contracts/instrument-readiness-card";
 import { MeasurementsTab } from "@/components/organisms/contracts/measurements-tab";
 import { PaymentsTab } from "@/components/organisms/contracts/payments-tab";
 import { ServicesTab } from "@/components/organisms/contracts/services-tab";
 import { SupplierSummaryCard } from "@/components/organisms/contracts/supplier-summary-card";
+import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildVersionChangeMap } from "@/lib/budget-version-diff";
 import { invalidateContractRelated } from "@/lib/invalidate-contract";
 import { queryClient } from "@/lib/query-client";
+import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
 import { contractPaymentCreateSchema } from "@/schemas/contracts";
 import type { PaymentStatus } from "@/types/contracts";
 import { getErrorMessage } from "@/utils/api-error";
@@ -184,6 +188,7 @@ function RouteComponent() {
 	const navigate = Route.useNavigate();
 
 	const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+	const [supplierModalOpen, setSupplierModalOpen] = useState(false);
 	const [hasCheckedBeforeDownload, setHasCheckedBeforeDownload] =
 		useState(false);
 	const [artifactError, setArtifactError] = useState<string | null>(null);
@@ -211,6 +216,34 @@ function RouteComponent() {
 	const readinessQuery = useQuery({
 		queryKey: contractKeys.instrumentReadiness(workId, contractId),
 		queryFn: () => getContractInstrumentReadiness(workId, contractId),
+	});
+	const linkSupplierMutation = useMutation({
+		mutationFn: async (supplierId: string) => {
+			await linkSupplierToWork(workId, supplierId);
+			return linkContractSupplier(workId, contractId, supplierId);
+		},
+		onSuccess: (result) => {
+			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(`Vínculo enviado para aprovação do ${approver}.`);
+				queryClient.invalidateQueries({
+					queryKey: governanceKeys.pendingApprovals(workId),
+				});
+				return;
+			}
+			toast.success("Fornecedor cadastrado e vinculado ao contrato.");
+			invalidateContractRelated(queryClient, workId, contractId);
+			queryClient.invalidateQueries({
+				queryKey: contractKeys.instrumentReadiness(workId, contractId),
+			});
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível vincular o fornecedor."),
+			),
 	});
 	const artifactMutation = useMutation({
 		mutationFn: () => generateContractArtifact(workId, contractId),
@@ -250,14 +283,22 @@ function RouteComponent() {
 	};
 
 	const revertAcceptanceMutation = useMutation({
-		mutationFn: () => {
-			if (!contract?.contractRequestId) {
-				throw new Error("Este contrato não veio de uma cotação.");
+		mutationFn: async () => {
+			if (contract?.contractRequestId) {
+				const result = await revertContractRequestAcceptance(
+					workId,
+					contract.contractRequestId,
+				);
+				return { source: "contract-request" as const, id: result.requestId };
 			}
-			return revertContractRequestAcceptance(
-				workId,
-				contract.contractRequestId,
-			);
+			if (contract?.quotationId) {
+				const quotation = await revertQuotationContract(
+					workId,
+					contract.quotationId,
+				);
+				return { source: "quotation" as const, id: quotation.id };
+			}
+			throw new Error("Este contrato não veio de uma cotação.");
 		},
 		onSuccess: (result) => {
 			setRevertDialogOpen(false);
@@ -268,13 +309,21 @@ function RouteComponent() {
 			queryClient.invalidateQueries({
 				queryKey: contractRequestKeys.all(workId),
 			});
+			queryClient.invalidateQueries({ queryKey: quotationKeys.all });
 			queryClient.invalidateQueries({
 				queryKey: workKeys.contracts(workId),
 			});
-			navigate({
-				to: "/app/obras/$workId/contratos/$requestId/comparativo",
-				params: { workId, requestId: result.requestId },
-			});
+			if (result.source === "contract-request") {
+				navigate({
+					to: "/app/obras/$workId/contratos/$requestId/comparativo",
+					params: { workId, requestId: result.id },
+				});
+			} else {
+				navigate({
+					to: "/app/obras/$workId/contratos/$requestId/aprovacao",
+					params: { workId, requestId: result.id },
+				});
+			}
 		},
 		onError: (error) =>
 			toast.error(
@@ -653,7 +702,8 @@ function RouteComponent() {
 							<Pencil className="h-4 w-4 mr-1" />
 							Editar
 						</Button>
-						{contract.contractRequestId && contract.status === "RASCUNHO" ? (
+						{(contract.contractRequestId || contract.quotationId) &&
+						contract.status === "RASCUNHO" ? (
 							<Button
 								variant="outline"
 								size="sm"
@@ -836,7 +886,16 @@ function RouteComponent() {
 					/>
 				</TabsContent>
 				<TabsContent value="fornecedor">
-					<SupplierSummaryCard supplier={contract.supplier} />
+					<SupplierSummaryCard
+						supplier={contract.supplier}
+						candidate={contract.supplierCandidate}
+						onRegister={
+							contract.supplierCandidate
+								? () => setSupplierModalOpen(true)
+								: undefined
+						}
+						isRegistering={linkSupplierMutation.isPending}
+					/>
 				</TabsContent>
 				<TabsContent value="relatorio">
 					{isAggregateLoading ? (
@@ -852,11 +911,23 @@ function RouteComponent() {
 			<ConfirmDialog
 				open={revertDialogOpen}
 				title="Voltar para a cotação?"
-				description="O contrato RASCUNHO será removido e a solicitação voltará para a comparação. Essa ação só é permitida enquanto não houver medições, pagamentos, documentos ou aditivos cadastrados."
+				description="O contrato RASCUNHO será removido e a cotação voltará para comparação e negociação. Essa ação só é permitida enquanto não houver medições, pagamentos, documentos ou aditivos cadastrados."
 				confirmLabel="Voltar para cotação"
 				onConfirm={() => revertAcceptanceMutation.mutate()}
 				onCancel={() => setRevertDialogOpen(false)}
 				loading={revertAcceptanceMutation.isPending}
+			/>
+			<SupplierModal
+				open={supplierModalOpen}
+				onOpenChange={setSupplierModalOpen}
+				defaultValues={
+					contract.supplierCandidate
+						? supplierImportDefaults(contract.supplierCandidate)
+						: undefined
+				}
+				onCreated={async (supplier) => {
+					await linkSupplierMutation.mutateAsync(supplier.id);
+				}}
 			/>
 		</PageContainer>
 	);

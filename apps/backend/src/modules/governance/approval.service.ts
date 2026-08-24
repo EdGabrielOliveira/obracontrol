@@ -102,6 +102,7 @@ export async function submitApproval<T>(
 ): Promise<{
 	status: "APPROVED" | "PENDING";
 	approvalRequestId: string | null;
+	requiredApproverRole?: "GERENTE" | "GESTOR" | null;
 	data?: unknown;
 	scope?: { organizationId: string; costCenterId: string | null };
 }> {
@@ -155,7 +156,10 @@ export async function submitApproval<T>(
 			);
 		}
 		if (existing.status === "APPROVED" || existing.status === "EXECUTED") {
-			return { status: "APPROVED", approvalRequestId: existing.id };
+			return {
+				status: "APPROVED",
+				approvalRequestId: existing.id,
+			};
 		}
 		if (existing.status === "PENDING" && isTrustedRole) {
 			return prisma.$transaction(async (tx) => {
@@ -165,21 +169,39 @@ export async function submitApproval<T>(
 					approverId: null,
 					decisionMode: "AUTOMATICO_POR_POLITICA" as ApprovalDecisionMode,
 					decision: "APPROVE" as const,
-					reason: null,
+					reason: "Pendência legada resolvida pelo papel confiável",
 				};
 				await tx.approvalDecision.create({
 					data: {
 						requestId: existing.id,
 						approverId: null,
-						decisionMode: "AUTOMATICO_POR_POLITICA",
-						decision: "APPROVE",
-						reason: null,
+						decisionMode: decision.decisionMode,
+						decision: decision.decision,
+						reason: decision.reason,
 					},
 				});
 				const data = await handler.apply({
 					tx,
 					request: toRequestView(existing),
 					decision,
+				});
+				await writeAudit(tx, {
+					userId: input.actorId,
+					ownerId: scope.resourceOwnerId,
+					action: "APPROVE",
+					entityType: "APPROVAL_REQUEST",
+					entityId: existing.id,
+					entityDescription: `${input.effectAction}:${input.resourceId ?? input.commandId ?? ""}`,
+					newState: {
+						status: "EXECUTED",
+						execution: "DIRECT_LEGACY_RESOLUTION",
+					},
+					metadata: {
+						actorRole,
+						organizationId: scope.path.organizationId,
+						costCenterId: scope.path.costCenterId,
+						workId,
+					},
 				});
 				await tx.approvalRequest.update({
 					where: { id: existing.id },
@@ -201,7 +223,13 @@ export async function submitApproval<T>(
 					| "GESTOR",
 			});
 		}
-		return { status: "PENDING", approvalRequestId: existing.id };
+		return {
+			status: "PENDING",
+			approvalRequestId: existing.id,
+			requiredApproverRole: existing.requiredApproverRole as
+				| "GERENTE"
+				| "GESTOR",
+		};
 	}
 
 	const requiredApproverRole = requiredApproverRoleFor(actorRole);
@@ -250,15 +278,35 @@ export async function submitApproval<T>(
 				request: toRequestView(request),
 				decision,
 			});
+			await writeAudit(tx, {
+				userId: input.actorId,
+				ownerId: scope.resourceOwnerId,
+				action: "APPROVE",
+				entityType: "APPROVAL_REQUEST",
+				entityId: request.id,
+				entityDescription: `${input.effectAction}:${input.resourceId ?? input.commandId ?? ""}`,
+				newState: { status: "EXECUTED", execution: "DIRECT" },
+				metadata: {
+					actorRole,
+					organizationId: scope.path.organizationId,
+					costCenterId: scope.path.costCenterId,
+					workId,
+				},
+			});
 			await tx.approvalRequest.update({
 				where: { id: request.id },
 				data: { status: "EXECUTED", executedAt: new Date() },
 			});
-			return {
+			const response: {
+				status: "APPROVED";
+				approvalRequestId: string;
+				data?: unknown;
+			} = {
 				status: "APPROVED" as const,
 				approvalRequestId: request.id,
-				data,
 			};
+			if (data !== undefined) response.data = data;
+			return response;
 		});
 	}
 
@@ -281,6 +329,24 @@ export async function submitApproval<T>(
 			status: "PENDING",
 		},
 	});
+	if (prisma.auditLog) {
+		await writeAudit(prisma, {
+			userId: input.actorId,
+			ownerId: scope.resourceOwnerId,
+			action: "SUBMIT",
+			entityType: "APPROVAL_REQUEST",
+			entityId: request.id,
+			entityDescription: `${input.effectAction}:${input.resourceId ?? input.commandId ?? ""}`,
+			newState: { status: "PENDING", execution: "APPROVAL_CHAIN" },
+			metadata: {
+				actorRole,
+				requiredApproverRole,
+				organizationId: scope.path.organizationId,
+				costCenterId: scope.path.costCenterId,
+				workId,
+			},
+		});
+	}
 
 	await notificationService.create({
 		recipientId: input.actorId,
@@ -297,6 +363,7 @@ export async function submitApproval<T>(
 	return {
 		status: "PENDING",
 		approvalRequestId: request.id,
+		requiredApproverRole,
 		scope: {
 			organizationId: scope.path.organizationId,
 			costCenterId: scope.path.costCenterId,
@@ -421,21 +488,60 @@ export async function decideApproval(input: {
 		isTrustedApprover &&
 		isTrustedRequestActor
 	) {
-		await submitApproval({
-			actorId: input.approverId,
-			resourceType: request.resourceType,
-			resourceId: request.resourceId,
-			effectAction: request.effectAction,
-			payload: request.payloadJson,
-			expectedVersion: request.expectedVersion,
-			idempotencyKey: request.idempotencyKey,
-			commandId: request.commandId,
+		const handler = effectHandlers.get(request.effectAction);
+		if (!handler) {
+			throw new ConstructionError(
+				"UNSUPPORTED_EFFECT_ACTION",
+				`Efeito de aprovacao nao registrado: ${request.effectAction}`,
+				422,
+			);
+		}
+		return withSerializableRetry(async (tx) => {
+			const updated = await tx.approvalRequest.updateMany({
+				where: { id: request.id, status: "PENDING" },
+				data: { status: "APPROVED", decidedAt: new Date() },
+			});
+			if (updated.count === 0) {
+				throw new ConstructionError(
+					"APPROVAL_CONFLICT",
+					"Solicitacao ja decidida por outro superior",
+					409,
+				);
+			}
+			const decision = {
+				id: "automatic-legacy",
+				requestId: request.id,
+				approverId: input.approverId,
+				decisionMode: isAdminOverride
+					? ("ADMIN_OVERRIDE" as ApprovalDecisionMode)
+					: ("MANUAL_POR_SUPERIOR" as ApprovalDecisionMode),
+				decision: "APPROVE" as const,
+				reason: input.reason?.trim() ?? null,
+			};
+			await handler.apply({
+				tx,
+				request: toRequestView({ ...request, status: "APPROVED" }),
+				decision,
+			});
+			await tx.approvalDecision.create({
+				data: {
+					requestId: request.id,
+					approverId: input.approverId,
+					decisionMode: decision.decisionMode,
+					decision: "APPROVE",
+					reason: decision.reason,
+				},
+			});
+			await tx.approvalRequest.update({
+				where: { id: request.id },
+				data: { status: "EXECUTED", executedAt: new Date() },
+			});
+			return {
+				id: decision.id,
+				requestId: request.id,
+				decision: "APPROVE" as const,
+			};
 		});
-		return {
-			id: "automatic-legacy",
-			requestId: request.id,
-			decision: "APPROVE",
-		};
 	}
 	if (isAdminOverride && !input.reason?.trim()) {
 		throw new ConstructionError(

@@ -39,7 +39,7 @@ interface SupplierModalProps {
 	onOpenChange: (open: boolean) => void;
 	supplier?: Supplier;
 	defaultValues?: Partial<SupplierFormValues>;
-	onCreated?: (supplier: Supplier) => void;
+	onCreated?: (supplier: Supplier) => void | Promise<void>;
 }
 
 const EMPTY_FORM: SupplierFormValues = {
@@ -171,11 +171,11 @@ export function SupplierModal({
 
 	const createMutation = useMutation({
 		mutationFn: (input: SupplierCreateInput) => createSupplier(input),
-		onSuccess: (createdSupplier) => {
+		onSuccess: async (createdSupplier) => {
 			toast.success("Fornecedor criado!");
 			invalidate();
 			onOpenChange(false);
-			onCreated?.(createdSupplier);
+			await onCreated?.(createdSupplier);
 		},
 		onError: (error) =>
 			toast.error(getErrorMessage(error, "Erro ao criar fornecedor.")),

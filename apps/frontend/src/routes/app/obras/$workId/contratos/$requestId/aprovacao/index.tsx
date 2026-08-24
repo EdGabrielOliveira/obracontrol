@@ -41,7 +41,9 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
+import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
 import type { QuotationComparisonProposal } from "@/types/quotations";
+import { getErrorMessage } from "@/utils/api-error";
 
 const negotiateSchema = z.object({
 	value: z.coerce.number().positive("Valor deve ser maior que zero"),
@@ -55,7 +57,12 @@ export function buildContractApprovalPath(workId: string, requestId: string) {
 }
 
 export function canApproveQuotation(role: string | null | undefined) {
-	return role === "ADMIN" || role === "GERENTE" || role === "GESTOR";
+	return (
+		role === "ADMIN" ||
+		role === "GERENTE" ||
+		role === "GESTOR" ||
+		role === "SUPERVISOR"
+	);
 }
 
 export const Route = createFileRoute(
@@ -123,7 +130,7 @@ function RouteComponent() {
 	const chooseMutation = useMutation({
 		mutationFn: (proposalId: string) =>
 			chooseQuotationWinner(workId, requestId, proposalId),
-		onSuccess: (contract) => {
+		onSuccess: (quotation, proposalId) => {
 			invalidateComparison();
 			routeQueryClient.invalidateQueries({ queryKey: quotationKeys.all });
 			routeQueryClient.invalidateQueries({
@@ -132,19 +139,29 @@ function RouteComponent() {
 			routeQueryClient.invalidateQueries({
 				queryKey: contractKeys.detailBase(workId),
 			});
-			toast.success(
-				contract.status === "ESCOLHIDA"
-					? "Fornecedor escolhido. Cadastre-o para gerar o contrato."
-					: "Contrato criado em rascunho.",
-			);
-			if (contract.contractId) {
+			if (quotation.status === "ESCOLHIDA") {
+				toast.success(
+					"Fornecedor escolhido. Complete o cadastro para gerar o contrato.",
+				);
+				setRegisterTarget(
+					comparisonQuery.data?.proposals.find(
+						(proposal) => proposal.id === proposalId,
+					) ?? null,
+				);
+				return;
+			}
+			toast.success("Contrato criado em rascunho.");
+			if (quotation.contractId) {
 				navigate({
 					to: "/app/obras/$workId/contratos/$contractId",
-					params: { workId, contractId: contract.contractId },
+					params: { workId, contractId: quotation.contractId },
 				});
 			}
 		},
-		onError: () => toast.error("Não foi possível aprovar o contrato."),
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível escolher o fornecedor."),
+			),
 	});
 
 	const requoteMutation = useMutation({
@@ -207,12 +224,21 @@ function RouteComponent() {
 				}}
 				defaultValues={
 					registerTarget
-						? {
+						? supplierImportDefaults({
 								name: registerTarget.supplierName,
-								document: registerTarget.supplierDocument ?? "",
-							}
+								document: registerTarget.supplierDocument,
+								address: registerTarget.supplierAddress,
+								phone: registerTarget.supplierPhone,
+								email: registerTarget.supplierEmail,
+								responsibleName: registerTarget.supplierResponsible,
+							})
 						: undefined
 				}
+				onCreated={() => {
+					const proposalId = registerTarget?.id;
+					setRegisterTarget(null);
+					if (proposalId) chooseMutation.mutate(proposalId);
+				}}
 			/>
 			<NegotiateDialog
 				open={negotiateTarget !== null}

@@ -85,6 +85,8 @@ export type ContractRequestSelection = {
 	requestId: string;
 	status: "PENDING" | "EXECUTED";
 	approvalRequestId: string | null;
+	requiredApproverRole?: "GERENTE" | "GESTOR" | null;
+	contractId: string | null;
 	data: ContractRequestAcceptance["contract"] | null;
 	supplierRegistrationRequired?: boolean;
 };

@@ -1,5 +1,4 @@
 import Decimal from "decimal.js";
-import { canPerformRoleAction } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { resolveResourceScope } from "../../lib/resource-scope";
@@ -27,6 +26,31 @@ function parseRequiredDate(value: string, field: string): Date {
 		throw new ConstructionError("INVALID_DATE", `${field} inválido`, 422);
 	}
 	return date;
+}
+
+type QuotationMapRowValues = {
+	supplierDocument?: unknown;
+	supplierAddress?: unknown;
+	supplierPhone?: unknown;
+	supplierEmail?: unknown;
+	supplierResponsible?: unknown;
+};
+
+type ImportedSupplierDetails = {
+	address: string | null;
+	phone: string | null;
+	email: string | null;
+	responsibleName: string | null;
+};
+
+function textValue(value: unknown): string | null {
+	if (typeof value !== "string") return null;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : null;
+}
+
+function documentDigits(value: unknown): string {
+	return textValue(value)?.replace(/\D/g, "") ?? "";
 }
 
 export async function createContractRequest(
@@ -274,10 +298,13 @@ export async function selectContractRequestWinner(
 	requestId: string,
 	proposalId: string,
 	idempotencyKey: string,
-	role: string | null | undefined,
+	_role: string | null | undefined,
 ) {
 	const scope = await resolveResourceScope(actorId, { workId });
-	if (!scope.canWrite || !canPerformRoleAction(role, "approve")) {
+	// Escolher o fornecedor inicia um comando de contratação. A aprovação é
+	// decidida pelo executor central conforme o papel do ator; exigir a
+	// permissão `approve` aqui impedia SUPERVISOR de iniciar o próprio fluxo.
+	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
 	const request = await prisma.contractRequest.findFirst({
@@ -330,6 +357,39 @@ export async function selectContractRequestWinner(
 			409,
 		);
 	}
+	const staleApprovals = await prisma.approvalRequest.findMany({
+		where: {
+			ownerId: scope.resourceOwnerId,
+			resourceType: "CONTRACT_REQUEST",
+			resourceId: request.id,
+			effectAction: "CONTRACT_REQUEST_FINALIZE",
+			status: "PENDING",
+		},
+		select: { id: true, idempotencyKey: true },
+	});
+	let effectiveIdempotencyKey = idempotencyKey;
+	if (staleApprovals.length > 0) {
+		const approvalIds = staleApprovals.map((approval) => approval.id);
+		await prisma.approvalRequest.updateMany({
+			where: { id: { in: approvalIds }, status: "PENDING" },
+			data: { status: "CANCELLED" },
+		});
+		await prisma.notification.updateMany({
+			where: { referenceId: { in: approvalIds }, status: "PENDING" },
+			data: { status: "DISMISSED", dismissedAt: new Date() },
+		});
+		// Voltar uma cotação para a seleção inicia uma nova operação. Se o
+		// cliente reutilizou a chave da seleção anterior, não podemos reenviar
+		// essa mesma chave depois de cancelar o registro antigo: o executor
+		// encontraria o registro CANCELLED e o trataria como uma pendência.
+		if (
+			staleApprovals.some(
+				(approval) => approval.idempotencyKey === idempotencyKey,
+			)
+		) {
+			effectiveIdempotencyKey = `${idempotencyKey}:retry:${globalThis.crypto.randomUUID()}`;
+		}
+	}
 	const { submitApproval } = await import("../governance/approval.service");
 	let approval: Awaited<ReturnType<typeof submitApproval>>;
 	try {
@@ -344,7 +404,7 @@ export async function selectContractRequestWinner(
 				proposalId: proposal.id,
 			},
 			expectedVersion: 1,
-			idempotencyKey,
+			idempotencyKey: effectiveIdempotencyKey,
 		});
 	} catch (error) {
 		await prisma.contractRequest.updateMany({
@@ -358,10 +418,28 @@ export async function selectContractRequestWinner(
 		});
 		throw error;
 	}
+	// O executor de aprovação pode devolver apenas o resultado técnico da
+	// operação. A solicitação é a fonte de verdade do vínculo criado e expor o
+	// contractId aqui elimina a necessidade de o cliente inferi-lo desse
+	// resultado para navegar após uma execução direta.
+	const completedRequest =
+		approval.status === "PENDING"
+			? null
+			: await prisma.contractRequest.findFirst({
+					where: {
+						id: request.id,
+						ownerId: scope.resourceOwnerId,
+						workId,
+					},
+					select: { contractId: true },
+				});
+
 	return {
 		requestId: request.id,
 		status: approval.status === "PENDING" ? "PENDING" : "EXECUTED",
 		approvalRequestId: approval.approvalRequestId,
+		requiredApproverRole: approval.requiredApproverRole ?? null,
+		contractId: completedRequest?.contractId ?? null,
 		data: approval.data ?? null,
 	};
 }
@@ -512,6 +590,10 @@ export type ContractRequestComparison = {
 		supplier: {
 			cnpj: string;
 			name: string;
+			address: string | null;
+			phone: string | null;
+			email: string | null;
+			responsibleName: string | null;
 			registered: boolean;
 			supplierId: string | null;
 			linked: boolean;
@@ -538,7 +620,7 @@ export async function getContractRequestComparison(
 	actorId: string,
 	workId: string,
 	requestId: string,
-	role: string | null | undefined,
+	_role: string | null | undefined,
 ): Promise<ContractRequestComparison> {
 	const scope = await resolveResourceScope(actorId, { workId });
 	if (!scope.canRead) {
@@ -622,13 +704,36 @@ export async function getContractRequestComparison(
 				orderBy: { proposalValue: "asc" },
 			})
 		: [];
+	const importedSupplierDetails = new Map<string, ImportedSupplierDetails>();
+	if (request.confirmedBatchId) {
+		const importRows = await prisma.importRow.findMany({
+			where: { batchId: request.confirmedBatchId },
+			select: { values: true },
+		});
+		for (const row of importRows) {
+			const values = row.values as QuotationMapRowValues;
+			const document = documentDigits(values.supplierDocument);
+			if (!document) continue;
+			importedSupplierDetails.set(document, {
+				address: textValue(values.supplierAddress),
+				phone: textValue(values.supplierPhone),
+				email: textValue(values.supplierEmail),
+				responsibleName: textValue(values.supplierResponsible),
+			});
+		}
+	}
 
 	const proposalsWithSuppliers = await Promise.all(
 		proposals.map(async (proposal) => {
-			const supplier = await findSupplierByDocument(
+			const importDetails = importedSupplierDetails.get(
+				proposal.normalizedCnpj,
+			);
+			const registeredSupplier = await findSupplierByDocument(
 				scope.resourceOwnerId,
 				proposal.normalizedCnpj,
 			);
+			const supplier =
+				registeredSupplier?.status === "APPROVED" ? registeredSupplier : null;
 			const linked =
 				supplier !== null &&
 				(await prisma.constructionWorkSupplier.findFirst({
@@ -681,6 +786,10 @@ export async function getContractRequestComparison(
 				supplier: {
 					cnpj: proposal.normalizedCnpj,
 					name: proposal.supplierName,
+					address: importDetails?.address ?? null,
+					phone: importDetails?.phone ?? null,
+					email: importDetails?.email ?? null,
+					responsibleName: importDetails?.responsibleName ?? null,
 					registered: supplier !== null,
 					supplierId: supplier?.id ?? null,
 					linked,
@@ -869,7 +978,7 @@ export async function getContractRequestComparison(
 		proposals: proposalsWithSuppliers,
 		permissions: {
 			canAccept:
-				canPerformRoleAction(role, "approve") &&
+				scope.canWrite &&
 				request.status === "EM_ESPERA" &&
 				proposals.length > 0,
 		},
@@ -898,7 +1007,7 @@ export async function acceptContractRequest(
 	requestId: string,
 	proposalId: string,
 	_idempotencyKey: string | undefined,
-	role: string | null | undefined,
+	_role: string | null | undefined,
 ): Promise<ContractRequestAcceptance> {
 	// Deprecated compatibility helper. Public routing now delegates to
 	// selectContractRequestWinner, so no HTTP path can create a contract from
@@ -908,17 +1017,21 @@ export async function acceptContractRequest(
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	if (!canPerformRoleAction(role, "approve")) {
+	// Este caminho cria o contrato imediatamente e só sobrevive por
+	// compatibilidade interna. GESTOR e SUPERVISOR devem usar a seleção pública,
+	// que inicia a cadeia de aprovação; permitir a criação direta aqui burlaria
+	// essa regra.
+	if (scope.role !== "ADMIN" && scope.role !== "GERENTE") {
 		throw new ConstructionError(
 			"FORBIDDEN",
-			"Apenas aprovadores podem escolher o fornecedor",
+			"Use o fluxo de seleção para enviar a contratação à aprovação",
 			403,
 		);
 	}
 
 	return withSerializableRetry(async (tx) => {
 		const request = await tx.contractRequest.findFirst({
-			where: { id: requestId, ownerId: actorId, workId },
+			where: { id: requestId, ownerId: scope.resourceOwnerId, workId },
 			include: { items: { orderBy: { sortOrder: "asc" } } },
 		});
 		if (!request) {
@@ -939,7 +1052,7 @@ export async function acceptContractRequest(
 			const contract = await tx.contract.findFirst({
 				where: {
 					id: request.contractId,
-					ownerId: actorId,
+					ownerId: scope.resourceOwnerId,
 					workId,
 				},
 			});
@@ -972,7 +1085,7 @@ export async function acceptContractRequest(
 			where: {
 				id: proposalId,
 				batchId: request.confirmedBatchId,
-				ownerId: actorId,
+				ownerId: scope.resourceOwnerId,
 				workId,
 			},
 		});
@@ -984,16 +1097,19 @@ export async function acceptContractRequest(
 			);
 		}
 		const supplier = await tx.constructionSupplier.findFirst({
-			where: { ownerId: actorId, document: proposal.normalizedCnpj },
+			where: {
+				ownerId: scope.resourceOwnerId,
+				document: proposal.normalizedCnpj,
+			},
 		});
 
 		const contractCount = await tx.contract.count({
-			where: { ownerId: actorId, workId },
+			where: { ownerId: scope.resourceOwnerId, workId },
 		});
 		const code = `CT-${String(contractCount + 1).padStart(3, "0")}`;
 		const contract = await tx.contract.create({
 			data: {
-				ownerId: actorId,
+				ownerId: scope.resourceOwnerId,
 				workId,
 				code,
 				supplierId: supplier?.id ?? null,
@@ -1070,23 +1186,18 @@ export async function revertContractRequestAcceptance(
 	actorId: string,
 	workId: string,
 	requestId: string,
-	role: string | null | undefined,
+	_role: string | null | undefined,
 ) {
 	const scope = await resolveResourceScope(actorId, { workId });
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	if (!canPerformRoleAction(role, "approve")) {
-		throw new ConstructionError(
-			"FORBIDDEN",
-			"Apenas aprovadores podem reverter a escolha",
-			403,
-		);
-	}
+	// Reverter a seleção é uma mutação do recurso. A eventual aprovação da
+	// nova seleção segue a cadeia central e não deve bloquear o solicitante.
 
 	return withSerializableRetry(async (tx) => {
 		const request = await tx.contractRequest.findFirst({
-			where: { id: requestId, ownerId: actorId, workId },
+			where: { id: requestId, ownerId: scope.resourceOwnerId, workId },
 			select: {
 				id: true,
 				status: true,
@@ -1101,7 +1212,10 @@ export async function revertContractRequestAcceptance(
 				404,
 			);
 		}
-		if (request.status !== "ACEITA" || !request.contractId) {
+		// Registros criados durante a migração do fluxo podem ter o status da
+		// solicitação defasado, apesar de já apontarem para um contrato RASCUNHO.
+		// A existência do contrato é a fonte de verdade para permitir a reversão.
+		if (!request.contractId) {
 			throw new ConstructionError(
 				"CONTRACT_REQUEST_CONFLICT",
 				"A solicitação ainda não possui um aceite para reverter",
@@ -1110,7 +1224,11 @@ export async function revertContractRequestAcceptance(
 		}
 
 		const contract = await tx.contract.findFirst({
-			where: { id: request.contractId, ownerId: actorId, workId },
+			where: {
+				id: request.contractId,
+				ownerId: scope.resourceOwnerId,
+				workId,
+			},
 			select: {
 				id: true,
 				status: true,
@@ -1145,6 +1263,25 @@ export async function revertContractRequestAcceptance(
 				"Não é possível voltar para a cotação após cadastrar medições, pagamentos, documentos ou aditivos",
 				409,
 			);
+		}
+		const staleApprovals = await tx.approvalRequest.findMany({
+			where: {
+				ownerId: scope.resourceOwnerId,
+				resourceId: { in: [request.id, contract.id] },
+				status: "PENDING",
+			},
+			select: { id: true },
+		});
+		if (staleApprovals.length > 0) {
+			const approvalIds = staleApprovals.map((approval) => approval.id);
+			await tx.approvalRequest.updateMany({
+				where: { id: { in: approvalIds }, status: "PENDING" },
+				data: { status: "CANCELLED" },
+			});
+			await tx.notification.updateMany({
+				where: { referenceId: { in: approvalIds }, status: "PENDING" },
+				data: { status: "DISMISSED", dismissedAt: new Date() },
+			});
 		}
 
 		await tx.contract.delete({ where: { id: contract.id } });

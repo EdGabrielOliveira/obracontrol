@@ -179,6 +179,19 @@ export const quotationRoutes = new Elysia({
 			quotationService.requote(scope.resourceOwnerId, params.quotationId),
 		{ detail: { tags: ["Quotations"] } },
 	)
+	.post(
+		"/:quotationId/revert-contract",
+		async ({ params, scope, user }) => {
+			assertRoleCan(user.role, "approve");
+			return quotationService.revertContract(
+				scope.resourceOwnerId,
+				params.workId,
+				params.quotationId,
+				{ userId: user.id },
+			);
+		},
+		{ detail: { tags: ["Quotations"] } },
+	)
 	.patch(
 		"/:quotationId/proposals/:proposalId/negotiate",
 		async ({ params, body, scope, user }) =>

@@ -7,6 +7,7 @@ import {
 import { ConstructionError } from "../../../lib/errors";
 import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
+import { resolveResourceScope } from "../../../lib/resource-scope";
 import { throwInvalidInput } from "../../../lib/zod-validation";
 import { auditService } from "../../audit/audit.service";
 import { budgetService } from "../budget.service";
@@ -186,19 +187,28 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					400,
 				);
 			}
-			const result = (await constructionWorkService.create(user.id, {
-				code: body.code?.trim(),
-				name: body.name.trim(),
+			const scope = await resolveResourceScope(user.id, {
 				costCenterId: body.costCenterId.trim(),
-				address: body.address?.trim() || undefined,
-				structuredAddress: body.structuredAddress,
-				clientName: body.clientName?.trim() || undefined,
-				baseDate: body.baseDate,
-				plannedStart: body.plannedStart,
-				plannedEnd: body.plannedEnd,
-				areaM2: body.areaM2,
-				responsibleName: body.responsibleName?.trim() || undefined,
-			})) as {
+			});
+			if (!scope.canWrite) {
+				throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+			}
+			const result = (await constructionWorkService.create(
+				scope.resourceOwnerId,
+				{
+					code: body.code?.trim(),
+					name: body.name.trim(),
+					costCenterId: body.costCenterId.trim(),
+					address: body.address?.trim() || undefined,
+					structuredAddress: body.structuredAddress,
+					clientName: body.clientName?.trim() || undefined,
+					baseDate: body.baseDate,
+					plannedStart: body.plannedStart,
+					plannedEnd: body.plannedEnd,
+					areaM2: body.areaM2,
+					responsibleName: body.responsibleName?.trim() || undefined,
+				},
+			)) as {
 				id: string;
 				code?: string;
 				name?: string;
@@ -206,7 +216,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			};
 			auditService.log({
 				userId: user.id,
-				ownerId: user.id,
+				ownerId: scope.resourceOwnerId,
 				action: "CREATE",
 				entityType: "WORK",
 				entityId: result.id,

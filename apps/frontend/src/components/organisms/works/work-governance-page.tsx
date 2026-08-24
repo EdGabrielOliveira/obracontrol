@@ -28,12 +28,11 @@ export function WorkGovernancePage({ mode }: WorkGovernancePageProps) {
 	const { workId } = useParams({ strict: false });
 	const navigate = useNavigate();
 	const { user, role, capabilities } = useAuth();
-	const isAdmin = role === "ADMIN";
-	const canViewHistory = isAdmin || role === "GERENTE";
+	const canViewHistory =
+		capabilities?.canReviewExecutedSupervisorRequests ?? role === "GERENTE";
 	const canAccessGovernance = canViewHistory || role === "GESTOR";
 	const canApprove =
-		canAccessGovernance &&
-		(isAdmin || canDecideSupervisorRequests(capabilities));
+		canAccessGovernance && canDecideSupervisorRequests(capabilities);
 	const [auditFilters, setAuditFilters] = useState<AuditFilters>({});
 	const [auditPage, setAuditPage] = useState(1);
 	const [auditDetail, setAuditDetail] = useState<AuditLogEntry | null>(null);
@@ -142,7 +141,7 @@ export function WorkGovernancePage({ mode }: WorkGovernancePageProps) {
 							? (decideMutation.variables?.requestId ?? null)
 							: null
 					}
-					requiresDecisionReason={isAdmin || role === "GESTOR"}
+					requiresDecisionReason={role === "ADMIN" || role === "GESTOR"}
 					currentUserId={user?.id}
 				/>
 			)}

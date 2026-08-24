@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
-import { contractFormSchema } from "@/schemas/contracts";
+import {
+	contractEditFormSchema,
+	contractFormSchema,
+} from "@/schemas/contracts";
 
 const validBase = {
 	code: "CT-001",
@@ -49,6 +52,31 @@ describe("contractFormSchema", () => {
 				supplierName: "Fornecedor A",
 				status: "INVALIDO",
 			}).success,
+		).toBe(false);
+	});
+});
+
+describe("contractEditFormSchema", () => {
+	it("aceita somente os dados editáveis do contrato", () => {
+		const result = contractEditFormSchema.safeParse({
+			title: "Contrato atualizado",
+			serviceType: "Execução",
+			objectDescription: "Serviços de fundação",
+			startDate: "2026-01-01",
+			endDate: "2026-12-31",
+		});
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data).not.toHaveProperty("contractValue");
+			expect(result.data).not.toHaveProperty("status");
+			expect(result.data).not.toHaveProperty("supplierId");
+		}
+	});
+
+	it("exige uma descrição", () => {
+		expect(
+			contractEditFormSchema.safeParse({ objectDescription: "   " }).success,
 		).toBe(false);
 	});
 });

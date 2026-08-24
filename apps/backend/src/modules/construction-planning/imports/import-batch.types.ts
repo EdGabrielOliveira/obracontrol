@@ -45,6 +45,11 @@ export type ImportBatchCreateInput = {
 	model: string;
 	title?: string | null;
 	file: AsyncIterable<Uint8Array>;
+	/**
+	 * Contexto da solicitacao que originou um mapa de cotacao. Arquivos iguais
+	 * pertencentes a solicitacoes diferentes devem poder ser importados.
+	 */
+	contractRequestId?: string | null;
 	reprocessOfId?: string | null;
 	reason?: string | null;
 };

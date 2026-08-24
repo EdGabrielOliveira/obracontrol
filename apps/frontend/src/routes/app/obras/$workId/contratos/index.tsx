@@ -16,7 +16,7 @@ import {
 	listContracts,
 } from "@/api/contracts";
 import { exportContratos } from "@/api/export";
-import { workKeys } from "@/api/query-keys";
+import { governanceKeys, workKeys } from "@/api/query-keys";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
@@ -102,7 +102,18 @@ function RouteComponent() {
 
 	const deleteMutation = useMutation({
 		mutationFn: (id: string) => deleteContract(workId, id),
-		onSuccess: () => {
+		onSuccess: (result) => {
+			if (result?.status === "PENDING") {
+				const approver =
+					result.approvalRequest?.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(`Exclusão enviada para aprovação do ${approver}.`);
+				queryClient.invalidateQueries({
+					queryKey: governanceKeys.pendingApprovals(workId),
+				});
+				return;
+			}
 			toast.success("Contrato excluído.");
 			queryClient.invalidateQueries({ queryKey: workKeys.contracts(workId) });
 			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });

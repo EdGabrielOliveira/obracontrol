@@ -652,6 +652,91 @@ export const quotationService = {
 		return this.get(ownerId, quotationId);
 	},
 
+	async revertContract(
+		ownerId: string,
+		workId: string,
+		quotationId: string,
+		ctx: { userId: string },
+	): Promise<QuotationView> {
+		const quotation = await prisma.quotation.findFirst({
+			where: { id: quotationId, ownerId, workId },
+			select: { id: true, contractId: true, status: true, title: true },
+		});
+		if (!quotation) {
+			throw new ConstructionError("NOT_FOUND", "Cotacao nao encontrada", 404);
+		}
+		if (!quotation.contractId) {
+			throw new ConstructionError(
+				"QUOTATION_CONFLICT",
+				"A cotacao ainda nao possui um contrato para reverter",
+				409,
+			);
+		}
+
+		await prisma.$transaction(async (tx) => {
+			const contract = await tx.contract.findFirst({
+				where: { id: quotation.contractId ?? "", ownerId, workId },
+				select: {
+					id: true,
+					status: true,
+					instrumentGeneratedAt: true,
+					_count: {
+						select: {
+							measurements: true,
+							payments: true,
+							folders: true,
+							amendments: true,
+						},
+					},
+				},
+			});
+			if (!contract) {
+				throw new ConstructionError(
+					"QUOTATION_CONFLICT",
+					"Contrato resultante nao encontrado",
+					409,
+				);
+			}
+			const hasRegisteredData =
+				contract.status !== "RASCUNHO" ||
+				contract.instrumentGeneratedAt !== null ||
+				contract._count.measurements > 0 ||
+				contract._count.payments > 0 ||
+				contract._count.folders > 0 ||
+				contract._count.amendments > 0;
+			if (hasRegisteredData) {
+				throw new ConstructionError(
+					"QUOTATION_REVERT_BLOCKED",
+					"Nao e possivel voltar para a cotacao apos cadastrar medicoes, pagamentos, documentos ou aditivos",
+					409,
+				);
+			}
+
+			await tx.contract.delete({ where: { id: contract.id } });
+			await tx.quotationProposal.updateMany({
+				where: { quotationId: quotation.id },
+				data: { isWinner: false },
+			});
+			await tx.quotation.update({
+				where: { id: quotation.id },
+				data: { status: "NEGOCIACAO", contractId: null },
+			});
+			await tx.auditLog.create({
+				data: {
+					userId: ctx.userId,
+					ownerId,
+					action: "QUOTATION_REVERTED",
+					entityType: "QUOTATION",
+					entityId: quotation.id,
+					entityDescription: `Retorno da cotacao ${quotation.title}`,
+					metadata: { revertedContractId: contract.id },
+				},
+			});
+		});
+
+		return this.get(ownerId, quotationId);
+	},
+
 	// Escolhe o vencedor e delega a criação do contrato ao gateway único.
 	// O gateway valida cobertura/ledger e só então vincula a cotação.
 	async chooseWinner(

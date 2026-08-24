@@ -221,30 +221,40 @@ export const contractRoutes = new Elysia({
 		},
 		{
 			body: t.Object({
-				code: t.Optional(t.String()),
-				supplierName: t.Optional(t.String()),
-				supplierId: t.Optional(t.Nullable(t.String())),
 				serviceType: t.Optional(t.String()),
 				objectDescription: t.Optional(t.String({ minLength: 1 })),
 				title: t.Optional(t.String()),
-				contractValue: t.Optional(t.Number()),
 				startDate: t.Optional(t.String()),
 				endDate: t.Optional(t.String()),
-				status: t.Optional(t.String()),
-				notes: t.Optional(t.String()),
 			}),
+			detail: { tags: ["Contracts"] },
+		},
+	)
+	.post(
+		"/:contractId/supplier",
+		async ({ params, body, scope, user }) =>
+			contractService.linkSupplier(
+				scope.resourceOwnerId,
+				params.workId,
+				params.contractId,
+				body.supplierId,
+				{ userId: user.id },
+			),
+		{
+			body: t.Object({ supplierId: t.String() }),
 			detail: { tags: ["Contracts"] },
 		},
 	)
 	.delete(
 		"/:contractId",
 		async ({ params, scope, user }) => {
-			await contractService.deleteContract(
+			const result = await contractService.deleteContract(
 				scope.resourceOwnerId,
 				params.workId,
 				params.contractId,
 				{ userId: user.id },
 			);
+			if (result.status === "PENDING") return result;
 			return new Response(null, { status: 204 });
 		},
 		{ detail: { tags: ["Contracts"] } },
@@ -356,13 +366,14 @@ export const contractRoutes = new Elysia({
 	)
 	.post(
 		"/:contractId/services/link-budget",
-		async ({ params, body, scope }) => {
+		async ({ params, body, scope, user }) => {
 			const parsed = parseInput(linkBudgetSchema, body);
 			return contractService.linkServicesToBudget(
 				scope.resourceOwnerId,
 				params.workId,
 				params.contractId,
 				parsed,
+				{ userId: user.id },
 			);
 		},
 		{

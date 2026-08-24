@@ -12,11 +12,14 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { ContractForm } from "@/organisms/contracts/contract-form";
-import type { ContractFormValues } from "@/schemas/contracts";
+import type {
+	ContractEditFormValues,
+	ContractFormValues,
+} from "@/schemas/contracts";
 import type {
 	Contract,
 	ContractCreateInput,
-	ContractUpdateInput,
+	ContractEditInput,
 } from "@/types/contracts";
 import type { Supplier } from "@/types/suppliers";
 import { getErrorMessage } from "@/utils/api-error";
@@ -56,8 +59,12 @@ export function ContractModal({
 		mutationFn: (input: ContractCreateInput) => createContract(workId, input),
 		onSuccess: (result) => {
 			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest?.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
 				toast.success(
-					"Solicitação de criação de contrato enviada para aprovação do Gestor.",
+					`Solicitação de criação de contrato enviada para aprovação do ${approver}.`,
 				);
 				queryClient.invalidateQueries({
 					queryKey: governanceKeys.pendingApprovals(workId),
@@ -75,13 +82,23 @@ export function ContractModal({
 	});
 
 	const updateMutation = useMutation({
-		mutationFn: (input: ContractUpdateInput) => {
+		mutationFn: (input: ContractEditInput) => {
 			if (!contractId) throw new Error("Contract ID is required for update");
-			const payload = { ...input };
-			if (disableContractValue) delete payload.contractValue;
-			return updateContract(workId, contractId, payload);
+			return updateContract(workId, contractId, input);
 		},
-		onSuccess: () => {
+		onSuccess: (result) => {
+			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest?.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(`Alteração enviada para aprovação do ${approver}.`);
+				queryClient.invalidateQueries({
+					queryKey: governanceKeys.pendingApprovals(workId),
+				});
+				onOpenChange(false);
+				return;
+			}
 			toast.success("Contrato atualizado!");
 			invalidateContractRelated();
 			if (contractId) {
@@ -96,56 +113,67 @@ export function ContractModal({
 		onSettled: () => setSubmitting(false),
 	});
 
-	const onSubmit = (data: ContractFormValues) => {
+	const onCreateSubmit = (data: ContractFormValues) => {
 		setSubmitting(true);
-		if (isEdit) {
-			updateMutation.mutate(data as ContractUpdateInput);
-		} else {
-			requestCreationConfirmation(() => createMutation.mutate(data));
-		}
+		requestCreationConfirmation(() => createMutation.mutate(data));
 	};
 
-	const defaultValues = contract
-		? {
-				code: contract.code,
-				supplierName: contract.supplierName,
-				supplierId: contract.supplierId ?? null,
-				contractValue: contract.contractValue,
-				serviceType: contract.serviceType ?? undefined,
-				objectDescription: contract.objectDescription ?? undefined,
-				title: contract.title ?? undefined,
-				startDate: contract.startDate ?? undefined,
-				endDate: contract.endDate ?? undefined,
-				status: contract.status,
-				notes: contract.notes ?? undefined,
-			}
-		: undefined;
+	const onEditSubmit = (data: ContractEditFormValues) => {
+		setSubmitting(true);
+		const payload: ContractEditInput = {
+			title: data.title,
+			serviceType: data.serviceType,
+			objectDescription: data.objectDescription,
+			startDate: data.startDate,
+			endDate: data.endDate,
+		};
+		updateMutation.mutate(payload);
+	};
 
-	const content = (
-		<>
-			<DialogHeader>
-				<DialogTitle>
-					{isEdit ? "Editar Contrato" : "Novo Contrato"}
-				</DialogTitle>
-				<DialogDescription>
-					{isEdit
-						? "Atualize os dados do contrato."
-						: "Preencha os dados para criar um novo contrato."}
-				</DialogDescription>
-			</DialogHeader>
-			<ContractForm
-				defaultValues={defaultValues}
-				onSubmit={onSubmit}
-				loading={submitting}
-				suppliers={suppliers}
-				disableContractValue={disableContractValue}
-			/>
-		</>
+	const editDefaultValues: Partial<ContractEditFormValues> | undefined =
+		contract
+			? {
+					serviceType: contract.serviceType ?? undefined,
+					objectDescription: contract.objectDescription ?? contract.notes ?? "",
+					title: contract.title ?? undefined,
+					startDate: contract.startDate ?? undefined,
+					endDate: contract.endDate ?? undefined,
+				}
+			: undefined;
+
+	const title = isEdit ? "Editar Contrato" : "Novo Contrato";
+	const description = isEdit
+		? "Atualize os dados do contrato."
+		: "Preencha os dados para criar um novo contrato.";
+	const form = isEdit ? (
+		<ContractForm
+			mode="edit"
+			defaultValues={editDefaultValues}
+			onSubmit={onEditSubmit}
+			loading={submitting}
+			onCancel={embedded ? () => onOpenChange(false) : undefined}
+		/>
+	) : (
+		<ContractForm
+			defaultValues={undefined}
+			onSubmit={onCreateSubmit}
+			loading={submitting}
+			suppliers={suppliers}
+			disableContractValue={disableContractValue}
+		/>
 	);
-	if (embedded) return <div className="space-y-4">{content}</div>;
+	if (embedded) {
+		return form;
+	}
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent>{content}</DialogContent>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{title}</DialogTitle>
+					<DialogDescription>{description}</DialogDescription>
+				</DialogHeader>
+				{form}
+			</DialogContent>
 		</Dialog>
 	);
 }

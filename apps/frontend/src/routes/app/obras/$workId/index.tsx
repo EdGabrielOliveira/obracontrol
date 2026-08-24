@@ -87,9 +87,9 @@ function RouteComponent() {
 	const search = useSearch({ from: Route.id });
 	const navigate = useNavigate({ from: Route.id });
 	const { user, role, capabilities } = useAuth();
-	const isAdmin = role === "ADMIN";
-	const canAccessGovernance = isAdmin || role === "GERENTE";
-	const canApprove = isAdmin || canDecideSupervisorRequests(capabilities);
+	const canAccessGovernance =
+		capabilities?.canReviewExecutedSupervisorRequests ?? role === "GERENTE";
+	const canApprove = canDecideSupervisorRequests(capabilities);
 
 	const tab = search.tab;
 	const asOfDate = search.asOfDate;
@@ -266,7 +266,7 @@ function RouteComponent() {
 									? (decideMutation.variables?.requestId ?? null)
 									: null
 							}
-							requiresDecisionReason={isAdmin || role === "GESTOR"}
+							requiresDecisionReason={role === "ADMIN" || role === "GESTOR"}
 							currentUserId={user?.id}
 						/>
 					) : undefined

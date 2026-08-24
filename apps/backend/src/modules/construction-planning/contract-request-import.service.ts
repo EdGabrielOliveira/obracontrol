@@ -86,12 +86,9 @@ export async function createQuotationMapPreview(
 			fileName: file.name,
 			model: "quotation-map",
 			file: file.stream(),
+			contractRequestId: requestId,
 		},
 	);
-	await prisma.importBatch.update({
-		where: { id: page.batchId },
-		data: { contractRequestId: requestId },
-	});
 	return page;
 }
 

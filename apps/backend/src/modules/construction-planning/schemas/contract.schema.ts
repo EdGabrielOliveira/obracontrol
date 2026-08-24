@@ -75,45 +75,26 @@ export const createContractSchema = z
 		}
 	});
 
-export const updateContractSchema = z
-	.object({
-		code: z.string().optional(),
-		supplierName: z.string().min(1).optional(),
-		supplierId: z.string().min(1).nullable().optional(),
-		serviceType: z.string().optional(),
-		objectDescription: z
-			.string()
-			.trim()
-			.min(1, "Objeto do contrato obrigatorio")
-			.optional(),
-		title: z.string().optional(),
-		contractValue: z.number().positive().optional(),
-		startDate: z
-			.string()
-			.optional()
-			.refine(
-				(v) => !v || !Number.isNaN(Date.parse(v)),
-				"Data de inicio invalida.",
-			),
-		endDate: z
-			.string()
-			.optional()
-			.refine(
-				(v) => !v || !Number.isNaN(Date.parse(v)),
-				"Data de fim invalida.",
-			),
-		status: contractStatusEnum.optional(),
-		notes: z.string().optional(),
-	})
-	.superRefine((data, ctx) => {
-		if (data.supplierId === null && data.supplierName === undefined) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: ["supplierName"],
-				message: "Informe supplierId ou supplierName.",
-			});
-		}
-	});
+export const updateContractSchema = z.object({
+	serviceType: z.string().optional(),
+	objectDescription: z
+		.string()
+		.trim()
+		.min(1, "Objeto do contrato obrigatorio")
+		.optional(),
+	title: z.string().optional(),
+	startDate: z
+		.string()
+		.optional()
+		.refine(
+			(v) => !v || !Number.isNaN(Date.parse(v)),
+			"Data de inicio invalida.",
+		),
+	endDate: z
+		.string()
+		.optional()
+		.refine((v) => !v || !Number.isNaN(Date.parse(v)), "Data de fim invalida."),
+});
 
 export const quotationBudgetItemSchema = z.object({
 	budgetItemId: z.string().min(1, "Item do orcamento obrigatorio"),

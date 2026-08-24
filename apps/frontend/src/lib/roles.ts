@@ -26,7 +26,8 @@ export function canAccessApiKeys(role: AppRole): boolean {
 }
 
 export function canAccessAudit(role: AppRole): boolean {
-	return normalizedRole(role) === "ADMIN";
+	const normalized = normalizedRole(role);
+	return normalized === "ADMIN" || normalized === "GERENTE";
 }
 
 export function isGestorOrSupervisor(role: AppRole): boolean {

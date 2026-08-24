@@ -21,8 +21,14 @@ const proposalFindFirst = mock(
 const proposalFindMany = mock(
 	async (): Promise<Array<Record<string, unknown>>> => [],
 );
+const importRowFindMany = mock(
+	async (): Promise<Array<Record<string, unknown>>> => [],
+);
 const supplierFindFirst = mock(
 	async (): Promise<Record<string, unknown> | null> => null,
+);
+const supplierFindMany = mock(
+	async (): Promise<Array<Record<string, unknown>>> => [],
 );
 const workSupplierFindFirst = mock(
 	async (): Promise<Record<string, unknown> | null> => null,
@@ -41,6 +47,11 @@ const budgetVersionItemFindMany = mock(
 );
 const requestUpdate = mock(async () => ({}));
 const requestUpdateMany = mock(async () => ({ count: 1 }));
+const approvalRequestFindMany = mock(
+	async (): Promise<Array<{ id: string; idempotencyKey?: string }>> => [],
+);
+const approvalRequestUpdateMany = mock(async () => ({ count: 0 }));
+const notificationUpdateMany = mock(async () => ({ count: 0 }));
 const submitApprovalMock = mock(async () => ({
 	status: "PENDING" as const,
 	approvalRequestId: "approval-1",
@@ -61,6 +72,11 @@ const transactionMock = mock(
 				findMany: proposalFindMany,
 			},
 			constructionSupplier: { findFirst: supplierFindFirst },
+			approvalRequest: {
+				findMany: approvalRequestFindMany,
+				updateMany: approvalRequestUpdateMany,
+			},
+			notification: { updateMany: notificationUpdateMany },
 			constructionWorkSupplier: { findFirst: workSupplierFindFirst },
 			contract: {
 				create: contractCreate,
@@ -96,8 +112,17 @@ mock.module("../../../../src/lib/prisma", () => ({
 			findFirst: proposalFindFirst,
 			findMany: proposalFindMany,
 		},
-		constructionSupplier: { findFirst: supplierFindFirst },
+		importRow: { findMany: importRowFindMany },
+		constructionSupplier: {
+			findFirst: supplierFindFirst,
+			findMany: supplierFindMany,
+		},
 		constructionWorkSupplier: { findFirst: workSupplierFindFirst },
+		approvalRequest: {
+			findMany: approvalRequestFindMany,
+			updateMany: approvalRequestUpdateMany,
+		},
+		notification: { updateMany: notificationUpdateMany },
 		budgetVersionItem: { findMany: budgetVersionItemFindMany },
 		$transaction: transactionMock,
 	},
@@ -137,7 +162,11 @@ const validInput = {
 describe("contract request service", () => {
 	beforeEach(() => {
 		mock.clearAllMocks();
-		resolveScopeMock.mockResolvedValue({ canRead: true, canWrite: true });
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			role: "GERENTE",
+		});
 		submitApprovalMock.mockClear();
 		requestUpdateMany.mockResolvedValue({ count: 1 });
 		getBudgetItemReferencesMock.mockResolvedValue({
@@ -159,7 +188,12 @@ describe("contract request service", () => {
 		contractRequestFindFirst.mockResolvedValue(null);
 		proposalFindFirst.mockResolvedValue(null);
 		proposalFindMany.mockResolvedValue([]);
+		importRowFindMany.mockResolvedValue([]);
 		supplierFindFirst.mockResolvedValue(null);
+		supplierFindMany.mockResolvedValue([]);
+		approvalRequestFindMany.mockResolvedValue([]);
+		approvalRequestUpdateMany.mockResolvedValue({ count: 0 });
+		notificationUpdateMany.mockResolvedValue({ count: 0 });
 		workSupplierFindFirst.mockResolvedValue(null);
 		contractCreate.mockResolvedValue({ id: "contract-1", code: "CT-001" });
 		contractCount.mockResolvedValue(0);
@@ -309,7 +343,10 @@ describe("contract request service", () => {
 	it("accepts a proposal creating one draft contract with the selected services", async () => {
 		contractRequestFindFirst.mockResolvedValue(pendingRequest);
 		proposalFindFirst.mockResolvedValue(eligibleProposal);
-		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
+		supplierFindFirst.mockResolvedValue({
+			id: "supplier-1",
+			status: "APPROVED",
+		});
 		workSupplierFindFirst.mockResolvedValue({ id: "ws-1" });
 		getBudgetItemReferencesMock.mockResolvedValue({
 			found: [
@@ -422,6 +459,11 @@ describe("contract request service", () => {
 	});
 
 	it("denies acceptance to non-approvers", async () => {
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			role: "SUPERVISOR",
+		});
 		contractRequestFindFirst.mockResolvedValue(pendingRequest);
 		proposalFindFirst.mockResolvedValue(eligibleProposal);
 		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
@@ -477,10 +519,10 @@ describe("contract request service", () => {
 		expect(contractCreate).not.toHaveBeenCalled();
 	});
 
-	it("reverts an acceptance while the generated contract is still a draft", async () => {
+	it("reverts a contracted request while the generated contract is still a draft", async () => {
 		contractRequestFindFirst.mockResolvedValue({
 			...pendingRequest,
-			status: "ACEITA",
+			status: "CONTRATADA",
 			acceptedProposalId: "proposal-1",
 			acceptedAt: new Date(),
 			acceptedBy: "user-1",
@@ -565,7 +607,21 @@ describe("contract request service", () => {
 				rowNumber: 3,
 			},
 		]);
-		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
+		importRowFindMany.mockResolvedValue([
+			{
+				values: {
+					supplierDocument: "11.222.333/0001-81",
+					supplierAddress: "Rua das Flores, 123",
+					supplierPhone: "(11) 99999-9999",
+					supplierEmail: "contato@modelo.com",
+					supplierResponsible: "Maria Silva",
+				},
+			},
+		]);
+		supplierFindFirst.mockResolvedValue({
+			id: "supplier-1",
+			status: "APPROVED",
+		});
 		workSupplierFindFirst.mockResolvedValue({ id: "ws-1" });
 		getBudgetItemReferencesMock.mockResolvedValue({
 			found: [
@@ -600,7 +656,14 @@ describe("contract request service", () => {
 		});
 		expect(comparison.proposals).toHaveLength(2);
 		expect(comparison.proposals[0]).toMatchObject({
-			supplier: { cnpj: "11222333000181", registered: true },
+			supplier: {
+				cnpj: "11222333000181",
+				registered: true,
+				address: "Rua das Flores, 123",
+				phone: "(11) 99999-9999",
+				email: "contato@modelo.com",
+				responsibleName: "Maria Silva",
+			},
 			proposalValue: 50_000,
 			costRatioPercent: 5000,
 			costAlert: "RED",
@@ -747,7 +810,10 @@ describe("contract request service", () => {
 			status: "EM_ESPERA",
 			confirmedBatchId: "batch-1",
 		});
-		proposalFindFirst.mockResolvedValue({ id: "proposal-1" });
+		proposalFindFirst.mockResolvedValue({
+			id: "proposal-1",
+			normalizedCnpj: "11222333000181",
+		});
 		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
 
 		const result = await selectContractRequestWinner(
@@ -778,5 +844,93 @@ describe("contract request service", () => {
 			}),
 		);
 		expect(contractCreate).not.toHaveBeenCalled();
+	});
+
+	it("allows selecting an unregistered supplier and opens final approval", async () => {
+		const { selectContractRequestWinner } = await import(
+			"../../../../src/modules/construction-planning/contract-request.service"
+		);
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			resourceOwnerId: "owner-1",
+		});
+		contractRequestFindFirst.mockResolvedValue({
+			id: "request-1",
+			status: "EM_ESPERA",
+			confirmedBatchId: "batch-1",
+		});
+		proposalFindFirst.mockResolvedValue({
+			id: "proposal-1",
+			normalizedCnpj: "11222333000181",
+		});
+		supplierFindFirst.mockResolvedValue(null);
+
+		const result = await selectContractRequestWinner(
+			"user-1",
+			"work-1",
+			"request-1",
+			"proposal-1",
+			"key-1",
+			"ADMIN",
+		);
+
+		expect(result).toMatchObject({
+			requestId: "request-1",
+			status: "PENDING",
+			approvalRequestId: "approval-1",
+		});
+		expect(requestUpdateMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					status: "AGUARDANDO_APROVACAO_FINAL",
+					acceptedProposalId: "proposal-1",
+				}),
+			}),
+		);
+		expect(submitApprovalMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				effectAction: "CONTRACT_REQUEST_FINALIZE",
+				resourceId: "request-1",
+			}),
+		);
+	});
+
+	it("restarts selection with a new idempotency key after a stale approval", async () => {
+		const { selectContractRequestWinner } = await import(
+			"../../../../src/modules/construction-planning/contract-request.service"
+		);
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			resourceOwnerId: "owner-1",
+		});
+		contractRequestFindFirst.mockResolvedValue({
+			id: "request-1",
+			status: "EM_ESPERA",
+			confirmedBatchId: "batch-1",
+		});
+		proposalFindFirst.mockResolvedValue({
+			id: "proposal-1",
+			normalizedCnpj: "11222333000181",
+		});
+		approvalRequestFindMany.mockResolvedValue([
+			{ id: "stale-approval", idempotencyKey: "selection-key" },
+		]);
+
+		await selectContractRequestWinner(
+			"actor-1",
+			"work-1",
+			"request-1",
+			"proposal-1",
+			"selection-key",
+			"GERENTE",
+		);
+
+		expect(submitApprovalMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				idempotencyKey: expect.stringMatching(/^selection-key:retry:/),
+			}),
+		);
 	});
 });

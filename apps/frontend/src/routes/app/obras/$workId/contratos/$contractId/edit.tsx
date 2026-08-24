@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-router";
 import { getContract } from "@/api/contracts";
 import { contractKeys } from "@/api/query-keys";
-import { listSuppliers } from "@/api/suppliers";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
@@ -18,16 +17,10 @@ export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$contractId/edit",
 )({
 	loader: ({ params }) => {
-		void Promise.all([
-			queryClient.prefetchQuery({
-				queryKey: contractKeys.detail(params.workId, params.contractId),
-				queryFn: () => getContract(params.workId, params.contractId),
-			}),
-			queryClient.prefetchQuery({
-				queryKey: ["suppliers", "for-contract-edit", params.workId],
-				queryFn: () => listSuppliers({ page: 1, pageSize: 100 }),
-			}),
-		]);
+		void queryClient.prefetchQuery({
+			queryKey: contractKeys.detail(params.workId, params.contractId),
+			queryFn: () => getContract(params.workId, params.contractId),
+		});
 	},
 	component: RouteComponent,
 	head: () => ({
@@ -48,14 +41,9 @@ function RouteComponent() {
 		queryKey: contractKeys.detail(workId, contractId),
 		queryFn: () => getContract(workId, contractId),
 	});
-	const suppliersQuery = useQuery({
-		queryKey: ["suppliers", "for-contract-edit", workId],
-		queryFn: () => listSuppliers({ page: 1, pageSize: 100 }),
-	});
-
-	if (contractQuery.isLoading || suppliersQuery.isLoading)
+	if (contractQuery.isLoading)
 		return <LoadingSpinner title="Carregando edição do contrato..." />;
-	if (contractQuery.error || suppliersQuery.error) return <ErrorFeedback />;
+	if (contractQuery.error) return <ErrorFeedback />;
 	if (!contractQuery.data) return <LoadingSpinner />;
 
 	const goBack = () =>
@@ -69,7 +57,7 @@ function RouteComponent() {
 			<PageHeader
 				eyebrow="Contratos"
 				title={`Editar contrato ${contractQuery.data.code}`}
-				description="Atualize os dados cadastrais do contrato."
+				description="Altere título, tipo de serviço, descrição e período de vigência."
 			/>
 			<ContractModal
 				open
@@ -79,7 +67,6 @@ function RouteComponent() {
 				}}
 				workId={workId}
 				contract={contractQuery.data}
-				suppliers={suppliersQuery.data?.data ?? []}
 			/>
 		</PageContainer>
 	);

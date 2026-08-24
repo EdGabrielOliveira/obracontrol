@@ -189,7 +189,7 @@ export class ConstructionWorkService {
 				status: "PENDING" as const,
 				approvalRequest: {
 					id: result.approvalRequestId,
-					requiredApproverRole: "GERENTE" as const,
+					requiredApproverRole: result.requiredApproverRole ?? "GERENTE",
 					organizationId: result.scope?.organizationId ?? "",
 					costCenterId: result.scope?.costCenterId ?? null,
 					createdAt: new Date().toISOString(),

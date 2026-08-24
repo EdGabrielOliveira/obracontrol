@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { budgetControlService } from "../construction-planning/budget-control/budget-control.service";
@@ -355,7 +356,7 @@ const IMPORT_CONFIRM: ApprovalEffectHandler = {
 
 const CONTRACT_CREATE: ApprovalEffectHandler = {
 	action: "CONTRACT_CREATE",
-	apply: async ({ tx, request }) => {
+	apply: async ({ tx, request, decision }) => {
 		const payload = request.payloadJson as {
 			workId: string;
 			contract: {
@@ -411,8 +412,205 @@ const CONTRACT_CREATE: ApprovalEffectHandler = {
 			})),
 			idempotencyKey: request.idempotencyKey,
 		});
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "CREATE",
+			entityType: "CONTRACT",
+			entityId: result.contract.id,
+			entityDescription: `Contrato ${result.contract.code}`,
+			newState: {
+				status: result.contract.status,
+				contractValue: result.contract.contractValue,
+			},
+			metadata: {
+				actorRole: request.actorRole,
+				organizationId: request.organizationId,
+				workId: payload.workId,
+				execution:
+					decision.decisionMode === "AUTOMATICO_POR_POLITICA"
+						? "DIRECT"
+						: "APPROVAL_CHAIN",
+			},
+		});
 
 		return result.contract;
+	},
+};
+
+const CONTRACT_UPDATE: ApprovalEffectHandler = {
+	action: "CONTRACT_UPDATE",
+	apply: async ({ tx, request, decision }) => {
+		const payload = request.payloadJson as {
+			workId: string;
+			contractId: string;
+			input: {
+				title?: string;
+				serviceType?: string;
+				objectDescription?: string;
+				startDate?: string;
+				endDate?: string;
+			};
+		};
+		const existing = await tx.contract.findFirst({
+			where: {
+				id: payload.contractId,
+				ownerId: request.ownerId,
+				workId: payload.workId,
+			},
+		});
+		if (!existing) throw new Error("contrato nao encontrado");
+
+		const data: Prisma.ContractUncheckedUpdateInput = {};
+		if (payload.input.title !== undefined) data.title = payload.input.title;
+		if (payload.input.serviceType !== undefined)
+			data.serviceType = payload.input.serviceType;
+		if (payload.input.objectDescription !== undefined)
+			data.objectDescription = payload.input.objectDescription;
+		if (payload.input.startDate !== undefined)
+			data.startDate = new Date(payload.input.startDate);
+		if (payload.input.endDate !== undefined)
+			data.endDate = new Date(payload.input.endDate);
+
+		const updated = await tx.contract.update({
+			where: { id: existing.id },
+			data,
+		});
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "UPDATE",
+			entityType: "CONTRACT",
+			entityId: existing.id,
+			entityDescription: `Contrato ${existing.code}`,
+			previousState: {
+				title: existing.title,
+				serviceType: existing.serviceType,
+				objectDescription: existing.objectDescription,
+				startDate: existing.startDate,
+				endDate: existing.endDate,
+			},
+			newState: {
+				title: updated.title,
+				serviceType: updated.serviceType,
+				objectDescription: updated.objectDescription,
+				startDate: updated.startDate,
+				endDate: updated.endDate,
+			},
+			metadata: {
+				actorRole: request.actorRole,
+				organizationId: request.organizationId,
+				workId: payload.workId,
+				execution:
+					decision.decisionMode === "AUTOMATICO_POR_POLITICA"
+						? "DIRECT"
+						: "APPROVAL_CHAIN",
+			},
+		});
+		return updated;
+	},
+};
+
+const CONTRACT_SUPPLIER_LINK: ApprovalEffectHandler = {
+	action: "CONTRACT_SUPPLIER_LINK",
+	apply: async ({ tx, request, decision }) => {
+		const payload = request.payloadJson as {
+			workId: string;
+			contractId: string;
+			supplierId: string;
+		};
+		const [contract, supplier, workLink] = await Promise.all([
+			tx.contract.findFirst({
+				where: {
+					id: payload.contractId,
+					ownerId: request.ownerId,
+					workId: payload.workId,
+				},
+				select: { id: true, code: true, supplierId: true },
+			}),
+			tx.constructionSupplier.findFirst({
+				where: { id: payload.supplierId, ownerId: request.ownerId },
+				select: { id: true, name: true, status: true },
+			}),
+			tx.constructionWorkSupplier.findFirst({
+				where: { workId: payload.workId, supplierId: payload.supplierId },
+				select: { id: true },
+			}),
+		]);
+		if (!contract) throw new Error("contrato nao encontrado");
+		if (!supplier || supplier.status !== "APPROVED") {
+			throw new Error("fornecedor ativo nao encontrado");
+		}
+		if (!workLink) throw new Error("fornecedor nao vinculado a obra");
+
+		const updated = await tx.contract.update({
+			where: { id: contract.id },
+			data: { supplierId: supplier.id, supplierName: supplier.name },
+		});
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "UPDATE",
+			entityType: "CONTRACT",
+			entityId: contract.id,
+			entityDescription: `Vinculo de fornecedor do contrato ${contract.code}`,
+			previousState: { supplierId: contract.supplierId },
+			newState: { supplierId: supplier.id, supplierName: supplier.name },
+			metadata: {
+				actorRole: request.actorRole,
+				organizationId: request.organizationId,
+				workId: payload.workId,
+				execution:
+					decision.decisionMode === "AUTOMATICO_POR_POLITICA"
+						? "DIRECT"
+						: "APPROVAL_CHAIN",
+			},
+		});
+		return updated;
+	},
+};
+
+const CONTRACT_DELETE: ApprovalEffectHandler = {
+	action: "CONTRACT_DELETE",
+	apply: async ({ tx, request, decision }) => {
+		const payload = request.payloadJson as {
+			workId: string;
+			contractId: string;
+		};
+		const existing = await tx.contract.findFirst({
+			where: {
+				id: payload.contractId,
+				ownerId: request.ownerId,
+				workId: payload.workId,
+			},
+		});
+		if (!existing) throw new Error("contrato nao encontrado");
+		await tx.contract.delete({ where: { id: existing.id } });
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "DELETE",
+			entityType: "CONTRACT",
+			entityId: existing.id,
+			entityDescription: `Contrato ${existing.code}`,
+			previousState: {
+				title: existing.title,
+				serviceType: existing.serviceType,
+				objectDescription: existing.objectDescription,
+				startDate: existing.startDate,
+				endDate: existing.endDate,
+			},
+			metadata: {
+				actorRole: request.actorRole,
+				organizationId: request.organizationId,
+				workId: payload.workId,
+				execution:
+					decision.decisionMode === "AUTOMATICO_POR_POLITICA"
+						? "DIRECT"
+						: "APPROVAL_CHAIN",
+			},
+		});
+		return { id: existing.id, deleted: true };
 	},
 };
 
@@ -576,6 +774,9 @@ export const approvalEffectHandlers: ApprovalEffectHandler[] = [
 	IMPORT_CONFIRM,
 	BUDGET_IMPACT_APPROVE,
 	CONTRACT_CREATE,
+	CONTRACT_UPDATE,
+	CONTRACT_SUPPLIER_LINK,
+	CONTRACT_DELETE,
 	CONTRACT_REQUEST_FINALIZE,
 	WORK_DELETE,
 ];

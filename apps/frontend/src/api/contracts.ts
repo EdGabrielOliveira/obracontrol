@@ -64,15 +64,30 @@ export async function updateContract(
 	contractId: string,
 	input: ContractUpdateInput,
 ) {
-	const { data } = await api.patch<Contract>(
+	const { data } = await api.patch<CommandResult<Contract>>(
 		`/construction/works/${workId}/contracts/${contractId}`,
 		input,
 	);
 	return data;
 }
 
+export async function linkContractSupplier(
+	workId: string,
+	contractId: string,
+	supplierId: string,
+) {
+	const { data } = await api.post<CommandResult<Contract>>(
+		`/construction/works/${workId}/contracts/${contractId}/supplier`,
+		{ supplierId },
+	);
+	return data;
+}
+
 export async function deleteContract(workId: string, contractId: string) {
-	await api.delete(`/construction/works/${workId}/contracts/${contractId}`);
+	const { data } = await api.delete<
+		CommandResult<{ id: string; deleted: boolean }>
+	>(`/construction/works/${workId}/contracts/${contractId}`);
+	return data;
 }
 
 export async function getContractSummary(workId: string) {

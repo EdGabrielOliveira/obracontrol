@@ -286,7 +286,8 @@ export class ContractService {
 				status: "PENDING" as const,
 				approvalRequest: {
 					id: result.approvalRequestId,
-					requiredApproverRole: "GESTOR" as const,
+					requiredApproverRole:
+						result.requiredApproverRole ?? ("GERENTE" as const),
 					organizationId: result.scope?.organizationId ?? "",
 					costCenterId: result.scope?.costCenterId ?? null,
 					createdAt: new Date().toISOString(),
@@ -306,62 +307,76 @@ export class ContractService {
 	) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId);
-		const previous = await contractRepository.getContractById(
+		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
 			contractId,
 		);
-		if (!previous) {
+		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
 		}
-		const resolved = await this.resolveSupplier(ownerId, workId, input);
-		if (resolved.contractValue !== undefined) {
-			const amendmentCount = await contractRepository.countAmendments(
-				ownerId,
-				contractId,
-			);
-			if (amendmentCount > 0) {
-				throw new ConstructionError(
-					"CONTRACT_AMENDMENTS_EXIST",
-					"Contrato com aditivos: ajuste por aditivo",
-					422,
-				);
-			}
-		}
-		const result = await contractRepository.updateContract(
-			ownerId,
-			workId,
-			contractId,
-			resolved,
-		);
-		if (!result) {
-			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
-		}
-		await auditService.log({
-			userId: ctx.userId,
-			ownerId,
-			action: "UPDATE",
-			entityType: "CONTRACT",
-			entityId: contractId,
-			entityDescription: `Contrato ${(result as { number?: string | null }).number ?? contractId}`,
-			previousState: {
-				supplierId:
-					(previous as { supplierId?: string | null }).supplierId ?? null,
-				supplierName:
-					(previous as { supplierName?: string | null }).supplierName ?? null,
-				contractValue:
-					(previous as { contractValue?: unknown }).contractValue ?? null,
-			},
-			newState: {
-				supplierId:
-					(result as { supplierId?: string | null }).supplierId ?? null,
-				supplierName:
-					(result as { supplierName?: string | null }).supplierName ?? null,
-				contractValue:
-					(result as { contractValue?: unknown }).contractValue ?? null,
-			},
+		const { submitApproval } = await import("../governance/approval.service");
+		const commandId = `contract-update-${contractId}-${crypto.randomUUID()}`;
+		const result = await submitApproval({
+			actorId: ctx.userId,
+			resourceType: "CONTRACT",
+			resourceId: contractId,
+			commandId,
+			effectAction: "CONTRACT_UPDATE",
+			payload: { workId, contractId, input },
+			expectedVersion: 1,
+			idempotencyKey: commandId,
 		});
-		return result;
+		if (result.status === "PENDING") {
+			return {
+				status: "PENDING" as const,
+				approvalRequest: {
+					id: result.approvalRequestId,
+					requiredApproverRole: result.requiredApproverRole ?? "GERENTE",
+					organizationId: result.scope?.organizationId ?? "",
+					costCenterId: result.scope?.costCenterId ?? null,
+					createdAt: new Date().toISOString(),
+				},
+			};
+		}
+		return { status: "EXECUTED" as const, data: result.data };
+	}
+
+	async linkSupplier(
+		ownerId: string,
+		workId: string,
+		contractId: string,
+		supplierId: string,
+		ctx: { userId: string },
+	) {
+		await getWorkOrThrow(ownerId, workId);
+		await this.assertWritable(ownerId, workId);
+		await this.resolveSupplier(ownerId, workId, { supplierId });
+		const commandId = `contract-supplier-link-${contractId}-${crypto.randomUUID()}`;
+		const { submitApproval } = await import("../governance/approval.service");
+		const result = await submitApproval({
+			actorId: ctx.userId,
+			resourceType: "CONTRACT",
+			resourceId: contractId,
+			commandId,
+			effectAction: "CONTRACT_SUPPLIER_LINK",
+			payload: { workId, contractId, supplierId },
+			expectedVersion: 1,
+			idempotencyKey: commandId,
+		});
+		if (result.status === "PENDING") {
+			return {
+				status: "PENDING" as const,
+				approvalRequest: {
+					id: result.approvalRequestId,
+					requiredApproverRole: result.requiredApproverRole ?? "GERENTE",
+					organizationId: result.scope?.organizationId ?? "",
+					costCenterId: result.scope?.costCenterId ?? null,
+					createdAt: new Date().toISOString(),
+				},
+			};
+		}
+		return { status: "EXECUTED" as const, data: result.data };
 	}
 
 	async deleteContract(
@@ -372,39 +387,39 @@ export class ContractService {
 	) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId);
-		const previous = await contractRepository.getContractById(
+		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
 			contractId,
 		);
-		if (!previous) {
+		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
 		}
-		const result = await contractRepository.deleteContract(
-			ownerId,
-			workId,
-			contractId,
-		);
-		if (!result) {
-			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
-		}
-		await auditService.log({
-			userId: ctx.userId,
-			ownerId,
-			action: "DELETE",
-			entityType: "CONTRACT",
-			entityId: contractId,
-			entityDescription: `Contrato ${(previous as { number?: string | null }).number ?? contractId}`,
-			previousState: {
-				supplierId:
-					(previous as { supplierId?: string | null }).supplierId ?? null,
-				supplierName:
-					(previous as { supplierName?: string | null }).supplierName ?? null,
-				contractValue:
-					(previous as { contractValue?: unknown }).contractValue ?? null,
-			},
+		const { submitApproval } = await import("../governance/approval.service");
+		const commandId = `contract-delete-${contractId}-${crypto.randomUUID()}`;
+		const result = await submitApproval({
+			actorId: ctx.userId,
+			resourceType: "CONTRACT",
+			resourceId: contractId,
+			commandId,
+			effectAction: "CONTRACT_DELETE",
+			payload: { workId, contractId },
+			expectedVersion: 1,
+			idempotencyKey: commandId,
 		});
-		return result;
+		if (result.status === "PENDING") {
+			return {
+				status: "PENDING" as const,
+				approvalRequest: {
+					id: result.approvalRequestId,
+					requiredApproverRole: result.requiredApproverRole ?? "GERENTE",
+					organizationId: result.scope?.organizationId ?? "",
+					costCenterId: result.scope?.costCenterId ?? null,
+					createdAt: new Date().toISOString(),
+				},
+			};
+		}
+		return { status: "EXECUTED" as const, data: result.data };
 	}
 
 	async getContractsSummary(ownerId: string, workId: string) {
@@ -518,6 +533,7 @@ export class ContractService {
 		await this.assertWritable(ownerId, workId);
 		return withOverflowApproval({
 			ownerId,
+			actorId: ctx.userId,
 			workId,
 			sourceType: SERVICE_SOURCE_TYPE,
 			commit: async (tx) => {
@@ -594,6 +610,7 @@ export class ContractService {
 		await this.assertWritable(ownerId, workId);
 		return withOverflowApproval({
 			ownerId,
+			actorId: ctx.userId,
 			workId,
 			sourceType: SERVICE_SOURCE_TYPE,
 			commit: async (tx) => {
@@ -689,6 +706,7 @@ export class ContractService {
 		await this.assertWritable(ownerId, workId);
 		return withOverflowApproval({
 			ownerId,
+			actorId: ctx.userId,
 			workId,
 			sourceType: SERVICE_SOURCE_TYPE,
 			commit: async (tx) => {
@@ -884,11 +902,13 @@ export class ContractService {
 		workId: string,
 		contractId: string,
 		input: LinkBudgetInput,
+		ctx?: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId);
 		return withOverflowApproval({
 			ownerId,
+			actorId: ctx?.userId ?? ownerId,
 			workId,
 			sourceType: SERVICE_SOURCE_TYPE,
 			commit: async (tx) => {

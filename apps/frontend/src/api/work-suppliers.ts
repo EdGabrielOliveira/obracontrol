@@ -18,3 +18,10 @@ export async function listWorkSuppliers(workId: string) {
 	);
 	return data;
 }
+
+export async function linkSupplierToWork(workId: string, supplierId: string) {
+	const { data } = await api.post<WorkSupplier>(
+		`/construction/works/${workId}/suppliers/${supplierId}`,
+	);
+	return data;
+}

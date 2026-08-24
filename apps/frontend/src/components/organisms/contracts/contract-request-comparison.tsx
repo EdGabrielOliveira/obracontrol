@@ -360,14 +360,19 @@ export function ContractRequestComparisonView({
 												<p className="text-xs text-muted-foreground">
 													{proposal.supplier.cnpj}
 												</p>
-												{proposal.supplier.registered ? (
+												{proposal.supplier.linked ? (
 													<p className="text-xs text-success">
 														<CheckCircle2 className="mr-1 inline h-3 w-3" />
 														Cadastrado e vinculado
 													</p>
+												) : proposal.supplier.registered ? (
+													<p className="text-xs text-success">
+														<CheckCircle2 className="mr-1 inline h-3 w-3" />
+														CNPJ cadastrado no sistema
+													</p>
 												) : (
 													<p className="text-xs text-warning">
-														Fornecedor ainda não cadastrado; isso não impede a
+														CNPJ não encontrado no cadastro; isso não impede a
 														contratação.
 													</p>
 												)}
