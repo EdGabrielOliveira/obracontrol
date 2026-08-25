@@ -32,9 +32,9 @@ model ConstructionSupplier {
   workLinks   ConstructionWorkSupplier[]
   workspace    Workspace?                @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
-  @@unique([workspaceId, document])
   @@index([ownerId, name])
   @@index([workspaceId])
+  @@index([workspaceId, document])
 }
 
 model ConstructionWorkSupplier {

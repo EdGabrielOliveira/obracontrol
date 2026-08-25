@@ -13,6 +13,7 @@ type Report = {
 	afterUnassigned: Record<string, number> | null;
 	divergences: Array<Record<string, string>>;
 	legacyOwnerDrifts: Array<Record<string, string>>;
+	duplicateSupplierDocuments: Array<Record<string, string>>;
 	completedAt: string;
 };
 
@@ -147,6 +148,7 @@ async function main() {
 	});
 	const divergences: Array<Record<string, string>> = [];
 	const legacyOwnerDrifts: Array<Record<string, string>> = [];
+	const duplicateSupplierDocuments: Array<Record<string, string>> = [];
 
 	const [users, organizations, costCenters, works, companies, suppliers] =
 		await Promise.all([
@@ -240,9 +242,10 @@ async function main() {
 			`WORK:${costCenterWorkspace.get(row.costCenterId) ?? fallbackWorkspaceId}:${row.code}`,
 			row.id,
 		);
+	const supplierDocuments = new Map<string, string[]>();
 	for (const row of suppliers)
 		if (row.document)
-			addDuplicate(
+			addDuplicateSupplier(
 				`SUPPLIER:${row.workspaceId ?? fallbackWorkspaceId}:${row.document}`,
 				row.id,
 			);
@@ -250,6 +253,19 @@ async function main() {
 		if (ids.length > 1)
 			divergences.push({
 				type: "DUPLICATE_WORKSPACE_KEY",
+				key,
+				ids: ids.sort().join(","),
+			});
+	}
+	function addDuplicateSupplier(key: string, id: string) {
+		const ids = supplierDocuments.get(key) ?? [];
+		ids.push(id);
+		supplierDocuments.set(key, ids);
+	}
+	for (const [key, ids] of supplierDocuments) {
+		if (ids.length > 1)
+			duplicateSupplierDocuments.push({
+				type: "DUPLICATE_LEGACY_SUPPLIER_DOCUMENT",
 				key,
 				ids: ids.sort().join(","),
 			});
@@ -272,6 +288,7 @@ async function main() {
 					unassigned,
 					divergences,
 					legacyOwnerDrifts,
+					duplicateSupplierDocuments,
 					completedAt: new Date().toISOString(),
 				},
 				null,
@@ -482,6 +499,7 @@ async function main() {
 		afterUnassigned: apply ? await countUnassignedWorkspaceIds(prisma) : null,
 		divergences,
 		legacyOwnerDrifts,
+		duplicateSupplierDocuments,
 		completedAt: new Date().toISOString(),
 	};
 	const json = JSON.stringify(report, null, 2);
