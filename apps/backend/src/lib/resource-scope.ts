@@ -102,7 +102,7 @@ function grantedContext(
 async function resolveWorkChain(workId: string): Promise<ResourceChain | null> {
 	const work = await prisma.constructionWork.findUnique({
 		where: { id: workId },
-		select: { id: true, costCenterId: true },
+		select: { id: true, ownerId: true, workspaceId: true, costCenterId: true },
 	});
 	if (!work) return null;
 	const costCenter = await prisma.costCenter.findUnique({
@@ -119,8 +119,12 @@ async function resolveWorkChain(workId: string): Promise<ResourceChain | null> {
 		organizationId: organization.id,
 		costCenterId: costCenter.id,
 		workId: work.id,
-		ownerId: organization.ownerId,
-		workspaceId: organization.workspaceId,
+		// `ownerId` permanece como contexto de compatibilidade para os
+		// registros operacionais legados. Em rotas de obra ele precisa ser o
+		// autor da própria obra (e não o autor da organização); a autorização
+		// entre administradores é garantida pelo workspace logo abaixo.
+		ownerId: work.ownerId,
+		workspaceId: work.workspaceId ?? organization.workspaceId,
 	};
 }
 

@@ -55,7 +55,12 @@ const { resolveResourceScope, resolvePortfolioScope } = await import(
 );
 
 const WORK_CHAIN = {
-	work: { id: "work-1", costCenterId: "cc-1" },
+	work: {
+		id: "work-1",
+		ownerId: "work-owner-1",
+		workspaceId: "workspace-1",
+		costCenterId: "cc-1",
+	},
 	costCenter: { id: "cc-1", organizationId: "org-1" },
 	organization: { id: "org-1", ownerId: "owner-1" },
 };
@@ -102,7 +107,7 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 			workId: "work-1",
 		});
 
-		expect(scope.resourceOwnerId).toBe("owner-1");
+		expect(scope.resourceOwnerId).toBe("work-owner-1");
 		expect(scope.resourceType).toBe("WORK");
 		expect(scope.canRead).toBe(true);
 		expect(scope.canWrite).toBe(true);
@@ -192,7 +197,12 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 
 	it("API key escopada rejeita cadeia de outra organizacao", async () => {
 		stubChain({
-			work: { id: "work-1", costCenterId: "cc-1" },
+			work: {
+				id: "work-1",
+				ownerId: "work-owner-1",
+				workspaceId: "workspace-1",
+				costCenterId: "cc-1",
+			},
 			costCenter: { id: "cc-1", organizationId: "org-2" },
 			organization: { id: "org-2", ownerId: "owner-2" },
 		});
