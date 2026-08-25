@@ -14,6 +14,8 @@ services:
       HOST: 0.0.0.0
       PORT: 7001
       DATABASE_URL: ${DATABASE_URL:-file:/data/obracontrol.db}
+      WORKSPACE_BACKFILL_ON_BOOT: ${WORKSPACE_BACKFILL_ON_BOOT:-true}
+      WORKSPACE_MIGRATION_REPORT_PATH: ${WORKSPACE_MIGRATION_REPORT_PATH:-/data/workspace-migration-report.json}
       OBJECT_STORAGE_DIR: ${OBJECT_STORAGE_DIR:-/data/objects}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no arquivo .env}
       ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:?Defina ADMIN_REGISTRATION_KEY no arquivo .env}

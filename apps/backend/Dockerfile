@@ -57,6 +57,7 @@ COPY --chown=bun:bun --from=production-dependencies /app/node_modules /app/node_
 COPY --chown=bun:bun --from=prisma-build /app/generated /app/generated
 COPY --chown=bun:bun --from=prisma-build /app/prisma/dev.db /app/schema.db
 COPY --chown=bun:bun --from=prisma-build /app/prisma/migrations /app/prisma/migrations
+COPY --chown=bun:bun --from=prisma-build /app/prisma/scripts /app/prisma/scripts
 COPY --chown=bun:bun apps/backend/prisma/seed.ts /app/prisma/seed.ts
 COPY --chown=bun:bun apps/backend/src /app/src
 COPY --chown=bun:bun apps/backend/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
