@@ -12,6 +12,7 @@ type Report = {
 	unassigned: Record<string, number>;
 	afterUnassigned: Record<string, number> | null;
 	divergences: Array<Record<string, string>>;
+	legacyOwnerDrifts: Array<Record<string, string>>;
 	completedAt: string;
 };
 
@@ -145,6 +146,7 @@ async function main() {
 		select: { id: true },
 	});
 	const divergences: Array<Record<string, string>> = [];
+	const legacyOwnerDrifts: Array<Record<string, string>> = [];
 
 	const [users, organizations, costCenters, works, companies, suppliers] =
 		await Promise.all([
@@ -196,21 +198,20 @@ async function main() {
 		costCenterWorkspace.set(center.id, value);
 	}
 	for (const work of works) {
-		const value =
-			work.workspaceId ??
-			costCenterWorkspace.get(work.costCenterId) ??
-			fallbackWorkspaceId;
-		if (work.workspaceId && work.workspaceId !== value) {
+		const expectedWorkspace =
+			costCenterWorkspace.get(work.costCenterId) ?? fallbackWorkspaceId;
+		const value = work.workspaceId ?? expectedWorkspace;
+		if (work.workspaceId && work.workspaceId !== expectedWorkspace) {
 			divergences.push({
 				type: "WORK_WORKSPACE",
 				id: work.id,
 				current: work.workspaceId,
-				expected: value,
+				expected: expectedWorkspace,
 			});
 		}
 		const ownerWorkspace = userWorkspace.get(work.ownerId);
 		if (ownerWorkspace && ownerWorkspace !== value) {
-			divergences.push({
+			legacyOwnerDrifts.push({
 				type: "WORK_OWNER_LEGACY_DRIFT",
 				id: work.id,
 				ownerWorkspace,
@@ -263,6 +264,21 @@ async function main() {
 
 	if (apply && workspaceId) {
 		if (divergences.length > 0) {
+			const json = JSON.stringify(
+				{
+					mode: "apply-preflight",
+					workspaceId,
+					counts,
+					unassigned,
+					divergences,
+					legacyOwnerDrifts,
+					completedAt: new Date().toISOString(),
+				},
+				null,
+				2,
+			);
+			if (out) writeFileSync(out, json);
+			console.error(json);
 			throw new Error(
 				`Migracao bloqueada: ${divergences.length} divergencias precisam ser resolvidas no dry-run`,
 			);
@@ -465,6 +481,7 @@ async function main() {
 		unassigned,
 		afterUnassigned: apply ? await countUnassignedWorkspaceIds(prisma) : null,
 		divergences,
+		legacyOwnerDrifts,
 		completedAt: new Date().toISOString(),
 	};
 	const json = JSON.stringify(report, null, 2);
