@@ -2,6 +2,10 @@ import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import {
+	CONTRACT_TRANSITIONS,
+	validateStatusTransition,
+} from "../../lib/status-machine";
 import { budgetControlService } from "../construction-planning/budget-control/budget-control.service";
 import { projectApprovedBudgetVersion } from "../construction-planning/budget-version-projection.service";
 import {
@@ -450,6 +454,12 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 				objectDescription?: string;
 				startDate?: string;
 				endDate?: string;
+				status?:
+					| "RASCUNHO"
+					| "A_INICIAR"
+					| "EM_ANDAMENTO"
+					| "PARALISADO"
+					| "FINALIZADO";
 			};
 		};
 		const existing = await tx.contract.findFirst({
@@ -471,6 +481,15 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 			data.startDate = new Date(payload.input.startDate);
 		if (payload.input.endDate !== undefined)
 			data.endDate = new Date(payload.input.endDate);
+		if (payload.input.status !== undefined) {
+			validateStatusTransition(
+				"Contrato",
+				CONTRACT_TRANSITIONS,
+				existing.status,
+				payload.input.status,
+			);
+			data.status = payload.input.status;
+		}
 
 		const updated = await tx.contract.update({
 			where: { id: existing.id },
@@ -489,6 +508,7 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 				objectDescription: existing.objectDescription,
 				startDate: existing.startDate,
 				endDate: existing.endDate,
+				status: existing.status,
 			},
 			newState: {
 				title: updated.title,
@@ -496,6 +516,7 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 				objectDescription: updated.objectDescription,
 				startDate: updated.startDate,
 				endDate: updated.endDate,
+				status: updated.status,
 			},
 			metadata: {
 				actorRole: request.actorRole,

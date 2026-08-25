@@ -11,6 +11,8 @@ const createContractWithEffectsInTx = mock(async () => ({
 	},
 	replayed: false,
 }));
+const writeAudit = mock(async () => ({ id: "audit-1" }));
+mock.module("../../../../src/lib/audit-writer", () => ({ writeAudit }));
 mock.module(
 	"../../../../src/modules/construction-planning/contracts/contract-creation.service",
 	() => ({
@@ -332,8 +334,11 @@ describe("approval effect handlers", () => {
 			"BUDGET_IMPACT_APPROVE",
 			"BUDGET_VERSION_ACTIVATE",
 			"CONTRACT_CREATE",
+			"CONTRACT_DELETE",
 			"CONTRACT_MEASUREMENT_APPROVE",
 			"CONTRACT_REQUEST_FINALIZE",
+			"CONTRACT_SUPPLIER_LINK",
+			"CONTRACT_UPDATE",
 			"COST_APPROVE",
 			"IMPORT_CONFIRM",
 			"PAYMENT_CONFIRM",
@@ -445,6 +450,63 @@ describe("approval effect handlers", () => {
 					contractValue: 1000,
 				}),
 				services: [{ budgetItemId: "item-1", quantity: 10, unitCost: 100 }],
+			}),
+		);
+	});
+
+	it("CONTRACT_UPDATE altera o status e registra a transicao na auditoria", async () => {
+		const contract = {
+			id: "contract-1",
+			ownerId: "owner-1",
+			workId: "work-1",
+			code: "CT-001",
+			status: "RASCUNHO",
+			title: "Contrato de fundacao",
+			serviceType: null,
+			objectDescription: "Fundacao",
+			startDate: null,
+			endDate: null,
+		};
+		const contractFindFirst = mock(async () => contract);
+		const contractUpdate = mock(
+			async (args: { data: Record<string, unknown> }) => ({
+				...contract,
+				...args.data,
+			}),
+		);
+		const handler = approvalEffectHandlers.find(
+			(h) => h.action === "CONTRACT_UPDATE",
+		);
+		expect(handler).toBeDefined();
+		writeAudit.mockClear();
+
+		await handler?.apply({
+			tx: {
+				...makeTx(),
+				contract: { findFirst: contractFindFirst, update: contractUpdate },
+			} as never,
+			request: makeRequest({
+				effectAction: "CONTRACT_UPDATE",
+				resourceType: "CONTRACT",
+				resourceId: "contract-1",
+				payloadJson: {
+					workId: "work-1",
+					contractId: "contract-1",
+					input: { status: "A_INICIAR" },
+				},
+			}) as never,
+			decision,
+		});
+
+		expect(contractUpdate).toHaveBeenCalledWith({
+			where: { id: "contract-1" },
+			data: { status: "A_INICIAR" },
+		});
+		expect(writeAudit).toHaveBeenCalledWith(
+			expect.anything(),
+			expect.objectContaining({
+				previousState: expect.objectContaining({ status: "RASCUNHO" }),
+				newState: expect.objectContaining({ status: "A_INICIAR" }),
 			}),
 		);
 	});

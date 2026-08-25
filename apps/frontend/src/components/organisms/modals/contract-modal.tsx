@@ -126,6 +126,7 @@ export function ContractModal({
 			objectDescription: data.objectDescription,
 			startDate: data.startDate,
 			endDate: data.endDate,
+			status: data.status,
 		};
 		updateMutation.mutate(payload);
 	};
@@ -138,6 +139,7 @@ export function ContractModal({
 					title: contract.title ?? undefined,
 					startDate: contract.startDate ?? undefined,
 					endDate: contract.endDate ?? undefined,
+					status: contract.status,
 				}
 			: undefined;
 

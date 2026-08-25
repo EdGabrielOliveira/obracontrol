@@ -57,19 +57,20 @@ describe("contractFormSchema", () => {
 });
 
 describe("contractEditFormSchema", () => {
-	it("aceita somente os dados editáveis do contrato", () => {
+	it("aceita os dados editáveis e o status do contrato", () => {
 		const result = contractEditFormSchema.safeParse({
 			title: "Contrato atualizado",
 			serviceType: "Execução",
 			objectDescription: "Serviços de fundação",
 			startDate: "2026-01-01",
 			endDate: "2026-12-31",
+			status: "A_INICIAR",
 		});
 
 		expect(result.success).toBe(true);
 		if (result.success) {
 			expect(result.data).not.toHaveProperty("contractValue");
-			expect(result.data).not.toHaveProperty("status");
+			expect(result.data.status).toBe("A_INICIAR");
 			expect(result.data).not.toHaveProperty("supplierId");
 		}
 	});

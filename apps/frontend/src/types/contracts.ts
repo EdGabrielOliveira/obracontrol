@@ -82,7 +82,12 @@ export type ContractCreateInput = {
 
 export type ContractEditInput = Pick<
 	ContractCreateInput,
-	"title" | "serviceType" | "objectDescription" | "startDate" | "endDate"
+	| "title"
+	| "serviceType"
+	| "objectDescription"
+	| "startDate"
+	| "endDate"
+	| "status"
 >;
 
 export type ContractUpdateInput = ContractEditInput;

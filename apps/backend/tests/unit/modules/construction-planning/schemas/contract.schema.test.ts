@@ -4,6 +4,7 @@ import {
 	createContractServiceSchema,
 	createQuotationSchema,
 	updateContractAmendmentSchema,
+	updateContractSchema,
 } from "../../../../../src/modules/construction-planning/schemas/contract.schema";
 
 describe("contract command schemas", () => {
@@ -85,5 +86,14 @@ describe("contract command schemas", () => {
 
 		expect(zeroQuantity.success).toBe(false);
 		expect(duplicatedItems.success).toBe(false);
+	});
+
+	it("aceita somente status validos na atualizacao de contrato", () => {
+		expect(
+			updateContractSchema.safeParse({ status: "A_INICIAR" }).success,
+		).toBe(true);
+		expect(
+			updateContractSchema.safeParse({ status: "CANCELADO" }).success,
+		).toBe(false);
 	});
 });

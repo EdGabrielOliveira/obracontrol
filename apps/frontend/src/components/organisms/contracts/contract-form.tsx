@@ -98,6 +98,19 @@ function ContractEditForm({
 						)}
 					/>
 					<Controller
+						name="status"
+						control={control}
+						render={({ field, fieldState }) => (
+							<SelectFormField
+								label="Status"
+								placeholder="Selecione..."
+								options={CONTRACT_STATUS_OPTIONS}
+								field={field}
+								fieldState={fieldState}
+							/>
+						)}
+					/>
+					<Controller
 						name="objectDescription"
 						control={control}
 						render={({ field, fieldState }) => (

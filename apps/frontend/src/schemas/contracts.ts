@@ -72,6 +72,7 @@ export const contractEditFormSchema = z.object({
 	title: z.string().optional(),
 	startDate: z.string().optional(),
 	endDate: z.string().optional(),
+	status: contractStatusSchema.optional(),
 });
 
 export type ContractEditFormValues = z.infer<typeof contractEditFormSchema>;

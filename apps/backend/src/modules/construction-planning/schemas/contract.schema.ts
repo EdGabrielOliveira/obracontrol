@@ -94,6 +94,7 @@ export const updateContractSchema = z.object({
 		.string()
 		.optional()
 		.refine((v) => !v || !Number.isNaN(Date.parse(v)), "Data de fim invalida."),
+	status: contractStatusEnum.optional(),
 });
 
 export const quotationBudgetItemSchema = z.object({
