@@ -75,7 +75,13 @@ async function loadInstrumentSource(
 					address: true,
 					structuredAddress: true,
 					costCenter: {
-						select: { organization: { select: { company: true } } },
+						select: {
+							organization: {
+								select: {
+									company: { include: { structuredAddress: true } },
+								},
+							},
+						},
 					},
 				},
 			},
@@ -275,10 +281,15 @@ export async function generateContractInstrumentArtifact(
 		activity: service.description,
 		quantity: formatQuantity(service.quantity),
 	}));
+	// New company forms persist the headquarters address in structuredAddress.
+	// Fall back to the legacy denormalized columns for companies registered
+	// before that form existed.
+	const companyCity =
+		company.structuredAddress?.city?.trim() || company.addressCity?.trim();
+	const companyState =
+		company.structuredAddress?.state?.trim() || company.addressState?.trim();
 	const companyForum =
-		company.addressCity && company.addressState
-			? `${company.addressCity}/${company.addressState}`
-			: null;
+		companyCity && companyState ? `${companyCity}/${companyState}` : null;
 	const bytes = renderDocxTemplate(
 		template,
 		{

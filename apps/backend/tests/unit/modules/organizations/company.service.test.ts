@@ -210,6 +210,32 @@ describe("companyService (EMP-003, DEC-013)", () => {
 		expect(result).toHaveLength(2);
 	});
 
+	it("permite que ADMIN acesse empresas e organizacoes criadas por outro admin", async () => {
+		companyFindMany.mockResolvedValue([makeCompany({ ownerId: "admin-1" })]);
+		companyFindFirst.mockResolvedValue(makeCompany({ ownerId: "admin-1" }));
+
+		const access = { canAccessAllCompanies: true };
+		await companyService.list("admin-2", access);
+		await companyService.get("admin-2", "company-1", access);
+		await companyService.linkOrganization(
+			"admin-2",
+			"company-1",
+			"org-1",
+			access,
+		);
+
+		expect(companyFindMany).toHaveBeenCalledWith(
+			expect.objectContaining({ where: {} }),
+		);
+		expect(companyFindFirst).toHaveBeenCalledWith(
+			expect.objectContaining({ where: { id: "company-1" } }),
+		);
+		expect(organizationUpdateMany).toHaveBeenCalledWith({
+			where: { id: "org-1" },
+			data: { companyId: "company-1" },
+		});
+	});
+
 	it("empresa de outro owner nao e acessivel (404)", async () => {
 		companyFindFirst.mockResolvedValue(null);
 

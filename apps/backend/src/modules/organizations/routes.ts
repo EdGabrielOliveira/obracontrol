@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { parseAsOfDate } from "../../lib/as-of-date";
-import { assertRoleCan } from "../../lib/authorization";
+import { assertRoleCan, normalizeRole } from "../../lib/authorization";
 import { requireRole } from "../../lib/authorization-middleware";
 import { cepClient } from "../../lib/cep-client";
 import { handleConstructionError } from "../../lib/construction-error-handler";
@@ -22,6 +22,10 @@ import {
 	updateCostCenterSchema,
 	updateOrganizationSchema,
 } from "./schema";
+
+function companyAccessFor(role: string | null | undefined) {
+	return { canAccessAllCompanies: normalizeRole(role) === "ADMIN" };
+}
 
 export const organizationController = new Elysia({
 	prefix: "/organizations",
@@ -580,14 +584,19 @@ export const organizationController = new Elysia({
 	// DEC-005: somente ADMIN cria, edita, exclui, vincula ou envia modelo de
 	// contrato; a leitura permanece disponivel para demais papeis.
 	.use(requireRole("read"))
-	.get("/companies", async ({ user }) => companyService.list(user.id), {
-		detail: {
-			tags: ["Companies"],
-			summary: "Listar empresas",
-			description:
-				"Lista as empresas disponíveis para o ator autenticado, sem expor o blob do template contratual.",
+	.get(
+		"/companies",
+		async ({ user }) =>
+			companyService.list(user.id, companyAccessFor(user.role)),
+		{
+			detail: {
+				tags: ["Companies"],
+				summary: "Listar empresas",
+				description:
+					"Lista as empresas disponíveis para o ator autenticado, sem expor o blob do template contratual.",
+			},
 		},
-	})
+	)
 	.post(
 		"/companies",
 		async ({ body, user }) => {
@@ -710,7 +719,12 @@ export const organizationController = new Elysia({
 	)
 	.get(
 		"/companies/:companyId",
-		async ({ params, user }) => companyService.get(user.id, params.companyId),
+		async ({ params, user }) =>
+			companyService.get(
+				user.id,
+				params.companyId,
+				companyAccessFor(user.role),
+			),
 		{
 			detail: {
 				tags: ["Companies"],
@@ -724,7 +738,12 @@ export const organizationController = new Elysia({
 		"/companies/:companyId",
 		async ({ params, body, user }) => {
 			assertRoleCan(user.role, "admin");
-			return companyService.update(user.id, params.companyId, body);
+			return companyService.update(
+				user.id,
+				params.companyId,
+				body,
+				companyAccessFor(user.role),
+			);
 		},
 		{
 			body: t.Object({
@@ -764,7 +783,11 @@ export const organizationController = new Elysia({
 		"/companies/:companyId",
 		async ({ params, user }) => {
 			assertRoleCan(user.role, "admin");
-			await companyService.delete(user.id, params.companyId);
+			await companyService.delete(
+				user.id,
+				params.companyId,
+				companyAccessFor(user.role),
+			);
 			return new Response(null, { status: 204 });
 		},
 		{
@@ -784,6 +807,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				params.orgId,
+				companyAccessFor(user.role),
 			);
 		},
 		{
@@ -806,6 +830,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				body.file,
+				companyAccessFor(user.role),
 			);
 		},
 		{
@@ -824,6 +849,7 @@ export const organizationController = new Elysia({
 			const template = await companyService.downloadContractTemplate(
 				user.id,
 				params.companyId,
+				companyAccessFor(user.role),
 			);
 			return new Response(new Blob([template.bytes.buffer as ArrayBuffer]), {
 				headers: {

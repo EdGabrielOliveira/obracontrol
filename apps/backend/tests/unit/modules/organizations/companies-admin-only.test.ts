@@ -78,6 +78,14 @@ describe("empresas exclusivas de ADMIN (DEC-005)", () => {
 		expect(companyServiceMock.create).toHaveBeenCalled();
 	});
 
+	it("ADMIN recebe escopo global ao listar empresas", async () => {
+		const response = await requestAs("ADMIN", "/companies");
+		expect(response.status).toBe(200);
+		expect(companyServiceMock.list).toHaveBeenCalledWith("user-1", {
+			canAccessAllCompanies: true,
+		});
+	});
+
 	it.each(["GERENTE", "GESTOR", "SUPERVISOR"])(
 		"%s nao cria empresa (403)",
 		async (role) => {

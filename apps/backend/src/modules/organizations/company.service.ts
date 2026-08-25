@@ -89,6 +89,19 @@ export type CompanyView = {
 	createdAt: string;
 };
 
+/**
+ * Company ownership records who created the company; it is not an access
+ * boundary for platform administrators. Keep this explicit at the service
+ * boundary so managers and other non-admin roles remain scoped as before.
+ */
+export type CompanyAccess = {
+	canAccessAllCompanies?: boolean;
+};
+
+function companyWhere(ownerId: string, access?: CompanyAccess) {
+	return access?.canAccessAllCompanies ? {} : { ownerId };
+}
+
 function toView(row: {
 	id: string;
 	name: string;
@@ -266,9 +279,9 @@ export const companyService = {
 		return toView(created);
 	},
 
-	async list(ownerId: string): Promise<CompanyView[]> {
+	async list(ownerId: string, access?: CompanyAccess): Promise<CompanyView[]> {
 		const rows = await prisma.company.findMany({
-			where: { ownerId },
+			where: companyWhere(ownerId, access),
 			orderBy: { name: "asc" },
 			include: {
 				_count: { select: { organizations: true } },
@@ -278,9 +291,13 @@ export const companyService = {
 		return rows.map(toView);
 	},
 
-	async get(ownerId: string, companyId: string): Promise<CompanyView> {
+	async get(
+		ownerId: string,
+		companyId: string,
+		access?: CompanyAccess,
+	): Promise<CompanyView> {
 		const row = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 			include: {
 				_count: { select: { organizations: true } },
 				structuredAddress: true,
@@ -296,9 +313,10 @@ export const companyService = {
 		ownerId: string,
 		companyId: string,
 		input: Partial<CompanyInput>,
+		access?: CompanyAccess,
 	): Promise<CompanyView> {
 		const existing = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 		});
 		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
@@ -349,9 +367,13 @@ export const companyService = {
 		return toView(updated);
 	},
 
-	async delete(ownerId: string, companyId: string): Promise<void> {
+	async delete(
+		ownerId: string,
+		companyId: string,
+		access?: CompanyAccess,
+	): Promise<void> {
 		const existing = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 		});
 		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
@@ -363,15 +385,16 @@ export const companyService = {
 		ownerId: string,
 		companyId: string,
 		organizationId: string,
+		access?: CompanyAccess,
 	): Promise<void> {
 		const company = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 		});
 		if (!company) {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
 		}
 		const result = await prisma.organization.updateMany({
-			where: { id: organizationId, ownerId },
+			where: { id: organizationId, ...companyWhere(ownerId, access) },
 			data: { companyId },
 		});
 		if (result.count === 0) {
@@ -387,9 +410,10 @@ export const companyService = {
 		ownerId: string,
 		companyId: string,
 		file: File,
+		access?: CompanyAccess,
 	): Promise<CompanyView> {
 		const company = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 		});
 		if (!company) {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
@@ -419,7 +443,7 @@ export const companyService = {
 		const bytes = new Uint8Array(await file.arrayBuffer());
 		if (ext === "docx") validateDocxTemplate(bytes);
 		const previousVersion = company.contractTemplateVersion ?? 0;
-		const storageKey = `companies/${ownerId}/${companyId}/template-v${previousVersion + 1}.${ext}`;
+		const storageKey = `companies/${company.ownerId}/${companyId}/template-v${previousVersion + 1}.${ext}`;
 		await objectStorage.put(storageKey, bytes, file.type);
 		try {
 			const updated = await prisma.company.update({
@@ -449,9 +473,10 @@ export const companyService = {
 	async downloadContractTemplate(
 		ownerId: string,
 		companyId: string,
+		access?: CompanyAccess,
 	): Promise<{ bytes: Uint8Array; filename: string; contentType: string }> {
 		const company = await prisma.company.findFirst({
-			where: { id: companyId, ownerId },
+			where: { id: companyId, ...companyWhere(ownerId, access) },
 			select: {
 				contractTemplate: true,
 				contractTemplateType: true,
