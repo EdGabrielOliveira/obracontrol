@@ -93,7 +93,7 @@ export async function getOrganizationById(ownerId: string, id: string) {
 	if (!accessibleIds.includes(id)) return null;
 	return prisma.organization.findFirst({
 		where: { id },
-		include: { costCenters: true },
+		include: { costCenters: true, structuredAddress: true },
 	});
 }
 
@@ -136,6 +136,7 @@ export async function updateOrganization(
 	return prisma.organization.update({
 		where: { id },
 		data: updateData,
+		include: { structuredAddress: true },
 	});
 }
 

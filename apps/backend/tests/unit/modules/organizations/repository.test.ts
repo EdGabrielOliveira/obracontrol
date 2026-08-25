@@ -160,6 +160,10 @@ describe("organizations repository", () => {
 		).toMatchObject({
 			id: "org-1",
 		});
+		expect(organizationFindFirst).toHaveBeenCalledWith({
+			where: { id: "org-1" },
+			include: { costCenters: true, structuredAddress: true },
+		});
 
 		organizationFindFirst.mockResolvedValue(null);
 		expect(await repository.deleteOrganization("owner-1", "org-1")).toBeNull();
@@ -170,7 +174,7 @@ describe("organizations repository", () => {
 			id: "org-1",
 		});
 		expect(organization.delete).toHaveBeenCalledWith({
-			where: { id: "org-1", ownerId: "owner-1" },
+			where: { id: "org-1" },
 		});
 	});
 
@@ -185,12 +189,13 @@ describe("organizations repository", () => {
 		});
 
 		expect(organization.update).toHaveBeenCalledWith({
-			where: { id: "org-1", ownerId: "owner-1" },
+			where: { id: "org-1" },
 			data: expect.objectContaining({
 				name: " Atualizada ",
 				managerName: " Gerente ",
 				structuredAddressId: "address-2",
 			}),
+			include: { structuredAddress: true },
 		});
 	});
 });
@@ -236,14 +241,14 @@ describe("cost center repository", () => {
 			name: "Atualizado",
 		});
 		expect(costCenter.update).toHaveBeenCalledWith({
-			where: { id: "cc-1", ownerId: "owner-1" },
+			where: { id: "cc-1" },
 			data: { name: "Atualizado" },
 			include: { structuredAddress: true },
 		});
 
 		await repository.deleteCostCenterByIdOnly("owner-1", "cc-1");
 		expect(costCenter.delete).toHaveBeenCalledWith({
-			where: { id: "cc-1", ownerId: "owner-1" },
+			where: { id: "cc-1" },
 		});
 	});
 
