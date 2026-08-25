@@ -1,7 +1,15 @@
 import type { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
 import { ConstructionError } from "../../../lib/errors";
+import { prisma } from "../../../lib/prisma";
 import { withSerializableRetry } from "../../../lib/transaction-retry";
+import { OPERATIONAL_CONTRACT_STATUSES } from "../contract-status";
+import {
+	AMENDMENT_SOURCE_TYPE,
+	MEASUREMENT_SOURCE_TYPE,
+	PAYMENT_SOURCE_TYPE,
+	SERVICE_SOURCE_TYPE,
+} from "./ledger.integration";
 import {
 	createLedgerEvent,
 	findApprovedDecision,
@@ -254,8 +262,78 @@ export async function appendLedgerEvents(
 	return tx.constructionLedgerEvent.createManyAndReturn({ data });
 }
 
-const CONTRACT_ORIGIN_PREFIX = "CONTRACT_";
 const AMENDMENT_COMPONENT = "AMENDMENT";
+const CONTRACT_SOURCE_TYPES = [
+	SERVICE_SOURCE_TYPE,
+	MEASUREMENT_SOURCE_TYPE,
+	PAYMENT_SOURCE_TYPE,
+	AMENDMENT_SOURCE_TYPE,
+];
+
+async function operationalContractEventFilters(
+	ownerId: string,
+	workId: string,
+) {
+	const contracts = await prisma.contract.findMany({
+		where: {
+			ownerId,
+			workId,
+			status: { in: [...OPERATIONAL_CONTRACT_STATUSES] },
+		},
+		select: {
+			services: { select: { id: true } },
+			measurements: { select: { id: true } },
+			payments: { select: { id: true } },
+			amendments: { select: { id: true } },
+		},
+	});
+	const serviceIds = contracts.flatMap((contract) =>
+		contract.services.map((service) => service.id),
+	);
+	const measurementIds = contracts.flatMap((contract) =>
+		contract.measurements.map((measurement) => measurement.id),
+	);
+	const paymentIds = contracts.flatMap((contract) =>
+		contract.payments.map((payment) => payment.id),
+	);
+	const amendmentIds = contracts.flatMap((contract) =>
+		contract.amendments.map((amendment) => amendment.id),
+	);
+
+	const contractFilters: Prisma.ConstructionLedgerEventWhereInput[] = [
+		...serviceIds.map((id) => ({
+			sourceType: SERVICE_SOURCE_TYPE,
+			sourceId: { startsWith: `${id}#` },
+		})),
+		...(measurementIds.length
+			? [
+					{
+						sourceType: MEASUREMENT_SOURCE_TYPE,
+						sourceId: { in: measurementIds },
+					},
+				]
+			: []),
+		...(paymentIds.length
+			? [{ sourceType: PAYMENT_SOURCE_TYPE, sourceId: { in: paymentIds } }]
+			: []),
+		...amendmentIds.map((id) => ({
+			sourceType: AMENDMENT_SOURCE_TYPE,
+			sourceId: { startsWith: `${id}#` },
+		})),
+	];
+
+	return {
+		contract: contractFilters.length
+			? { OR: contractFilters }
+			: { id: { in: [] } },
+		global: {
+			OR: [
+				{ sourceType: { notIn: CONTRACT_SOURCE_TYPES } },
+				...contractFilters,
+			],
+		},
+	};
+}
 
 export async function summarizeLedger(
 	ownerId: string,
@@ -267,13 +345,16 @@ export async function summarizeLedger(
 		workId,
 		occurredAt: { lte: asOf },
 	};
-	const contractCut = {
-		...cut,
-		sourceType: { startsWith: CONTRACT_ORIGIN_PREFIX },
+	const visibility = await operationalContractEventFilters(ownerId, workId);
+	const contractCut: Prisma.ConstructionLedgerEventWhereInput = {
+		AND: [cut, visibility.contract],
+	};
+	const globalCut: Prisma.ConstructionLedgerEventWhereInput = {
+		AND: [cut, visibility.global],
 	};
 
 	const [globalRows, contractRows] = await Promise.all([
-		sumLedgerEvents(cut, ["eventType"]),
+		sumLedgerEvents(globalCut, ["eventType"]),
 		sumLedgerEvents(contractCut, ["eventType", "componentId"]),
 	]);
 

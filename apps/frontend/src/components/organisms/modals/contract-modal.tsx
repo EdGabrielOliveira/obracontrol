@@ -51,6 +51,9 @@ export function ContractModal({
 
 	const invalidateContractRelated = () => {
 		queryClient.invalidateQueries({ queryKey: workKeys.contracts(workId) });
+		queryClient.invalidateQueries({
+			queryKey: workKeys.contractsSummary(workId),
+		});
 		queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
 		queryClient.invalidateQueries({ queryKey: workKeys.reports(workId) });
 	};

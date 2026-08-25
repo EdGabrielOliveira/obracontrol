@@ -135,6 +135,10 @@ export type UpdateContractAmendmentInput =
 
 export type ContractSummaryResponse = {
 	totalContracts: number;
+	operationalContracts: number;
+	pendingContracts: number;
+	draftContracts: number;
+	pendingContractValue: number;
 	totalContractValue: number;
 	approvedMeasurements: number;
 	totalMeasuredValue: number;

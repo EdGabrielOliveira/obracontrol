@@ -27,7 +27,7 @@ export function ContractMeasurementStatus({
 			<CardHeaderWithIcon
 				icon={FileText}
 				title="Status de Contratos e Medições"
-				description={`${summary.totalContracts} contrato(s) registrado(s)`}
+				description={`${summary.operationalContracts} contrato(s) compondo os cálculos da obra · ${summary.pendingContracts} a iniciar`}
 			/>
 			<div className="px-6 pb-4">
 				<div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -35,8 +35,10 @@ export function ContractMeasurementStatus({
 						<CardContent className="flex items-center gap-3 p-4">
 							<FileText className="h-8 w-8 text-muted-foreground" />
 							<div>
-								<p className="text-2xl font-bold">{summary.totalContracts}</p>
-								<p className="text-xs text-muted-foreground">Total Contratos</p>
+								<p className="text-2xl font-bold">
+									{summary.operationalContracts}
+								</p>
+								<p className="text-xs text-muted-foreground">Nos cálculos</p>
 							</div>
 						</CardContent>
 					</Card>
@@ -44,10 +46,8 @@ export function ContractMeasurementStatus({
 						<CardContent className="flex items-center gap-3 p-4">
 							<CheckCircle className="h-8 w-8 text-success" />
 							<div>
-								<p className="text-2xl font-bold">
-									{summary.approvedMeasurements}
-								</p>
-								<p className="text-xs text-muted-foreground">Medições</p>
+								<p className="text-2xl font-bold">{summary.pendingContracts}</p>
+								<p className="text-xs text-muted-foreground">A iniciar</p>
 							</div>
 						</CardContent>
 					</Card>
@@ -55,13 +55,8 @@ export function ContractMeasurementStatus({
 						<CardContent className="flex items-center gap-3 p-4">
 							<Clock className="h-8 w-8 text-warning" />
 							<div>
-								<p className="text-2xl font-bold">
-									{Math.max(
-										0,
-										summary.totalContracts - summary.approvedMeasurements,
-									)}
-								</p>
-								<p className="text-xs text-muted-foreground">Pendentes</p>
+								<p className="text-2xl font-bold">{summary.draftContracts}</p>
+								<p className="text-xs text-muted-foreground">Rascunhos</p>
 							</div>
 						</CardContent>
 					</Card>
@@ -72,7 +67,9 @@ export function ContractMeasurementStatus({
 								<p className="text-sm font-bold">
 									{formatCurrency(summary.totalContractValue)}
 								</p>
-								<p className="text-xs text-muted-foreground">Valor Total</p>
+								<p className="text-xs text-muted-foreground">
+									Valor operacional
+								</p>
 							</div>
 						</CardContent>
 					</Card>

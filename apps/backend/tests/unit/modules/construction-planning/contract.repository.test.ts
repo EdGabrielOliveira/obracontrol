@@ -121,6 +121,37 @@ function makeStoredContract(overrides: Record<string, unknown>) {
 }
 
 describe("getContractsSummary.bySupplier", () => {
+	it("inclui nos totais somente contratos operacionais e separa rascunhos e pendentes", async () => {
+		contractFindMany.mockResolvedValue([
+			makeStoredContract({
+				id: "contract-active",
+				status: "EM_ANDAMENTO",
+				contractValue: 1000,
+			}),
+			makeStoredContract({
+				id: "contract-pending",
+				status: "A_INICIAR",
+				contractValue: 2000,
+			}),
+			makeStoredContract({
+				id: "contract-draft",
+				status: "RASCUNHO",
+				contractValue: 3000,
+			}),
+		]);
+
+		const summary = await getContractsSummary("owner-1", "work-1");
+
+		expect(summary).toMatchObject({
+			totalContracts: 3,
+			operationalContracts: 1,
+			pendingContracts: 1,
+			draftContracts: 1,
+			pendingContractValue: 2000,
+			totalContractValue: 1000,
+		});
+	});
+
 	it("agrupa contratos por supplierId somando valores contratado, medido e pago", async () => {
 		contractFindMany.mockResolvedValue([
 			makeStoredContract({

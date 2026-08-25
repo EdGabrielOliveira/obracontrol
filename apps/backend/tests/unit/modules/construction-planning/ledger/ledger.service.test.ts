@@ -41,6 +41,7 @@ const approvalDecisionFindFirst = mock<
 		id: string;
 	} | null>
 >(async () => ({ id: "decision-1" }));
+const contractFindMany = mock(async (): Promise<unknown[]> => []);
 
 const transactionMock = mock<
 	(
@@ -54,6 +55,7 @@ const transactionMock = mock<
 		},
 		budgetItemIdentity: { findFirst: identityFindFirst },
 		budgetVersionItem: { findFirst: versionItemFindFirst },
+		contract: { findMany: contractFindMany },
 		approvalDecision: { findFirst: approvalDecisionFindFirst },
 	}),
 );
@@ -67,6 +69,7 @@ mock.module("../../../../../src/lib/prisma", () => ({
 		},
 		budgetItemIdentity: { findFirst: identityFindFirst },
 		budgetVersionItem: { findFirst: versionItemFindFirst },
+		contract: { findMany: contractFindMany },
 		$transaction: transactionMock,
 	},
 }));
@@ -126,6 +129,7 @@ describe("ledger service", () => {
 			}) => (args.where.workId === "work-1" ? { id: "identity-1" } : null),
 		);
 		versionItemFindFirst.mockResolvedValue({ id: "version-item-1" });
+		contractFindMany.mockResolvedValue([]);
 	});
 
 	it("appendLedgerEvent valida valor positivo", async () => {
@@ -425,5 +429,45 @@ describe("ledger service", () => {
 		expect(summary.contracts.contractedValue).toBe("0.00");
 		expect(summary.contracts.amendmentNet).toBe("0.00");
 		expect(summary.contracts.measuredGross).toBe("0.00");
+	});
+
+	it("summarizeLedger considera somente eventos de contratos operacionais", async () => {
+		contractFindMany.mockResolvedValueOnce([
+			{
+				services: [{ id: "service-active" }],
+				measurements: [{ id: "measurement-active" }],
+				payments: [{ id: "payment-active" }],
+				amendments: [{ id: "amendment-active" }],
+			},
+		]);
+		ledgerGroupBy.mockResolvedValue([]);
+		const { summarizeLedger } = await import(
+			"../../../../../src/modules/construction-planning/ledger/ledger.service"
+		);
+
+		await summarizeLedger("owner-1", "work-1", new Date());
+
+		expect(contractFindMany).toHaveBeenCalledWith({
+			where: {
+				ownerId: "owner-1",
+				workId: "work-1",
+				status: { in: ["EM_ANDAMENTO", "PARALISADO", "FINALIZADO"] },
+			},
+			select: expect.any(Object),
+		});
+		const globalWhere = ledgerGroupBy.mock.calls[0]?.[0]?.where;
+		expect(globalWhere).toMatchObject({
+			AND: [
+				expect.any(Object),
+				{
+					OR: expect.arrayContaining([
+						{
+							sourceType: "CONTRACT_SERVICE",
+							sourceId: { startsWith: "service-active#" },
+						},
+					]),
+				},
+			],
+		});
 	});
 });

@@ -5,13 +5,13 @@ import { toFiniteNumber } from "../../lib/number-utils";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { pickDefined } from "../../lib/pick-defined";
 import { prisma } from "../../lib/prisma";
-import {
-	CONTRACT_TRANSITIONS,
-	validateStatusTransition,
-} from "../../lib/status-machine";
 import { getWorkspaceIdForUser } from "../../lib/workspace";
 import type { ContractSnapshotRow } from "./bi/metric-source";
 import { contractTotal } from "./calculators/contract-calculator";
+import {
+	isOperationalContractStatus,
+	OPERATIONAL_CONTRACT_STATUSES,
+} from "./contract-status";
 import type {
 	CreateContractInput,
 	CreateContractServiceInput,
@@ -52,6 +52,7 @@ export async function listContractSnapshotRows(
 		where: {
 			ownerId,
 			workId,
+			status: { in: [...OPERATIONAL_CONTRACT_STATUSES] },
 			...(asOfDate ? { createdAt: { lte: asOfDate } } : {}),
 		},
 		select: {
@@ -401,15 +402,6 @@ export async function updateContract(
 	});
 	if (!existing) return null;
 
-	if (input.status) {
-		validateStatusTransition(
-			"Contrato",
-			CONTRACT_TRANSITIONS,
-			existing.status,
-			input.status,
-		);
-	}
-
 	const updateData = pickDefined(input, [
 		"serviceType",
 		"objectDescription",
@@ -461,8 +453,17 @@ export async function getContractsSummary(ownerId: string, workId: string) {
 			amendments: { where: { approvalStatus: "APPROVED" } },
 		},
 	});
+	const operationalContracts = contracts.filter((contract) =>
+		isOperationalContractStatus(contract.status),
+	);
+	const pendingContracts = contracts.filter(
+		(contract) => contract.status === "A_INICIAR",
+	);
+	const draftContracts = contracts.filter(
+		(contract) => contract.status === "RASCUNHO",
+	);
 
-	const perContract = contracts.map((c) => {
+	const perContract = operationalContracts.map((c) => {
 		const servicesById = new Map(
 			c.services.map((service) => [
 				service.id,
@@ -561,8 +562,16 @@ export async function getContractsSummary(ownerId: string, workId: string) {
 
 	return {
 		totalContracts,
+		operationalContracts: operationalContracts.length,
+		pendingContracts: pendingContracts.length,
+		draftContracts: draftContracts.length,
+		pendingContractValue: roundCurrency(
+			pendingContracts.reduce((sum, contract) => {
+				return sum + Number(contract.contractValue);
+			}, 0),
+		),
 		totalContractValue: roundCurrency(totalContractValue),
-		approvedMeasurements: contracts.reduce(
+		approvedMeasurements: operationalContracts.reduce(
 			(sum, c) => sum + c.measurements.length,
 			0,
 		),

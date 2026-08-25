@@ -454,7 +454,7 @@ describe("approval effect handlers", () => {
 		);
 	});
 
-	it("CONTRACT_UPDATE altera o status e registra a transicao na auditoria", async () => {
+	it("CONTRACT_UPDATE altera manualmente o status e registra na auditoria", async () => {
 		const contract = {
 			id: "contract-1",
 			ownerId: "owner-1",
@@ -492,7 +492,7 @@ describe("approval effect handlers", () => {
 				payloadJson: {
 					workId: "work-1",
 					contractId: "contract-1",
-					input: { status: "A_INICIAR" },
+					input: { status: "EM_ANDAMENTO" },
 				},
 			}) as never,
 			decision,
@@ -500,13 +500,13 @@ describe("approval effect handlers", () => {
 
 		expect(contractUpdate).toHaveBeenCalledWith({
 			where: { id: "contract-1" },
-			data: { status: "A_INICIAR" },
+			data: { status: "EM_ANDAMENTO" },
 		});
 		expect(writeAudit).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({
 				previousState: expect.objectContaining({ status: "RASCUNHO" }),
-				newState: expect.objectContaining({ status: "A_INICIAR" }),
+				newState: expect.objectContaining({ status: "EM_ANDAMENTO" }),
 			}),
 		);
 	});

@@ -1,4 +1,5 @@
 import { prisma } from "../../../lib/prisma";
+import { OPERATIONAL_CONTRACT_STATUSES } from "../contract-status";
 
 export type WorkIdentityRow = {
 	id: string;
@@ -56,6 +57,7 @@ export const prismaExecutionViewRepository: ExecutionViewRepository = {
 			where: {
 				ownerId,
 				workId,
+				status: { in: [...OPERATIONAL_CONTRACT_STATUSES] },
 				...(asOfDate ? { createdAt: { lte: asOfDate } } : {}),
 			},
 			select: {

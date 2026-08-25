@@ -226,6 +226,7 @@ export const contractRoutes = new Elysia({
 				title: t.Optional(t.String()),
 				startDate: t.Optional(t.String()),
 				endDate: t.Optional(t.String()),
+				status: t.Optional(t.String()),
 			}),
 			detail: { tags: ["Contracts"] },
 		},
