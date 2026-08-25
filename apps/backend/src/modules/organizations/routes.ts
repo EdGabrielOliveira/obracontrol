@@ -23,8 +23,14 @@ import {
 	updateOrganizationSchema,
 } from "./schema";
 
-function companyAccessFor(role: string | null | undefined) {
-	return { canAccessAllCompanies: normalizeRole(role) === "ADMIN" };
+function companyAccessFor(
+	role: string | null | undefined,
+	workspaceId?: string | null,
+) {
+	return {
+		canAccessAllCompanies: normalizeRole(role) === "ADMIN",
+		workspaceId: workspaceId ?? undefined,
+	};
 }
 
 export const organizationController = new Elysia({
@@ -587,7 +593,10 @@ export const organizationController = new Elysia({
 	.get(
 		"/companies",
 		async ({ user }) =>
-			companyService.list(user.id, companyAccessFor(user.role)),
+			companyService.list(
+				user.id,
+				companyAccessFor(user.role, user.workspaceId),
+			),
 		{
 			detail: {
 				tags: ["Companies"],
@@ -723,7 +732,7 @@ export const organizationController = new Elysia({
 			companyService.get(
 				user.id,
 				params.companyId,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			),
 		{
 			detail: {
@@ -742,7 +751,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				body,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			);
 		},
 		{
@@ -786,7 +795,7 @@ export const organizationController = new Elysia({
 			await companyService.delete(
 				user.id,
 				params.companyId,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			);
 			return new Response(null, { status: 204 });
 		},
@@ -807,7 +816,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				params.orgId,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			);
 		},
 		{
@@ -830,7 +839,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				body.file,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			);
 		},
 		{
@@ -849,7 +858,7 @@ export const organizationController = new Elysia({
 			const template = await companyService.downloadContractTemplate(
 				user.id,
 				params.companyId,
-				companyAccessFor(user.role),
+				companyAccessFor(user.role, user.workspaceId),
 			);
 			return new Response(new Blob([template.bytes.buffer as ArrayBuffer]), {
 				headers: {

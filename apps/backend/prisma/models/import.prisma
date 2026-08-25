@@ -1,6 +1,7 @@
 model ConstructionImport {
   id               String   @id @default(uuid())
   ownerId          String
+  workspaceId       String?
   workId           String?
   fileName         String
   sheetName        String
@@ -18,6 +19,7 @@ model ConstructionImport {
   scheduleRevisions ConstructionScheduleRevision[]
   measurements      ConstructionMeasurement[]
   actualCosts       ConstructionActualCost[]
+  workspace          Workspace?               @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([workId])
@@ -28,6 +30,7 @@ model ConstructionImport {
 model ImportBatch {
   id                String    @id @default(cuid())
   ownerId           String
+  workspaceId       String?
   workId            String?
   model             String
   title             String?

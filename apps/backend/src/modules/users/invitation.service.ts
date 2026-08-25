@@ -5,6 +5,7 @@ import { isAuthorizationRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../lib/workspace";
 import type {
 	AcceptInvitationInput,
 	CreateInvitationInput,
@@ -123,6 +124,7 @@ export const invitationService = {
 		const expiresAt = new Date(
 			Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000,
 		);
+		const workspaceId = await getWorkspaceIdForUser(actorId);
 
 		const invitation = await prisma.$transaction(async (tx) => {
 			await tx.userInvitation.updateMany({
@@ -143,6 +145,7 @@ export const invitationService = {
 					email: input.email,
 					expiresAt,
 					createdBy: actorId,
+					workspaceId,
 				},
 			});
 		});
@@ -222,7 +225,7 @@ export const invitationService = {
 		await prisma.$transaction(async (tx) => {
 			await tx.user.update({
 				where: { id: userId },
-				data: { role },
+				data: { role, workspaceId: invitation.workspaceId },
 			});
 			await tx.organizationMembership.updateMany({
 				where: { userId, revokedAt: null },
@@ -332,6 +335,7 @@ export const invitationService = {
 					email: invitation.email,
 					expiresAt,
 					createdBy: actorId,
+					workspaceId: invitation.workspaceId,
 				},
 			});
 		});

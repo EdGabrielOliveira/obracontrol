@@ -3,6 +3,7 @@ import { ConstructionError } from "../../../lib/errors";
 import { logger } from "../../../lib/logger";
 import { mapSequentialBatches } from "../../../lib/map-sequential-batches";
 import { prisma } from "../../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../../lib/workspace";
 import type { StructuredAddressInput } from "./work-service";
 
 function addressCreateInput(address: StructuredAddressInput) {
@@ -394,6 +395,12 @@ export async function createWorkManual(
 		creationIdempotencyKey?: string | null;
 	},
 ) {
+	const costCenter = await prisma.costCenter.findUnique({
+		where: { id: data.costCenterId },
+		select: { workspaceId: true },
+	});
+	const workspaceId =
+		costCenter?.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
 	return prisma.$transaction(async (tx) => {
 		const address = data.structuredAddress
 			? await tx.address.create({
@@ -403,6 +410,7 @@ export async function createWorkManual(
 		const work = await tx.constructionWork.create({
 			data: {
 				ownerId,
+				workspaceId,
 				code: data.code,
 				name: data.name,
 				costCenterId: data.costCenterId,
@@ -418,7 +426,12 @@ export async function createWorkManual(
 		});
 		if (data.creationIdempotencyKey) {
 			await tx.workCreationIdempotency.create({
-				data: { ownerId, key: data.creationIdempotencyKey, workId: work.id },
+				data: {
+					ownerId,
+					workspaceId,
+					key: data.creationIdempotencyKey,
+					workId: work.id,
+				},
 			});
 		}
 		return work;
@@ -435,13 +448,31 @@ export async function findWorkByOwnerAndCreationIdempotencyKey(
 }
 
 async function mergeWorksWithChildren<
-	T extends { id: string; activeImportId: string | null },
+	T extends { id: string; activeImportId: string | null; ownerId?: string },
 >(ownerId: string, works: T[]): Promise<(T & ActiveImportChildren)[]> {
-	const activeImportIds = works.map((w) => ({
-		workId: w.id,
-		activeImportId: w.activeImportId,
-	}));
-	const childMap = await getBatchActiveImportChildren(ownerId, activeImportIds);
+	const groups = new Map<
+		string,
+		Array<{ workId: string; activeImportId: string | null }>
+	>();
+	for (const work of works) {
+		const scopeOwnerId = work.ownerId ?? ownerId;
+		const group = groups.get(scopeOwnerId) ?? [];
+		group.push({ workId: work.id, activeImportId: work.activeImportId });
+		groups.set(scopeOwnerId, group);
+	}
+	const childMaps = await Promise.all(
+		[...groups].map(
+			async ([scopeOwnerId, activeImportIds]) =>
+				[
+					scopeOwnerId,
+					await getBatchActiveImportChildren(scopeOwnerId, activeImportIds),
+				] as const,
+		),
+	);
+	const childMap = new Map<string, ActiveImportChildren>();
+	for (const [, map] of childMaps) {
+		for (const [workId, children] of map) childMap.set(workId, children);
+	}
 	const empty = {
 		items: [] as ActiveImportChildren["items"],
 		baselineSchedules: [] as ActiveImportChildren["baselineSchedules"],
@@ -562,7 +593,11 @@ export async function getWorkWithItems(ownerId: string, workId: string) {
 
 	return {
 		...work,
-		...(await getActiveImportChildren(ownerId, work.id, work.activeImportId)),
+		...(await getActiveImportChildren(
+			work.ownerId,
+			work.id,
+			work.activeImportId,
+		)),
 	};
 }
 
@@ -642,7 +677,7 @@ export async function getWorkById(ownerId: string, workId: string) {
 	if (!work) return null;
 
 	const children = await getActiveImportChildren(
-		ownerId,
+		work.ownerId,
 		work.id,
 		work.activeImportId,
 	);
@@ -689,8 +724,12 @@ export async function updateWork(
 		structuredAddress?: StructuredAddressInput | null;
 	},
 ) {
+	const workspaceId = await getWorkspaceIdForUser(ownerId);
 	const work = await prisma.constructionWork.findFirst({
-		where: { id: workId, ownerId },
+		where: {
+			id: workId,
+			OR: [{ ownerId }, ...(workspaceId ? [{ workspaceId }] : [])],
+		},
 	});
 
 	if (!work) return null;
@@ -719,7 +758,7 @@ export async function updateWork(
 	}
 
 	return prisma.constructionWork.update({
-		where: { id: workId, ownerId },
+		where: { id: workId },
 		data: updateData,
 	});
 }

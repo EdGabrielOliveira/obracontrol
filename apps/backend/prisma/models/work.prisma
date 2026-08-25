@@ -1,6 +1,7 @@
 model ConstructionWork {
   id                  String    @id @default(uuid())
   ownerId             String
+  workspaceId         String?
   code                String
   name                String
   costCenterId        String
@@ -42,9 +43,11 @@ model ConstructionWork {
   creationIdempotency    WorkCreationIdempotency?
   budgetProjectionState  BudgetProjectionState?
   budgetProjectionOutbox BudgetProjectionOutbox[]
+  workspace               Workspace?                    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
-  @@unique([ownerId, code])
+  @@unique([workspaceId, code])
   @@index([ownerId])
+  @@index([workspaceId])
   @@index([ownerId, name])
   @@index([costCenterId])
   @@index([structuredAddressId])
@@ -53,6 +56,7 @@ model ConstructionWork {
 model WorkCreationIdempotency {
   id        String   @id @default(cuid())
   ownerId   String
+  workspaceId String?
   key       String
   workId    String   @unique
   createdAt DateTime @default(now())
@@ -66,6 +70,7 @@ model WorkCreationIdempotency {
 model PhotoReport {
   id        String   @id @default(uuid())
   ownerId   String
+  workspaceId String?
   workId    String
   title     String
   fileName  String

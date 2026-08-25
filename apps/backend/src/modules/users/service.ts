@@ -6,6 +6,7 @@ import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { hashPassword } from "../../lib/password-hasher";
 import { prisma } from "../../lib/prisma";
+import { createWorkspace, ensureWorkspaceForUser } from "../../lib/workspace";
 import type {
 	CreateUserInput,
 	ReplaceScopeInput,
@@ -205,6 +206,7 @@ const adminUserSelect = {
 	name: true,
 	email: true,
 	role: true,
+	workspaceId: true,
 	emailVerified: true,
 	createdAt: true,
 	organizationMemberships: {
@@ -309,6 +311,7 @@ function serializeAdminUser(user: AdminUserResponse): AdminUserResponse {
 type AdminScope = {
 	organizationIds: string[];
 	isGlobalAdmin: boolean;
+	workspaceId: string | null;
 };
 
 /**
@@ -319,15 +322,17 @@ type AdminScope = {
 async function resolveAdminScope(actorId: string): Promise<AdminScope> {
 	const actor = await prisma.user.findUnique({
 		where: { id: actorId },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (actor?.role === "ADMIN" && !actor.banned) {
 		const orgs = await prisma.organization.findMany({
+			where: actor.workspaceId ? { workspaceId: actor.workspaceId } : undefined,
 			select: { id: true },
 		});
 		return {
 			organizationIds: orgs.map((org) => org.id),
 			isGlobalAdmin: true,
+			workspaceId: actor.workspaceId ?? null,
 		};
 	}
 
@@ -348,7 +353,20 @@ async function resolveAdminScope(actorId: string): Promise<AdminScope> {
 			...memberships.map((m) => m.organizationId),
 		]),
 	];
-	return { organizationIds, isGlobalAdmin: false };
+	return { organizationIds, isGlobalAdmin: false, workspaceId: null };
+}
+
+function assertAdminWorkspace(
+	scope: AdminScope,
+	targetWorkspaceId?: string | null,
+) {
+	if (
+		scope.isGlobalAdmin &&
+		scope.workspaceId !== null &&
+		targetWorkspaceId !== scope.workspaceId
+	) {
+		throw notFoundUser();
+	}
 }
 
 function inScopeWhere(scope: AdminScope) {
@@ -364,7 +382,8 @@ async function assertUserInScope(
 	userId: string,
 	scope: AdminScope,
 ): Promise<void> {
-	if (userId === actorId || scope.isGlobalAdmin) return;
+	if (userId === actorId) return;
+	if (scope.isGlobalAdmin) return;
 	if (scope.organizationIds.length === 0) {
 		throw notFoundUser();
 	}
@@ -426,6 +445,7 @@ export const userService = {
 	async create(input: CreateUserInput, ctx?: { actorId: string }) {
 		const scope = normalizeScope(input.scope);
 		await assertValidScope(input.role, scope);
+		let inheritedWorkspaceId: string | null = null;
 
 		if (ctx?.actorId) {
 			const actor = await prisma.user.findUnique({
@@ -443,11 +463,14 @@ export const userService = {
 				input.role,
 				orgIds,
 			);
+			inheritedWorkspaceId = await ensureWorkspaceForUser(ctx.actorId);
 		}
 
 		let userId: string;
 		try {
 			const passwordHash = await hashPassword(input.password);
+			const workspaceId =
+				inheritedWorkspaceId ?? (await createWorkspace(`Conta ${input.name}`));
 			const user = await prisma.user.create({
 				data: {
 					id: `usr-${crypto.randomUUID()}`,
@@ -455,6 +478,7 @@ export const userService = {
 					email: input.email,
 					emailVerified: true,
 					role: input.role,
+					...(workspaceId ? { workspaceId } : {}),
 				},
 			});
 			await prisma.account.create({
@@ -510,8 +534,14 @@ export const userService = {
 			return buildPaginatedResponse([], 0, page, limit);
 		}
 		const skip = (page - 1) * limit;
+		const actor = await prisma.user.findUnique({
+			where: { id: actorId },
+			select: { workspaceId: true },
+		});
 		const where = scope.isGlobalAdmin
-			? {}
+			? actor?.workspaceId
+				? { workspaceId: actor.workspaceId }
+				: {}
 			: { OR: [{ id: actorId }, inScopeWhere(scope)] };
 		const [users, total] = await Promise.all([
 			prisma.user.findMany({
@@ -539,6 +569,10 @@ export const userService = {
 			select: adminUserSelect,
 		});
 		if (!user) throw notFoundUser();
+		assertAdminWorkspace(
+			scope,
+			(user as { workspaceId?: string | null }).workspaceId,
+		);
 		return serializeAdminUser(user);
 	},
 
@@ -555,6 +589,7 @@ export const userService = {
 
 		const target = await prisma.user.findUnique({ where: { id } });
 		if (!target) throw notFoundUser();
+		assertAdminWorkspace(adminScope, target.workspaceId);
 
 		const nextRole = (input.role ?? target.role) as AuthorizationRole;
 		const scope = input.scope ? normalizeScope(input.scope) : undefined;
@@ -630,9 +665,26 @@ export const userService = {
 
 		const target = await prisma.user.findUnique({
 			where: { id },
-			select: { email: true, role: true },
+			select: { email: true, role: true, workspaceId: true },
 		});
 		if (!target) throw notFoundUser();
+		assertAdminWorkspace(adminScope, target.workspaceId);
+		if (target.role === "ADMIN") {
+			const activeAdmins = await prisma.user.count({
+				where: {
+					role: "ADMIN",
+					banned: false,
+					...(target.workspaceId ? { workspaceId: target.workspaceId } : {}),
+				},
+			});
+			if (activeAdmins <= 1) {
+				throw new ConstructionError(
+					"LAST_ADMIN_REQUIRED",
+					"Nao e permitido excluir o ultimo administrador ativo do workspace",
+					409,
+				);
+			}
+		}
 
 		const targetScope = await getCurrentScope(id);
 		assertActorCanManage(
@@ -673,6 +725,7 @@ export const userService = {
 
 		const target = await prisma.user.findUnique({ where: { id: userId } });
 		if (!target) throw notFoundUser();
+		assertAdminWorkspace(adminScope, target.workspaceId);
 
 		const targetRole = target.role as AuthorizationRole;
 		const scope = normalizeScope(input);

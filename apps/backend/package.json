@@ -26,6 +26,8 @@
 		"verify:prisma": "tsx scripts/verify-prisma.ts",
 		"db:seed:smoke": "bun tests/scripts/seed-smoke.ts",
 		"db:bootstrap:contracts": "bun prisma/scripts/bootstrap-contract-companies.ts",
+		"db:workspaces:dry-run": "bun prisma/scripts/migrate-workspaces.ts --dry-run",
+		"db:workspaces:apply": "bun prisma/scripts/migrate-workspaces.ts --apply",
 		"budget:identity:backfill": "bun prisma/scripts/backfill-budget-item-identities.ts",
 		"budget:reconcile": "bun prisma/scripts/reconcile-budget-versions.ts",
 		"budget:repair-baselines": "bun prisma/scripts/repair-missing-budget-baselines.ts",

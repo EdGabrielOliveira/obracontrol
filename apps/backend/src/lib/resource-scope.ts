@@ -14,6 +14,7 @@ export type ScopeContext = {
 	actorId: string;
 	resourceType: "ORGANIZATION" | "COST_CENTER" | "WORK";
 	resourceOwnerId: string;
+	workspaceId?: string;
 	path: {
 		organizationId: string;
 		costCenterId: string | null;
@@ -44,6 +45,7 @@ type ResourceChain = {
 	costCenterId: string | null;
 	workId: string | null;
 	ownerId: string;
+	workspaceId: string | null;
 };
 
 type MembershipSet = {
@@ -60,6 +62,7 @@ function deniedContext(
 		actorId,
 		resourceType,
 		resourceOwnerId: "",
+		workspaceId: "",
 		path: { organizationId: "", costCenterId: null, workId: null },
 		role: null,
 		canRead: false,
@@ -81,6 +84,7 @@ function grantedContext(
 		actorId,
 		resourceType,
 		resourceOwnerId: chain.ownerId,
+		workspaceId: chain.workspaceId ?? "",
 		path: {
 			organizationId: chain.organizationId,
 			costCenterId: chain.costCenterId,
@@ -108,7 +112,7 @@ async function resolveWorkChain(workId: string): Promise<ResourceChain | null> {
 	if (!costCenter) return null;
 	const organization = await prisma.organization.findUnique({
 		where: { id: costCenter.organizationId },
-		select: { id: true, ownerId: true },
+		select: { id: true, ownerId: true, workspaceId: true },
 	});
 	if (!organization) return null;
 	return {
@@ -116,6 +120,7 @@ async function resolveWorkChain(workId: string): Promise<ResourceChain | null> {
 		costCenterId: costCenter.id,
 		workId: work.id,
 		ownerId: organization.ownerId,
+		workspaceId: organization.workspaceId,
 	};
 }
 
@@ -129,7 +134,7 @@ async function resolveCostCenterChain(
 	if (!costCenter) return null;
 	const organization = await prisma.organization.findUnique({
 		where: { id: costCenter.organizationId },
-		select: { id: true, ownerId: true },
+		select: { id: true, ownerId: true, workspaceId: true },
 	});
 	if (!organization) return null;
 	return {
@@ -137,6 +142,7 @@ async function resolveCostCenterChain(
 		costCenterId: costCenter.id,
 		workId: null,
 		ownerId: organization.ownerId,
+		workspaceId: organization.workspaceId,
 	};
 }
 
@@ -145,7 +151,7 @@ async function resolveOrganizationChain(
 ): Promise<ResourceChain | null> {
 	const organization = await prisma.organization.findUnique({
 		where: { id: organizationId },
-		select: { id: true, ownerId: true },
+		select: { id: true, ownerId: true, workspaceId: true },
 	});
 	if (!organization) return null;
 	return {
@@ -153,6 +159,7 @@ async function resolveOrganizationChain(
 		costCenterId: null,
 		workId: null,
 		ownerId: organization.ownerId,
+		workspaceId: organization.workspaceId,
 	};
 }
 
@@ -187,7 +194,7 @@ export async function resolveResourceScope(
 ): Promise<ScopeContext> {
 	const user = await prisma.user.findUnique({
 		where: { id: actorId },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (!user || user.banned) {
 		return deniedContext(actorId, "ORGANIZATION");
@@ -212,6 +219,14 @@ export async function resolveResourceScope(
 				? await resolveOrganizationChain(resource.organizationId)
 				: null;
 	if (!chain) return deniedContext(actorId, resourceType);
+	if (
+		user.workspaceId &&
+		chain.workspaceId &&
+		chain.workspaceId !== user.workspaceId
+	) {
+		return deniedContext(actorId, resourceType);
+	}
+	chain.workspaceId = chain.workspaceId ?? user.workspaceId;
 	const apiKeyOrgScope = requestContext.getApiKeyOrgScope();
 	if (apiKeyOrgScope && chain.organizationId !== apiKeyOrgScope) {
 		return deniedContext(actorId, resourceType);
@@ -282,7 +297,7 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 }> {
 	const user = await prisma.user.findUnique({
 		where: { id: actorId },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (!user || user.banned || !isAuthorizationRole(user.role)) {
 		return { actorId, paths: [] };
@@ -293,6 +308,7 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 
 	if (role === "ADMIN") {
 		const works = await prisma.constructionWork.findMany({
+			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
 			select: {
 				id: true,
 				costCenter: { select: { id: true, organizationId: true } },

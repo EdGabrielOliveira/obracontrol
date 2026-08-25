@@ -3,6 +3,7 @@ import { type CnpjLookupResult, cnpjClient } from "../../lib/cnpj-client";
 import { ConstructionError } from "../../lib/errors";
 import { objectStorage } from "../../lib/object-storage";
 import { prisma } from "../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../lib/workspace";
 import { sha256Docx, validateDocxTemplate } from "./docx-template";
 export type StructuredAddressInput = {
 	zipCode: string;
@@ -96,10 +97,15 @@ export type CompanyView = {
  */
 export type CompanyAccess = {
 	canAccessAllCompanies?: boolean;
+	workspaceId?: string;
 };
 
 function companyWhere(ownerId: string, access?: CompanyAccess) {
-	return access?.canAccessAllCompanies ? {} : { ownerId };
+	return access?.canAccessAllCompanies
+		? access.workspaceId
+			? { workspaceId: access.workspaceId }
+			: {}
+		: { ownerId };
 }
 
 function toView(row: {
@@ -185,10 +191,14 @@ export const companyService = {
 			}
 		}
 		try {
+			const workspaceId = await getWorkspaceIdForUser(ownerId);
 			const row = await prisma.$transaction(async (tx) =>
 				tx.company.create({
 					data: {
 						ownerId,
+						...(workspaceId
+							? { workspace: { connect: { id: workspaceId } } }
+							: {}),
 						name: input.name.trim(),
 						document,
 						tradeName,
@@ -252,9 +262,11 @@ export const companyService = {
 			}
 		}
 
+		const workspaceId = await getWorkspaceIdForUser(ownerId);
 		const created = await prisma.company.create({
 			data: {
 				ownerId,
+				...(workspaceId ? { workspace: { connect: { id: workspaceId } } } : {}),
 				name: input.name.trim(),
 				document,
 				tradeName,

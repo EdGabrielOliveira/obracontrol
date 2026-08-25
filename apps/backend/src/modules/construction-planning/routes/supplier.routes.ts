@@ -24,6 +24,7 @@ export const supplierRoutes = new Elysia({
 				q: parsed.q,
 				page: parsed.page,
 				pageSize: parsed.pageSize,
+				workspaceId: user.workspaceId,
 			});
 		},
 		{ detail: { tags: ["Suppliers"] } },
@@ -31,7 +32,11 @@ export const supplierRoutes = new Elysia({
 	.get(
 		"/:supplierId",
 		async ({ params, user }) => {
-			return supplierService.getDetail(user.id, params.supplierId);
+			return supplierService.getDetail(
+				user.id,
+				params.supplierId,
+				user.workspaceId,
+			);
 		},
 		{ detail: { tags: ["Suppliers"] } },
 	)
@@ -64,7 +69,7 @@ export const supplierRoutes = new Elysia({
 					addressState: parsed.addressState,
 					notes: parsed.notes,
 				},
-				{ userId: user.id },
+				{ userId: user.id, workspaceId: user.workspaceId },
 			);
 		},
 		{
@@ -122,7 +127,7 @@ export const supplierRoutes = new Elysia({
 					addressState: parsed.addressState,
 					notes: parsed.notes,
 				},
-				{ userId: user.id },
+				{ userId: user.id, workspaceId: user.workspaceId },
 			);
 		},
 		{
@@ -156,6 +161,7 @@ export const supplierRoutes = new Elysia({
 		async ({ params, user }) => {
 			await supplierService.remove(user.id, params.supplierId, {
 				userId: user.id,
+				workspaceId: user.workspaceId,
 			});
 			return new Response(null, { status: 204 });
 		},

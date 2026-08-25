@@ -9,6 +9,7 @@ import {
 	CONTRACT_TRANSITIONS,
 	validateStatusTransition,
 } from "../../lib/status-machine";
+import { getWorkspaceIdForUser } from "../../lib/workspace";
 import type { ContractSnapshotRow } from "./bi/metric-source";
 import { contractTotal } from "./calculators/contract-calculator";
 import type {
@@ -292,7 +293,7 @@ export async function getContractById(
 	}));
 	return {
 		...contract,
-		quotationId: contract.quotations[0]?.id ?? null,
+		quotationId: contract.quotations?.[0]?.id ?? null,
 		supplier: resolvedSupplier,
 		supplierCandidate,
 		services: servicesWithCurrentIndex,
@@ -340,9 +341,27 @@ export async function createContract(
 		createdBy?: string | null;
 	},
 ) {
+	const workDelegate = (
+		prisma as unknown as {
+			constructionWork?: {
+				findUnique?: (
+					args: unknown,
+				) => Promise<{ workspaceId?: string | null } | null>;
+			};
+		}
+	).constructionWork;
+	const work = workDelegate?.findUnique
+		? await workDelegate.findUnique({
+				where: { id: workId },
+				select: { workspaceId: true },
+			})
+		: null;
+	const workspaceId =
+		work?.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
 	return prisma.contract.create({
 		data: {
 			ownerId,
+			...(workspaceId ? { workspaceId } : {}),
 			workId,
 			code: input.code,
 			supplierName: input.supplierName,
@@ -395,6 +414,11 @@ export async function updateContract(
 		"serviceType",
 		"objectDescription",
 		"title",
+		"supplierId",
+		"supplierName",
+		"contractValue",
+		"status",
+		"notes",
 	] as (keyof typeof input)[]);
 	if (input.startDate !== undefined)
 		(updateData as Record<string, unknown>).startDate = input.startDate

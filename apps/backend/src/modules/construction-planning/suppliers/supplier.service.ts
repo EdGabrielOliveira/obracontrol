@@ -63,16 +63,20 @@ export class SupplierService {
 		q?: string;
 		page?: number;
 		pageSize?: number;
+		workspaceId?: string | null;
 	}) {
 		return supplierRepository.listSuppliers(input.ownerId, {
 			q: input.q,
 			page: input.page ?? 1,
 			pageSize: input.pageSize ?? 10,
+			workspaceId: input.workspaceId,
 		});
 	}
 
-	async get(ownerId: string, id: string) {
-		const supplier = await supplierRepository.getSupplierById(ownerId, id);
+	async get(ownerId: string, id: string, workspaceId?: string | null) {
+		const supplier = workspaceId
+			? await supplierRepository.getSupplierById(ownerId, id, workspaceId)
+			: await supplierRepository.getSupplierById(ownerId, id);
 		if (!supplier) {
 			throw new ConstructionError(
 				"NOT_FOUND",
@@ -83,8 +87,10 @@ export class SupplierService {
 		return supplier;
 	}
 
-	async getDetail(ownerId: string, id: string) {
-		const detail = await supplierRepository.getSupplierDetail(ownerId, id);
+	async getDetail(ownerId: string, id: string, workspaceId?: string | null) {
+		const detail = workspaceId
+			? await supplierRepository.getSupplierDetail(ownerId, id, workspaceId)
+			: await supplierRepository.getSupplierDetail(ownerId, id);
 		if (!detail) {
 			throw new ConstructionError(
 				"NOT_FOUND",
@@ -119,7 +125,7 @@ export class SupplierService {
 			addressState?: string | null;
 			notes?: string | null;
 		},
-		ctx: { userId: string },
+		ctx: { userId: string; workspaceId?: string | null },
 	) {
 		const name = input.name.trim();
 		if (!name) {
@@ -137,6 +143,7 @@ export class SupplierService {
 			const existing = await supplierRepository.findSupplierByDocument(
 				input.ownerId,
 				document,
+				ctx.workspaceId,
 			);
 			if (existing) {
 				throw new ConstructionError(
@@ -223,9 +230,11 @@ export class SupplierService {
 			addressState?: string | null;
 			notes?: string | null;
 		},
-		ctx: { userId: string },
+		ctx: { userId: string; workspaceId?: string | null },
 	) {
-		const existing = await supplierRepository.getSupplierById(ownerId, id);
+		const existing = ctx.workspaceId
+			? await supplierRepository.getSupplierById(ownerId, id, ctx.workspaceId)
+			: await supplierRepository.getSupplierById(ownerId, id);
 		if (!existing) {
 			throw new ConstructionError(
 				"NOT_FOUND",
@@ -254,6 +263,7 @@ export class SupplierService {
 				const duplicate = await supplierRepository.findSupplierByDocument(
 					ownerId,
 					document,
+					ctx.workspaceId,
 				);
 				if (duplicate && duplicate.id !== id) {
 					throw new ConstructionError(
@@ -296,11 +306,14 @@ export class SupplierService {
 		}
 		if (input.notes !== undefined) updateData.notes = input.notes;
 
-		const updated = await supplierRepository.updateSupplier(
-			ownerId,
-			id,
-			updateData,
-		);
+		const updated = ctx.workspaceId
+			? await supplierRepository.updateSupplier(
+					ownerId,
+					id,
+					updateData,
+					ctx.workspaceId,
+				)
+			: await supplierRepository.updateSupplier(ownerId, id, updateData);
 		if (updated) {
 			await writeAudit(prisma, {
 				userId: ctx.userId,
@@ -381,8 +394,14 @@ export class SupplierService {
 		return link;
 	}
 
-	async remove(ownerId: string, id: string, ctx: { userId: string }) {
-		const existing = await supplierRepository.getSupplierById(ownerId, id);
+	async remove(
+		ownerId: string,
+		id: string,
+		ctx: { userId: string; workspaceId?: string | null },
+	) {
+		const existing = ctx.workspaceId
+			? await supplierRepository.getSupplierById(ownerId, id, ctx.workspaceId)
+			: await supplierRepository.getSupplierById(ownerId, id);
 		if (!existing) {
 			throw new ConstructionError(
 				"NOT_FOUND",
@@ -403,7 +422,11 @@ export class SupplierService {
 			);
 		}
 
-		await supplierRepository.deleteSupplier(ownerId, id);
+		if (ctx.workspaceId) {
+			await supplierRepository.deleteSupplier(ownerId, id, ctx.workspaceId);
+		} else {
+			await supplierRepository.deleteSupplier(ownerId, id);
+		}
 		await writeAudit(prisma, {
 			userId: ctx.userId,
 			ownerId,

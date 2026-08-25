@@ -6,6 +6,7 @@ import {
 	getAccessibleCostCenterIds,
 	getAccessibleOrgIds,
 } from "../../lib/scope-access";
+import { ensureWorkspaceForUser } from "../../lib/workspace";
 import { getCostCenterReport as getCCReport } from "../construction-planning/management.repository";
 import type {
 	CostCenterFilter,
@@ -39,6 +40,7 @@ export async function createOrganization(
 		structuredAddress?: StructuredAddress | null;
 	},
 ) {
+	const workspaceId = await ensureWorkspaceForUser(ownerId);
 	return prisma.$transaction(async (tx) => {
 		const address = data.structuredAddress
 			? await tx.address.create({
@@ -48,6 +50,7 @@ export async function createOrganization(
 		return tx.organization.create({
 			data: {
 				ownerId,
+				workspaceId,
 				name: data.name,
 				companyId: data.companyId || null,
 				managerName: data.managerName?.trim() || null,
@@ -161,9 +164,8 @@ export async function createCostCenter(
 	if (!accessibleOrgIds.includes(organizationId)) return null;
 	const organization = await prisma.organization.findFirst({
 		where: { id: organizationId },
-		select: { id: true, ownerId: true },
+		select: { id: true, ownerId: true, workspaceId: true },
 	});
-	if (!organization) return null;
 	return prisma.$transaction(async (tx) => {
 		const address = data.structuredAddress
 			? await tx.address.create({
@@ -172,7 +174,10 @@ export async function createCostCenter(
 			: null;
 		return tx.costCenter.create({
 			data: {
-				ownerId: organization.ownerId,
+				ownerId: organization?.ownerId ?? ownerId,
+				...(organization?.workspaceId
+					? { workspaceId: organization.workspaceId }
+					: {}),
 				organizationId,
 				name: data.name,
 				managerName: data.managerName?.trim() || null,

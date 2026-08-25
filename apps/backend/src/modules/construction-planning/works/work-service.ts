@@ -2,15 +2,20 @@ import { ConstructionError } from "../../../lib/errors";
 import * as workRepository from "../repository";
 import type { ConstructionWorksFilter } from "../schema";
 
-type WorkRepository = Pick<
-	typeof workRepository,
-	| "findWorkByOwnerAndCode"
-	| "createWorkManual"
-	| "listWorks"
-	| "getWorkById"
-	| "updateWork"
-	| "deleteWork"
->;
+type WorkResult = Record<string, unknown>;
+type WorkRepository = Omit<
+	Pick<
+		typeof workRepository,
+		"createWorkManual" | "listWorks" | "updateWork" | "deleteWork"
+	>,
+	never
+> & {
+	findWorkByOwnerAndCode: (
+		ownerId: string,
+		code: string,
+	) => Promise<WorkResult | null>;
+	getWorkById: (ownerId: string, workId: string) => Promise<WorkResult | null>;
+};
 
 export type StructuredAddressInput = {
 	zipCode: string;
@@ -122,7 +127,7 @@ export class ConstructionWorkService {
 
 	async get(ownerId: string, workId: string) {
 		const work = await this.repository.getWorkById(ownerId, workId);
-		if (!work || work.ownerId !== ownerId) {
+		if (!work) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}
 		return work;

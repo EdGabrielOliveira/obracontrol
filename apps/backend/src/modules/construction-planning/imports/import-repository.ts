@@ -2,6 +2,7 @@ import { Prisma } from "../../../../generated/prisma/client";
 import { ConstructionError } from "../../../lib/errors";
 import { buildPaginatedResponse } from "../../../lib/pagination";
 import { prisma } from "../../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../../lib/workspace";
 import { ancestorIndexesOf, compareIndexHierarchy } from "./index-helpers";
 import type {
 	NormalizedActualCost,
@@ -31,6 +32,7 @@ async function createBudgetItems(
 	items: NormalizedBudgetItem[],
 	itens: NormalizedBudgetItem[] = [],
 	seedIndexToId: Map<string, string> = new Map(),
+	workspaceId?: string | null,
 ) {
 	const indexToId = new Map(seedIndexToId);
 	const merged = [...items, ...itens].sort(
@@ -52,7 +54,12 @@ async function createBudgetItems(
 		sortPosition++;
 		const identity = await tx.budgetItemIdentity.upsert({
 			where: { workId_index: { workId, index: item.index } },
-			create: { ownerId, workId, index: item.index },
+			create: {
+				ownerId,
+				workspaceId: workspaceId ?? null,
+				workId,
+				index: item.index,
+			},
 			update: {},
 			select: { id: true },
 		});
@@ -63,6 +70,7 @@ async function createBudgetItems(
 		const created = await tx.constructionBudgetItem.create({
 			data: {
 				ownerId,
+				workspaceId: workspaceId ?? null,
 				workId,
 				importId,
 				identityId: identity.id,
@@ -233,9 +241,17 @@ async function createUnifiedChildren(
 	}
 }
 
-export async function findWorkByOwnerAndCode(ownerId: string, code: string) {
-	return prisma.constructionWork.findUnique({
-		where: { ownerId_code: { ownerId, code } },
+type LegacyWorkLookup = Omit<
+	Prisma.ConstructionWorkGetPayload<null>,
+	"workspaceId"
+> & { workspaceId?: string | null };
+
+export async function findWorkByOwnerAndCode(
+	ownerId: string,
+	code: string,
+): Promise<LegacyWorkLookup | null> {
+	return prisma.constructionWork.findFirst({
+		where: { ownerId, code },
 	});
 }
 
@@ -322,9 +338,27 @@ export async function createWorkWithImport(
 	},
 ) {
 	return prisma.$transaction(async (tx) => {
+		const costCenterDelegate = (
+			tx as unknown as {
+				costCenter?: {
+					findUnique?: (
+						args: unknown,
+					) => Promise<{ workspaceId?: string | null } | null>;
+				};
+			}
+		).costCenter;
+		const center = costCenterDelegate?.findUnique
+			? await costCenterDelegate.findUnique({
+					where: { id: costCenterId },
+					select: { workspaceId: true },
+				})
+			: null;
+		const workspaceId =
+			center?.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
 		const createdWork = await tx.constructionWork.create({
 			data: {
 				ownerId,
+				workspaceId,
 				costCenterId,
 				code: work.code,
 				name: work.name,
@@ -341,6 +375,7 @@ export async function createWorkWithImport(
 		const imp = await tx.constructionImport.create({
 			data: {
 				ownerId,
+				workspaceId,
 				workId: createdWork.id,
 				fileName: work.fileName,
 				sheetName: work.sheetName,
@@ -359,6 +394,8 @@ export async function createWorkWithImport(
 			imp.id,
 			items,
 			options.itens,
+			new Map(),
+			workspaceId,
 		);
 		await createUnifiedChildren(
 			tx,
@@ -451,6 +488,7 @@ async function replaceWorkWithImportInTx(
 			importedSections: work.importedSections,
 			rowCount: options.rowCount,
 			status: "IMPORTED",
+			workspaceId: updatedWork.workspaceId,
 			reprocessOfId: options.reprocessOfId ?? null,
 			errorSummary: options.errorSummary ?? Prisma.JsonNull,
 		},
@@ -472,6 +510,7 @@ async function replaceWorkWithImportInTx(
 		items,
 		options.itens,
 		existingIndexToId,
+		updatedWork.workspaceId,
 	);
 	await createUnifiedChildren(
 		tx,
@@ -501,7 +540,7 @@ export async function replaceBudgetWithImport(
 	return prisma.$transaction(async (tx) => {
 		const work = await tx.constructionWork.findUnique({
 			where: { id: workId, ownerId },
-			select: { id: true },
+			select: { id: true, workspaceId: true },
 		});
 
 		if (!work) {
@@ -511,6 +550,7 @@ export async function replaceBudgetWithImport(
 		const imp = await tx.constructionImport.create({
 			data: {
 				ownerId,
+				workspaceId: work.workspaceId,
 				workId,
 				fileName: options.fileName,
 				sheetName: options.sheetName,
@@ -520,7 +560,16 @@ export async function replaceBudgetWithImport(
 			},
 		});
 
-		await createBudgetItems(tx, ownerId, workId, imp.id, items);
+		await createBudgetItems(
+			tx,
+			ownerId,
+			workId,
+			imp.id,
+			items,
+			[],
+			new Map(),
+			work.workspaceId,
+		);
 
 		await tx.constructionWork.update({
 			where: { id: workId, ownerId },

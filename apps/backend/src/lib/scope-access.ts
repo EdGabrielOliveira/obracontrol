@@ -32,10 +32,13 @@ export async function getAccessibleWorkIds(userId: string): Promise<string[]> {
 export async function getAccessibleOrgIds(userId: string): Promise<string[]> {
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (user?.role === "ADMIN") {
-		const orgs = await prisma.organization.findMany({ select: { id: true } });
+		const orgs = await prisma.organization.findMany({
+			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
+			select: { id: true },
+		});
 		return orgs.map((o) => o.id);
 	}
 	const memberships = await prisma.organizationMembership.findMany({
@@ -50,10 +53,13 @@ export async function getAccessibleCostCenterIds(
 ): Promise<string[]> {
 	const user = await prisma.user.findUnique({
 		where: { id: userId },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (user?.role === "ADMIN") {
-		const ccs = await prisma.costCenter.findMany({ select: { id: true } });
+		const ccs = await prisma.costCenter.findMany({
+			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
+			select: { id: true },
+		});
 		return ccs.map((c) => c.id);
 	}
 	if (user?.role === "GERENTE") {

@@ -11,7 +11,9 @@ model User {
   banExpires    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  workspaceId   String?
 
+  workspace                Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   sessions                Session[]
   accounts                Account[]
   apiKeys                 ApiKey[]
@@ -25,6 +27,28 @@ model User {
   auditLogs               AuditLog[]
   auditComments           AuditComment[]
   scopeGrants             UserScopeGrant[]
+
+  @@index([workspaceId])
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  companies   Company[]
+  organizations Organization[]
+  costCenters CostCenter[]
+  works       ConstructionWork[]
+  imports     ConstructionImport[]
+  budgetItems ConstructionBudgetItem[]
+  contracts   Contract[]
+  suppliers   ConstructionSupplier[]
+  invitations UserInvitation[]
+
+  @@index([createdAt])
 }
 
 model UserScopeGrant {
@@ -57,12 +81,15 @@ model UserInvitation {
   acceptedAt DateTime?
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
+  workspaceId String?
 
   creator User @relation("UserInvitationCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([scopeType, scopeId])
   @@index([email])
   @@index([revokedAt])
+  @@index([workspaceId])
 }
 
 model Session {

@@ -108,8 +108,12 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.use(requireWorkAccess("read"))
 	.get(
 		"/:workId",
-		async ({ params, scope }) => {
-			return constructionWorkService.get(scope.resourceOwnerId, params.workId);
+		async ({ params, user }) => {
+			// O acesso e validado pelo middleware usando o workspace da sessão.
+			// O ID do executor não é mais usado como dono dos dados, mas é o
+			// contexto correto para localizar a obra de um ADMIN após a remoção
+			// do administrador que a criou.
+			return constructionWorkService.get(user.id, params.workId);
 		},
 		{
 			detail: {
@@ -266,8 +270,19 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					400,
 				);
 			}
+			const parentScope = await resolveResourceScope(user.id, {
+				costCenterId: body.costCenterId.trim(),
+			});
+			if (!parentScope.canWrite) {
+				throw new ConstructionError(
+					"NOT_FOUND",
+					"Centro de custo nao encontrado",
+					404,
+				);
+			}
+			const resourceOwnerId = parentScope.resourceOwnerId || user.id;
 			const idempotencyKey = headers["idempotency-key"]?.trim();
-			const work = (await constructionWorkService.create(user.id, {
+			const work = (await constructionWorkService.create(resourceOwnerId, {
 				code: body.code?.trim(),
 				name: body.name.trim(),
 				costCenterId: body.costCenterId.trim(),
@@ -292,9 +307,13 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			}
 			assertValidXlsxUpload(body.file);
 			try {
-				const imported = await budgetService.importBudget(user.id, work.id, {
-					file: body.file,
-				});
+				const imported = await budgetService.importBudget(
+					resourceOwnerId,
+					work.id,
+					{
+						file: body.file,
+					},
+				);
 				set.status = imported.errors.length > 0 ? 200 : 201;
 				return { status: "IMPORTED", work, import: imported } as const;
 			} catch (error) {
@@ -383,7 +402,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				where: { id: params.workId },
 			});
 			const result = await constructionWorkService.update(
-				scope.resourceOwnerId,
+				user.id,
 				params.workId,
 				body,
 			);

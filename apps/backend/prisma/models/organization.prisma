@@ -1,6 +1,7 @@
 model Company {
   id                      String   @id @default(cuid())
   ownerId                 String
+  workspaceId             String?
   name                    String
   document                String?
   tradeName               String?
@@ -20,10 +21,12 @@ model Company {
   updatedAt               DateTime @updatedAt
 
   organizations     Organization[]
+  workspace          Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   structuredAddress Address?       @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
 
-  @@unique([ownerId, name])
+  @@unique([workspaceId, name])
   @@index([ownerId])
+  @@index([workspaceId])
   @@index([structuredAddressId])
 }
 
@@ -52,6 +55,7 @@ model Address {
 model Organization {
   id                  String   @id @default(cuid())
   ownerId             String
+  workspaceId         String?
   name                String
   companyId           String?
   managerName         String?
@@ -65,8 +69,11 @@ model Organization {
   apiKeys           ApiKey[]
   company           Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
   structuredAddress Address?                 @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
+  workspace          Workspace?               @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
+  @@unique([workspaceId, name])
   @@index([ownerId])
+  @@index([workspaceId])
   @@index([companyId])
   @@index([structuredAddressId])
 }
@@ -76,6 +83,7 @@ model CostCenter {
   name                String
   organizationId      String
   ownerId             String
+  workspaceId         String?
   managerName         String?
   address             String?
   structuredAddressId String?
@@ -86,8 +94,10 @@ model CostCenter {
   structuredAddress Address?               @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
   works             ConstructionWork[]
   memberships       CostCenterMembership[]
+  workspace          Workspace?               @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, ownerId])
+  @@index([workspaceId])
   @@index([organizationId])
   @@index([structuredAddressId])
 }

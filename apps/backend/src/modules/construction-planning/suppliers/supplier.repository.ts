@@ -2,16 +2,29 @@ import type { Prisma } from "@prisma/client";
 import { buildPaginatedResponse } from "../../../lib/pagination";
 import { pickDefined } from "../../../lib/pick-defined";
 import { prisma } from "../../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../../lib/workspace";
 import {
 	normalizeSupplierDocument,
 	normalizeSupplierName,
 } from "./supplier-document";
 
+function supplierScope(ownerId: string, workspaceId?: string | null) {
+	return workspaceId ? { workspaceId } : { ownerId };
+}
+
 export async function listSuppliers(
 	ownerId: string,
-	filters?: { q?: string; page?: number; pageSize?: number },
+	filters?: {
+		q?: string;
+		page?: number;
+		pageSize?: number;
+		workspaceId?: string | null;
+	},
 ) {
-	const where: Prisma.ConstructionSupplierWhereInput = { ownerId };
+	const where: Prisma.ConstructionSupplierWhereInput = supplierScope(
+		ownerId,
+		filters?.workspaceId,
+	);
 	if (filters?.q) {
 		where.OR = [
 			{ name: { contains: filters.q } },
@@ -35,18 +48,26 @@ export async function listSuppliers(
 	return buildPaginatedResponse(data, total, page, pageSize);
 }
 
-export async function getSupplierById(ownerId: string, id: string) {
+export async function getSupplierById(
+	ownerId: string,
+	id: string,
+	workspaceId?: string | null,
+) {
 	return prisma.constructionSupplier.findFirst({
-		where: { id, ownerId },
+		where: { id, ...supplierScope(ownerId, workspaceId) },
 	});
 }
 
-export async function getSupplierDetail(ownerId: string, id: string) {
-	const supplier = await getSupplierById(ownerId, id);
+export async function getSupplierDetail(
+	ownerId: string,
+	id: string,
+	workspaceId?: string | null,
+) {
+	const supplier = await getSupplierById(ownerId, id, workspaceId);
 	if (!supplier) return null;
 	const [contracts, actualCosts, workLinks] = await Promise.all([
 		prisma.contract.findMany({
-			where: { ownerId, supplierId: id },
+			where: { ...supplierScope(ownerId, workspaceId), supplierId: id },
 			select: {
 				id: true,
 				code: true,
@@ -58,7 +79,7 @@ export async function getSupplierDetail(ownerId: string, id: string) {
 			orderBy: { createdAt: "desc" },
 		}),
 		prisma.constructionActualCost.findMany({
-			where: { ownerId, supplierId: id },
+			where: { ...supplierScope(ownerId, workspaceId), supplierId: id },
 			select: {
 				id: true,
 				costDate: true,
@@ -71,7 +92,7 @@ export async function getSupplierDetail(ownerId: string, id: string) {
 			orderBy: { costDate: "desc" },
 		}),
 		prisma.constructionWorkSupplier.findMany({
-			where: { ownerId, supplierId: id },
+			where: { ...supplierScope(ownerId, workspaceId), supplierId: id },
 			select: {
 				id: true,
 				status: true,
@@ -86,15 +107,16 @@ export async function getSupplierDetail(ownerId: string, id: string) {
 export async function findSupplierByDocument(
 	ownerId: string,
 	document: string,
+	workspaceId?: string | null,
 ) {
 	const normalized = normalizeSupplierDocument(document);
 	if (!normalized) return null;
 	const exact = await prisma.constructionSupplier.findFirst({
-		where: { ownerId, document: normalized },
+		where: { ...supplierScope(ownerId, workspaceId), document: normalized },
 	});
 	if (exact) return exact;
 	const candidates = await prisma.constructionSupplier.findMany({
-		where: { ownerId },
+		where: supplierScope(ownerId, workspaceId),
 	});
 	return (
 		candidates.find(
@@ -107,15 +129,16 @@ export async function findSupplierByDocumentOrName(
 	ownerId: string,
 	document: string | null | undefined,
 	name: string | null | undefined,
+	workspaceId?: string | null,
 ) {
 	const byDocument = document
-		? await findSupplierByDocument(ownerId, document)
+		? await findSupplierByDocument(ownerId, document, workspaceId)
 		: null;
 	if (byDocument) return byDocument;
 	const normalizedName = normalizeSupplierName(name);
 	if (!normalizedName) return null;
 	const candidates = await prisma.constructionSupplier.findMany({
-		where: { ownerId },
+		where: supplierScope(ownerId, workspaceId),
 	});
 	const matches = candidates.filter(
 		(supplier) => normalizeSupplierName(supplier.name) === normalizedName,
@@ -196,6 +219,7 @@ export async function createSupplier(
 	return prisma.constructionSupplier.create({
 		data: {
 			ownerId,
+			workspaceId: await getWorkspaceIdForUser(ownerId),
 			name: input.name,
 			document: input.document,
 			responsibleName: input.responsibleName ?? null,
@@ -245,9 +269,10 @@ export async function updateSupplier(
 		addressState?: string | null;
 		notes?: string | null;
 	},
+	workspaceId?: string | null,
 ) {
 	const existing = await prisma.constructionSupplier.findFirst({
-		where: { id, ownerId },
+		where: { id, ...supplierScope(ownerId, workspaceId) },
 	});
 	if (!existing) return null;
 
@@ -275,17 +300,21 @@ export async function updateSupplier(
 	] as (keyof typeof input)[]);
 
 	return prisma.constructionSupplier.update({
-		where: { id, ownerId },
+		where: { id },
 		data: updateData as Prisma.ConstructionSupplierUpdateInput,
 	});
 }
 
-export async function deleteSupplier(ownerId: string, id: string) {
+export async function deleteSupplier(
+	ownerId: string,
+	id: string,
+	workspaceId?: string | null,
+) {
 	const item = await prisma.constructionSupplier.findFirst({
-		where: { id, ownerId },
+		where: { id, ...supplierScope(ownerId, workspaceId) },
 	});
 	if (!item) return null;
-	await prisma.constructionSupplier.delete({ where: { id, ownerId } });
+	await prisma.constructionSupplier.delete({ where: { id } });
 	return item;
 }
 

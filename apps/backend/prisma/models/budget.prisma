@@ -1,6 +1,7 @@
 model ConstructionBudgetItem {
   id                   String    @id @default(uuid())
   ownerId              String
+  workspaceId           String?
   workId               String
   importId             String
   identityId           String?
@@ -44,6 +45,7 @@ model ConstructionBudgetItem {
   contractServices      ContractService[]
   quotationBudgetItems  QuotationBudgetItem[]
   contractRequestItems  ContractRequestBudgetItem[]
+  workspace              Workspace?                    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([ownerId, workId])
   @@index([importId])
@@ -56,6 +58,7 @@ model ConstructionBudgetItem {
 model BudgetVersion {
   id                String    @id @default(cuid())
   ownerId           String
+  workspaceId       String?
   workId            String
   versionNumber     Int
   label             String
@@ -89,6 +92,7 @@ model BudgetVersion {
 model BudgetItemIdentity {
   id        String   @id @default(cuid())
   ownerId   String
+  workspaceId String?
   workId    String
   index     String
   createdAt DateTime @default(now())
@@ -142,6 +146,7 @@ model BudgetVersionItem {
 model ConstructionBudgetReconciliation {
   id           String   @id @default(cuid())
   ownerId      String
+  workspaceId  String?
   workId       String
   sourceType   String
   sourceId     String
@@ -160,6 +165,7 @@ model ConstructionBudgetReconciliation {
 model BudgetProjectionState {
   id              String   @id @default(cuid())
   ownerId         String
+  workspaceId     String?
   workId          String   @unique
   status          String   @default("READY")
   sourceVersionId String?
@@ -175,6 +181,7 @@ model BudgetProjectionState {
 model BudgetProjectionOutbox {
   id              String    @id @default(cuid())
   ownerId         String
+  workspaceId     String?
   workId          String
   sourceVersionId String
   idempotencyKey  String    @unique

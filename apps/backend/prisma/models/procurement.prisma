@@ -1,6 +1,7 @@
 model ConstructionSupplier {
   id                  String   @id @default(cuid())
   ownerId             String
+  workspaceId         String?
   name                String
   document            String?
   responsibleName     String?
@@ -29,9 +30,11 @@ model ConstructionSupplier {
   contracts   Contract[]
   actualCosts ConstructionActualCost[]
   workLinks   ConstructionWorkSupplier[]
+  workspace    Workspace?                @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
-  @@unique([ownerId, document])
+  @@unique([workspaceId, document])
   @@index([ownerId, name])
+  @@index([workspaceId])
 }
 
 model ConstructionWorkSupplier {

@@ -11,6 +11,7 @@ const emptyScope: ScopeContext = {
 	actorId: "",
 	resourceType: "ORGANIZATION",
 	resourceOwnerId: "",
+	workspaceId: "",
 	path: { organizationId: "", costCenterId: null, workId: null },
 	role: null,
 	canRead: false,

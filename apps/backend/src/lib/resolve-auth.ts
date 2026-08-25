@@ -9,7 +9,10 @@ import { requestContext } from "./request-context";
 import { requestPath } from "./request-path";
 import { isTenantApiRouteAllowed } from "./tenant-api-allowlist";
 
-type AuthUser = Session["user"] & { role?: string | null };
+type AuthUser = Session["user"] & {
+	role?: string | null;
+	workspaceId?: string | null;
+};
 
 function assertAuthorizedRole(
 	role: string | null | undefined,
@@ -40,7 +43,7 @@ export async function resolveAuthenticatedUser(
 		}
 		const user = await prisma.user.findUnique({
 			where: { id: keyResult.userId },
-			select: { role: true, banned: true },
+			select: { role: true, banned: true, workspaceId: true },
 		});
 		if (!user || user.banned) {
 			throw new ConstructionError("UNAUTHORIZED", "Usuario desativado", 401);
@@ -69,6 +72,7 @@ export async function resolveAuthenticatedUser(
 				image: null,
 				banned: false,
 				role: user.role,
+				workspaceId: user.workspaceId,
 				createdAt: new Date(),
 				updatedAt: new Date(),
 			},
@@ -78,7 +82,7 @@ export async function resolveAuthenticatedUser(
 	const sessionUser = await getSessionUser(request);
 	const user = await prisma.user.findUnique({
 		where: { id: sessionUser.id },
-		select: { role: true, banned: true },
+		select: { role: true, banned: true, workspaceId: true },
 	});
 	if (!user || user.banned) {
 		throw new ConstructionError("UNAUTHORIZED", "Usuario desativado", 401);
@@ -92,6 +96,7 @@ export async function resolveAuthenticatedUser(
 		user: {
 			...(sessionUser as AuthUser),
 			role,
+			workspaceId: user.workspaceId,
 		},
 	};
 }

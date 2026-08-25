@@ -1,6 +1,7 @@
 model Contract {
   id                        String    @id @default(uuid())
   ownerId                   String
+  workspaceId                String?
   workId                    String
   code                      String
   supplierName              String
@@ -37,6 +38,7 @@ model Contract {
   quotations          Quotation[]
   contractRequest     ContractRequest?                @relation(fields: [contractRequestId], references: [id], onDelete: SetNull)
   instrumentArtifacts ContractInstrumentArtifact[]
+  workspace           Workspace?                    @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@unique([ownerId, workId, code])
   @@index([ownerId, workId])
@@ -46,6 +48,7 @@ model Contract {
 model ContractInstrumentArtifact {
   id             String   @id @default(cuid())
   ownerId        String
+  workspaceId    String?
   contractId     String
   version        Int
   filename       String
@@ -93,6 +96,7 @@ model ContractService {
 model ContractMeasurement {
   id              String   @id @default(uuid())
   ownerId         String
+  workspaceId     String?
   contractId      String
   number          Int
   date            DateTime
@@ -141,6 +145,7 @@ model ContractMeasurementItem {
 model ContractPayment {
   id              String   @id @default(uuid())
   ownerId         String
+  workspaceId     String?
   contractId      String
   measurementId   String?
   date            DateTime
@@ -193,6 +198,7 @@ model ContractFile {
 model ConstructionContractAmendment {
   id                String    @id @default(cuid())
   ownerId           String
+  workspaceId       String?
   contractId        String
   kind              String    @default("ADITIVO")
   value             Decimal
@@ -216,6 +222,7 @@ model ConstructionContractAmendment {
 model ContractAmendmentMeasurement {
   id            String   @id @default(cuid())
   ownerId       String
+  workspaceId   String?
   amendmentId   String
   measurementId String
   createdAt     DateTime @default(now())

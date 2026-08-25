@@ -2,6 +2,7 @@ import { ConstructionError } from "../../lib/errors";
 import { roundCurrency } from "../../lib/math-utils";
 import { toFiniteNumber, toNullableNumber } from "../../lib/number-utils";
 import { prisma } from "../../lib/prisma";
+import { getWorkspaceIdForUser } from "../../lib/workspace";
 import {
 	buildBudgetTree,
 	calculateBdi,
@@ -59,7 +60,7 @@ function toNullableDateTime(value: string | null | undefined): Date | null {
 async function ensureActiveImport(ownerId: string, workId: string) {
 	const work = await prisma.constructionWork.findFirst({
 		where: { id: workId, ownerId },
-		select: { id: true, activeImportId: true },
+		select: { id: true, activeImportId: true, workspaceId: true },
 	});
 
 	if (!work) {
@@ -71,6 +72,7 @@ async function ensureActiveImport(ownerId: string, workId: string) {
 	const imp = await prisma.constructionImport.create({
 		data: {
 			ownerId,
+			workspaceId: work.workspaceId ?? (await getWorkspaceIdForUser(ownerId)),
 			workId,
 			fileName: "manual-budget",
 			sheetName: "Manual",
@@ -365,10 +367,26 @@ export async function createBudgetItem(
 ) {
 	const importId = await ensureActiveImport(ownerId, workId);
 	const payload = normalizeBudgetItemInput(input);
+	const workDelegate = (
+		prisma as unknown as {
+			constructionWork?: {
+				findUnique?: (
+					args: unknown,
+				) => Promise<{ workspaceId?: string | null } | null>;
+			};
+		}
+	).constructionWork;
+	const work = workDelegate?.findUnique
+		? await workDelegate.findUnique({
+				where: { id: workId },
+				select: { workspaceId: true },
+			})
+		: null;
 
 	return prisma.constructionBudgetItem.create({
 		data: {
 			ownerId,
+			workspaceId: work?.workspaceId ?? (await getWorkspaceIdForUser(ownerId)),
 			workId,
 			importId,
 			...payload,
