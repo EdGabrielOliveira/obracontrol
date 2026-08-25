@@ -12,6 +12,12 @@ function supplierScope(ownerId: string, workspaceId?: string | null) {
 	return workspaceId ? { workspaceId } : { ownerId };
 }
 
+// Custos e vínculos de fornecedor ainda não possuem workspaceId próprio. O
+// escopo é obtido pela obra-pai, que já pertence ao workspace do fornecedor.
+function supplierWorkScope(ownerId: string, workspaceId?: string | null) {
+	return workspaceId ? { work: { workspaceId } } : { ownerId };
+}
+
 export async function listSuppliers(
 	ownerId: string,
 	filters?: {
@@ -79,7 +85,7 @@ export async function getSupplierDetail(
 			orderBy: { createdAt: "desc" },
 		}),
 		prisma.constructionActualCost.findMany({
-			where: { ...supplierScope(ownerId, workspaceId), supplierId: id },
+			where: { ...supplierWorkScope(ownerId, workspaceId), supplierId: id },
 			select: {
 				id: true,
 				costDate: true,
@@ -92,7 +98,7 @@ export async function getSupplierDetail(
 			orderBy: { costDate: "desc" },
 		}),
 		prisma.constructionWorkSupplier.findMany({
-			where: { ...supplierScope(ownerId, workspaceId), supplierId: id },
+			where: { ...supplierWorkScope(ownerId, workspaceId), supplierId: id },
 			select: {
 				id: true,
 				status: true,
