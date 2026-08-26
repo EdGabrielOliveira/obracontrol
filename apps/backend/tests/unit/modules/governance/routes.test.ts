@@ -10,7 +10,11 @@ const userFindUnique = mock(
 	async (): Promise<{ role: string | null }> => ({ role: "ADMIN" }),
 );
 const resolveGovernanceTarget = mock(
-	async (): Promise<{ workId: string } | null> => ({ workId: "work-1" }),
+	async (): Promise<{
+		workId: string;
+		resourceOwnerId?: string;
+		workspaceId?: string | null;
+	} | null> => ({ workId: "work-1" }),
 );
 type MockScope = {
 	actorId: string;
@@ -209,6 +213,34 @@ describe("governance routes target and owner validation", () => {
 
 		expect(response.status).toBe(200);
 		expect(get).toHaveBeenCalledWith("owner-org", "BUDGET", "work-1");
+	});
+
+	it("keeps an admin able to govern a legacy work with a broken hierarchy", async () => {
+		resolveGovernanceTarget.mockResolvedValue({
+			workId: "work-legacy",
+			resourceOwnerId: "owner-work",
+			workspaceId: null,
+		});
+		resolveResourceScope.mockResolvedValue(
+			makeScope({
+				resourceOwnerId: "",
+				role: null,
+				canRead: false,
+				canWrite: false,
+				canApprove: false,
+			}),
+		);
+
+		const response = await governanceRoutes.handle(
+			new Request("http://localhost/governance/WORK_STATUS/work-legacy"),
+		);
+
+		expect(response.status).toBe(200);
+		expect(get).toHaveBeenCalledWith(
+			"owner-work",
+			"WORK_STATUS",
+			"work-legacy",
+		);
 	});
 
 	it("answers 404 on reads when the target is missing", async () => {
