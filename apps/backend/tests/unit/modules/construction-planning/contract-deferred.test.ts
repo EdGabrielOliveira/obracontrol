@@ -4,6 +4,7 @@ const submitApproval = mock(
 	async (): Promise<{
 		status: "APPROVED" | "PENDING";
 		approvalRequestId: string | null;
+		requiredApproverRole?: "GERENTE" | "GESTOR" | null;
 		data?: unknown;
 		scope?: { organizationId: string; costCenterId: string | null };
 	}> => ({
@@ -60,6 +61,7 @@ describe("createContract deferido (USR-002/DEC-005)", () => {
 		submitApproval.mockResolvedValueOnce({
 			status: "PENDING",
 			approvalRequestId: "req-1",
+			requiredApproverRole: "GESTOR",
 			scope: { organizationId: "org-1", costCenterId: "cc-1" },
 		});
 
@@ -120,5 +122,37 @@ describe("createContract deferido (USR-002/DEC-005)", () => {
 			status: "EXECUTED",
 			data: { id: "contract-1" },
 		});
+	});
+
+	it("ADMIN recebe EXECUTED sem passar por aprovacao", async () => {
+		submitApproval.mockResolvedValueOnce({
+			status: "APPROVED",
+			approvalRequestId: "req-admin-1",
+			data: { id: "contract-admin-1", code: "CT-ADMIN-1" },
+		});
+
+		const result = await contractService.createContract(
+			"owner-1",
+			"work-1",
+			{
+				code: "CT-ADMIN-1",
+				supplierName: "Fornecedor",
+				contractValue: 1000,
+				objectDescription: "Servicos de fundacao",
+				status: "RASCUNHO",
+			},
+			{ userId: "admin-1" },
+		);
+
+		expect(result).toMatchObject({
+			status: "EXECUTED",
+			data: { id: "contract-admin-1" },
+		});
+		expect(submitApproval).toHaveBeenCalledWith(
+			expect.objectContaining({
+				actorId: "admin-1",
+				effectAction: "CONTRACT_CREATE",
+			}),
+		);
 	});
 });

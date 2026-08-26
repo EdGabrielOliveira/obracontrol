@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
 	createFileRoute,
 	Link,
@@ -6,7 +6,6 @@ import {
 	useSearch,
 } from "@tanstack/react-router";
 import { BarChart3, FileText, Pencil, Plus } from "lucide-react";
-import { z } from "zod";
 import { getOrganization, listCostCenters } from "@/api/organizations";
 import { costCenterKeys, organizationKeys } from "@/api/query-keys";
 import { ErrorFeedback } from "@/atoms/error-feedback";
@@ -51,11 +50,12 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/")({
 
 function RouteComponent() {
 	const { orgId } = useParams({ from: "/app/organizacoes/$orgId/" });
-	const { role } = useAuth();
+	const { role, capabilities } = useAuth();
+	const canEditOrganization =
+		role === "ADMIN" || capabilities?.canAdministerCompanies === true;
 	const canViewManagement = role !== "SUPERVISOR";
 	const searchParams = useSearch({ from: Route.id });
 	const navigate = Route.useNavigate();
-	const queryClient = useQueryClient();
 
 	const {
 		data: org,
@@ -90,15 +90,21 @@ function RouteComponent() {
 				<PageHeader
 					eyebrow="Órgão"
 					title={org?.name ?? ""}
-					description="Centros de custo e obras"
+					description={
+						role === "ADMIN" && org?.company?.name
+							? `Empresa: ${org.company.name}`
+							: "Centros de custo e obras"
+					}
 					actions={
 						<>
-							<Link to="/app/organizacoes/$orgId/edit" params={{ orgId }}>
-								<Button variant="outline" size="sm">
-									<Pencil className="mr-2 h-4 w-4" />
-									Editar
-								</Button>
-							</Link>
+							{canEditOrganization ? (
+								<Link to="/app/organizacoes/$orgId/edit" params={{ orgId }}>
+									<Button variant="outline" size="sm">
+										<Pencil className="mr-2 h-4 w-4" />
+										Editar
+									</Button>
+								</Link>
+							) : null}
 							{canViewManagement ? (
 								<>
 									<Link

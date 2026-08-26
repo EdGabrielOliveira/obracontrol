@@ -277,6 +277,12 @@ async function collectOwnerMismatches(prisma: PrismaClient) {
 			}),
 		},
 		{
+			resourceType: "CONTRACT_REQUEST_PROPOSAL",
+			resources: await prisma.contractRequestProposal.findMany({
+				select: { id: true, workId: true, ownerId: true },
+			}),
+		},
+		{
 			resourceType: "QUOTATION",
 			resources: await prisma.quotation.findMany({
 				select: { id: true, workId: true, ownerId: true },

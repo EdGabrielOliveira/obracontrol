@@ -250,28 +250,42 @@ export async function resolveResourceScope(
 	}
 
 	if (role === "GESTOR" || role === "SUPERVISOR") {
-		if (!memberships.organizationIds.includes(chain.organizationId)) {
-			return deniedContext(actorId, resourceType);
-		}
-		if (!chain.costCenterId) {
-			return deniedContext(actorId, resourceType);
-		}
-		const hasCostCenterAccess = memberships.costCenterIds.includes(
-			chain.costCenterId,
+		const hasOrganizationAccess = memberships.organizationIds.includes(
+			chain.organizationId,
 		);
-		if (!hasCostCenterAccess) {
+		const hasCostCenterAccess = chain.costCenterId
+			? memberships.costCenterIds.includes(chain.costCenterId)
+			: false;
+
+		// Gestor pode receber uma organização inteira ou apenas centros de
+		// custo. Supervisor sempre fica limitado ao centro explicitamente
+		// direcionado. A obra herda o acesso do centro pai.
+		if (role === "SUPERVISOR") {
+			if (resourceType === "ORGANIZATION" || !hasCostCenterAccess) {
+				return deniedContext(actorId, resourceType);
+			}
+		} else if (
+			(resourceType === "ORGANIZATION" && !hasOrganizationAccess) ||
+			(resourceType !== "ORGANIZATION" &&
+				!hasOrganizationAccess &&
+				!hasCostCenterAccess)
+		) {
 			return deniedContext(actorId, resourceType);
 		}
 		if (resourceType === "WORK") {
-			const restrictedWorkIds = await resolveRestrictedWorkIds(
-				actorId,
-				memberships,
-			);
-			if (
-				restrictedWorkIds.length > 0 &&
-				(chain.workId === null || !restrictedWorkIds.includes(chain.workId))
-			) {
-				return deniedContext(actorId, resourceType);
+			// A Gestor assigned to an organization inherits every work below it;
+			// work-level assignments only restrict a Gestor assigned to CCs.
+			if (!(role === "GESTOR" && hasOrganizationAccess)) {
+				const restrictedWorkIds = await resolveRestrictedWorkIds(
+					actorId,
+					memberships,
+				);
+				if (
+					restrictedWorkIds.length > 0 &&
+					(chain.workId === null || !restrictedWorkIds.includes(chain.workId))
+				) {
+					return deniedContext(actorId, resourceType);
+				}
 			}
 		}
 		return grantedContext(actorId, chain, resourceType, role);
@@ -286,7 +300,14 @@ async function resolveRestrictedWorkIds(
 ): Promise<string[]> {
 	const workMemberships = await prisma.workMembership.findMany({
 		where: { userId: actorId, revokedAt: null },
-		select: { work: { select: { id: true, costCenterId: true } } },
+		select: {
+			work: {
+				select: {
+					id: true,
+					costCenterId: true,
+				},
+			},
+		},
 	});
 	const assignedCenters = new Set(memberships.costCenterIds);
 	const validWorkIds = workMemberships
@@ -354,7 +375,17 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 		const [orgMemberships, ccMemberships, workMemberships] = await Promise.all([
 			prisma.organizationMembership.findMany({
 				where: { userId: actorId, revokedAt: null },
-				select: { organizationId: true },
+				select: {
+					organizationId: true,
+					organization: {
+						select: {
+							id: true,
+							costCenters: {
+								select: { id: true, works: { select: { id: true } } },
+							},
+						},
+					},
+				},
 			}),
 			prisma.costCenterMembership.findMany({
 				where: { userId: actorId, revokedAt: null },
@@ -383,23 +414,45 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 		const grantedOrgIds = new Set(
 			orgMemberships.map((membership) => membership.organizationId),
 		);
-		const grantedCenterIds = new Set(
-			ccMemberships.map((membership) => membership.costCenter.id),
-		);
+		const grantedCenterIds = new Set<string>();
+		const centers = new Map<
+			string,
+			{ id: string; organizationId: string; works: Array<{ id: string }> }
+		>();
+		if (role === "GESTOR") {
+			for (const membership of orgMemberships) {
+				for (const costCenter of membership.organization?.costCenters ?? []) {
+					grantedCenterIds.add(costCenter.id);
+					centers.set(costCenter.id, {
+						id: costCenter.id,
+						organizationId: membership.organizationId,
+						works: costCenter.works,
+					});
+				}
+			}
+		}
+		for (const membership of ccMemberships) {
+			const costCenter = membership.costCenter;
+			if (!costCenter) continue;
+			grantedCenterIds.add(costCenter.id);
+			centers.set(costCenter.id, costCenter);
+			grantedOrgIds.add(costCenter.organizationId);
+		}
 
 		const validWorkIds = new Set(
 			workMemberships
 				.filter(
 					(membership) =>
 						membership.work.costCenter &&
-						grantedCenterIds.has(membership.work.costCenter.id) &&
-						grantedOrgIds.has(membership.work.costCenter.organizationId),
+						(grantedCenterIds.has(membership.work.costCenter.id) ||
+							grantedOrgIds.has(membership.work.costCenter.organizationId)),
 				)
 				.map((membership) => membership.work.id),
 		);
-		const restrictionActive = validWorkIds.size > 0;
-		for (const membership of ccMemberships) {
-			const costCenter = membership.costCenter;
+		const restrictionActive =
+			!(role === "GESTOR" && orgMemberships.length > 0) &&
+			validWorkIds.size > 0;
+		for (const costCenter of centers.values()) {
 			if (!grantedOrgIds.has(costCenter.organizationId)) continue;
 			for (const work of costCenter.works) {
 				if (restrictionActive && !validWorkIds.has(work.id)) continue;

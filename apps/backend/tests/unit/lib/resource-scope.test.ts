@@ -160,7 +160,7 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 		expect(scope.role).toBe("SUPERVISOR");
 	});
 
-	it("GESTOR sem membership do centro do recurso nao acessa a obra", async () => {
+	it("GESTOR com membership da organizacao acessa todos os centros da obra", async () => {
 		stubChain(WORK_CHAIN);
 		userFindUnique.mockResolvedValue({ role: "GESTOR", banned: false });
 		organizationMembershipFindMany.mockResolvedValue([
@@ -172,12 +172,12 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 
 		const scope = await resolveResourceScope("gestor-1", { workId: "work-1" });
 
-		expect(scope.canRead).toBe(false);
-		expect(scope.canWrite).toBe(false);
-		expect(scope.role).toBeNull();
+		expect(scope.canRead).toBe(true);
+		expect(scope.canWrite).toBe(true);
+		expect(scope.role).toBe("GESTOR");
 	});
 
-	it("work membership sem centro pai ativo e ignorada (orfa nao concede acesso)", async () => {
+	it("work membership orfa nao reduz o acesso organizacional do Gestor", async () => {
 		stubChain(WORK_CHAIN);
 		userFindUnique.mockResolvedValue({ role: "GESTOR", banned: false });
 		organizationMembershipFindMany.mockResolvedValue([
@@ -190,9 +190,53 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 
 		const scope = await resolveResourceScope("gestor-1", { workId: "work-1" });
 
+		expect(scope.canRead).toBe(true);
+		expect(scope.canWrite).toBe(true);
+		expect(scope.role).toBe("GESTOR");
+	});
+
+	it("SUPERVISOR com apenas o centro direcionado acessa suas obras", async () => {
+		stubChain(WORK_CHAIN);
+		userFindUnique.mockResolvedValue({ role: "SUPERVISOR", banned: false });
+		costCenterMembershipFindMany.mockResolvedValue([{ costCenterId: "cc-1" }]);
+
+		const scope = await resolveResourceScope("supervisor-cc-1", {
+			workId: "work-1",
+		});
+
+		expect(scope.canRead).toBe(true);
+		expect(scope.canWrite).toBe(true);
+		expect(scope.canApprove).toBe(false);
+		expect(scope.role).toBe("SUPERVISOR");
+	});
+
+	it("SUPERVISOR nao recebe acesso direto a organizacao", async () => {
+		stubChain(ORG_CHAIN);
+		userFindUnique.mockResolvedValue({ role: "SUPERVISOR", banned: false });
+		costCenterMembershipFindMany.mockResolvedValue([{ costCenterId: "cc-1" }]);
+
+		const scope = await resolveResourceScope("supervisor-cc-1", {
+			organizationId: "org-1",
+		});
+
 		expect(scope.canRead).toBe(false);
-		expect(scope.canWrite).toBe(false);
 		expect(scope.role).toBeNull();
+	});
+
+	it("GESTOR com membership da organizacao acessa o centro sem membership direta", async () => {
+		stubChain(CC_CHAIN);
+		userFindUnique.mockResolvedValue({ role: "GESTOR", banned: false });
+		organizationMembershipFindMany.mockResolvedValue([
+			{ organizationId: "org-1" },
+		]);
+
+		const scope = await resolveResourceScope("gestor-org-1", {
+			costCenterId: "cc-1",
+		});
+
+		expect(scope.canRead).toBe(true);
+		expect(scope.canWrite).toBe(true);
+		expect(scope.role).toBe("GESTOR");
 	});
 
 	it("API key escopada rejeita cadeia de outra organizacao", async () => {
@@ -214,7 +258,7 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 		expect((await scope).canRead).toBe(false);
 	});
 
-	it("work membership valida restringe as obras dos centros atribuidos", async () => {
+	it("membership da organizacao do Gestor cobre todos os trabalhos do centro", async () => {
 		stubChain(WORK_CHAIN);
 		userFindUnique.mockResolvedValue({ role: "GESTOR", banned: false });
 		organizationMembershipFindMany.mockResolvedValue([
@@ -237,11 +281,11 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 			organization: { id: "org-1", ownerId: "owner-1" },
 		};
 		stubChain(otherChain);
-		const denied = await resolveResourceScope("gestor-1", {
+		const grantedOther = await resolveResourceScope("gestor-1", {
 			workId: "work-2",
 		});
-		expect(denied.canRead).toBe(false);
-		expect(denied.role).toBeNull();
+		expect(grantedOther.canRead).toBe(true);
+		expect(grantedOther.role).toBe("GESTOR");
 	});
 
 	it("work membership orfa (centro fora dos atribuidos) nao restringe obras do centro", async () => {
@@ -411,7 +455,7 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 			}
 		});
 
-		it("work membership valida restringe portfolio as obras listadas", async () => {
+		it("membership de organizacao do Gestor prevalece sobre work membership", async () => {
 			workFindUnique.mockImplementation(
 				async (args?: {
 					where: { id: string };
@@ -438,18 +482,31 @@ describe("USR-001 matriz de resource scope (DEC-004/DEC-005)", () => {
 				},
 			]);
 			const { paths } = await resolvePortfolioScope("gestor-1");
-			expect(paths.map((p) => p.workId).sort()).toEqual(["work-2"]);
-			const denied = await resolveResourceScope("gestor-1", {
-				workId: "work-1",
-			});
-			expect(denied.canRead).toBe(false);
+			expect(paths.map((p) => p.workId).sort()).toEqual([
+				"work-1",
+				"work-2",
+				"work-3",
+			]);
 			const granted = await resolveResourceScope("gestor-1", {
-				workId: "work-2",
+				workId: "work-1",
 			});
 			expect(granted.canRead).toBe(true);
 		});
 
 		it("work membership orfa nao restringe portfolio", async () => {
+			organizationMembershipFindMany.mockResolvedValue([
+				{
+					organizationId: "org-1",
+					organization: {
+						costCenters: [
+							{
+								id: "cc-1",
+								works: [{ id: "work-1" }, { id: "work-2" }, { id: "work-3" }],
+							},
+						],
+					},
+				},
+			]);
 			workMembershipFindMany.mockResolvedValue([
 				{
 					work: {

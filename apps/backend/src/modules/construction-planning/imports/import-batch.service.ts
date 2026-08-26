@@ -63,8 +63,15 @@ export class ConstructionImportBatchService {
 		private readonly governance: GovernanceMutationGuard = constructionGovernanceGuard,
 	) {}
 
-	private async assertContext(ownerId: string, workId: string) {
-		await getWorkOrThrow(ownerId, workId);
+	private async assertContext(
+		ownerId: string,
+		workId: string,
+		actorId = ownerId,
+	) {
+		// The resource owner is used for persistence and governance records;
+		// the actor is used for the access check so delegated users can import
+		// into a work they are actively assigned to.
+		await getWorkOrThrow(actorId, workId);
 		await this.governance.assertWritable(ownerId, "WORK_IMPORTS", workId);
 	}
 
@@ -77,8 +84,9 @@ export class ConstructionImportBatchService {
 		ownerId: string,
 		workId: string,
 		input: ImportBatchCreateInput,
+		actorId = ownerId,
 	): Promise<ImportPreviewPage> {
-		await this.assertContext(ownerId, workId);
+		await this.assertContext(ownerId, workId, actorId);
 
 		if (!input.fileName.toLowerCase().endsWith(".xlsx")) {
 			throw new ConstructionError(

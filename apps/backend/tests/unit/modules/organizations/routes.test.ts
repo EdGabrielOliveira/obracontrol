@@ -278,11 +278,37 @@ describe("organizationController", () => {
 		expect(response.status).toBe(200);
 		expect(findUser).toHaveBeenCalledWith({
 			where: { id: "owner-1" },
-			select: { role: true, banned: true },
+			select: { role: true, banned: true, workspaceId: true },
 		});
 		expect(listOrganizations).toHaveBeenCalledWith("owner-1", {
 			page: 1,
 			limit: 10,
+		});
+	});
+
+	it("includes the company relationship only for admin organization views", async () => {
+		getSessionUser.mockResolvedValue({ id: "admin-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
+		const { organizationController } = await import(
+			"../../../../src/modules/organizations/routes"
+		);
+
+		const listResponse = await organizationController.handle(
+			new Request("http://localhost/organizations"),
+		);
+		const detailResponse = await organizationController.handle(
+			new Request("http://localhost/organizations/org-1"),
+		);
+
+		expect(listResponse.status).toBe(200);
+		expect(detailResponse.status).toBe(200);
+		expect(listOrganizations).toHaveBeenCalledWith(
+			"admin-1",
+			expect.anything(),
+			{ includeCompany: true },
+		);
+		expect(getOrganizationById).toHaveBeenCalledWith("admin-1", "org-1", {
+			includeCompany: true,
 		});
 	});
 
@@ -318,6 +344,8 @@ describe("organizationController", () => {
 	});
 
 	it("updates an organization", async () => {
+		getSessionUser.mockResolvedValue({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -336,6 +364,28 @@ describe("organizationController", () => {
 		expect(updateOrganization).toHaveBeenCalledWith("owner-1", "org-1", {
 			name: "Rio Grande do Norte Atualizado",
 		});
+	});
+
+	it("blocks organization updates for non-admin roles", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "GERENTE" });
+		const { organizationController } = await import(
+			"../../../../src/modules/organizations/routes"
+		);
+
+		const response = await organizationController.handle(
+			new Request("http://localhost/organizations/org-1", {
+				method: "PATCH",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ name: "Não permitido" }),
+			}),
+		);
+
+		expect(response.status).toBe(403);
+		expect(updateOrganization).not.toHaveBeenCalledWith(
+			"owner-1",
+			"org-1",
+			expect.objectContaining({ name: "Não permitido" }),
+		);
 	});
 
 	it("deletes an organization", async () => {

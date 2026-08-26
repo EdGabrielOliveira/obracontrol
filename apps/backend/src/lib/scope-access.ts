@@ -1,4 +1,4 @@
-import type { ScopeAccessFlags } from "./authorization";
+import { normalizeRole, type ScopeAccessFlags } from "./authorization";
 import { prisma } from "./prisma";
 import { resolvePortfolioScope, resolveResourceScope } from "./resource-scope";
 
@@ -34,18 +34,31 @@ export async function getAccessibleOrgIds(userId: string): Promise<string[]> {
 		where: { id: userId },
 		select: { role: true, banned: true, workspaceId: true },
 	});
-	if (user?.role === "ADMIN") {
+	if (!user || user.banned) return [];
+	const role = normalizeRole(user?.role);
+	if (role === "ADMIN") {
 		const orgs = await prisma.organization.findMany({
-			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
+			where: user?.workspaceId ? { workspaceId: user.workspaceId } : undefined,
 			select: { id: true },
 		});
 		return orgs.map((o) => o.id);
 	}
-	const memberships = await prisma.organizationMembership.findMany({
-		where: { userId, revokedAt: null },
-		select: { organizationId: true },
-	});
-	return [...new Set(memberships.map((m) => m.organizationId))];
+	const [memberships, centerMemberships] = await Promise.all([
+		prisma.organizationMembership.findMany({
+			where: { userId, revokedAt: null },
+			select: { organizationId: true },
+		}),
+		prisma.costCenterMembership.findMany({
+			where: { userId, revokedAt: null },
+			select: { costCenter: { select: { organizationId: true } } },
+		}),
+	]);
+	return [
+		...new Set([
+			...memberships.map((m) => m.organizationId),
+			...centerMemberships.map((m) => m.costCenter.organizationId),
+		]),
+	];
 }
 
 export async function getAccessibleCostCenterIds(
@@ -55,14 +68,16 @@ export async function getAccessibleCostCenterIds(
 		where: { id: userId },
 		select: { role: true, banned: true, workspaceId: true },
 	});
-	if (user?.role === "ADMIN") {
+	if (!user || user.banned) return [];
+	const role = normalizeRole(user?.role);
+	if (role === "ADMIN") {
 		const ccs = await prisma.costCenter.findMany({
-			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
+			where: user?.workspaceId ? { workspaceId: user.workspaceId } : undefined,
 			select: { id: true },
 		});
 		return ccs.map((c) => c.id);
 	}
-	if (user?.role === "GERENTE") {
+	if (role === "GERENTE") {
 		const orgMemberships = await prisma.organizationMembership.findMany({
 			where: { userId, revokedAt: null },
 			select: {
@@ -75,11 +90,29 @@ export async function getAccessibleCostCenterIds(
 		}
 		return [...ccIds];
 	}
-	const ccMemberships = await prisma.costCenterMembership.findMany({
-		where: { userId, revokedAt: null },
-		select: { costCenterId: true },
-	});
-	return [...new Set(ccMemberships.map((m) => m.costCenterId))];
+	const [ccMemberships, orgMemberships] = await Promise.all([
+		prisma.costCenterMembership.findMany({
+			where: { userId, revokedAt: null },
+			select: { costCenterId: true },
+		}),
+		role === "GESTOR"
+			? prisma.organizationMembership.findMany({
+					where: { userId, revokedAt: null },
+					select: {
+						organization: { select: { costCenters: { select: { id: true } } } },
+					},
+				})
+			: Promise.resolve([]),
+	]);
+	const ids = new Set(ccMemberships.map((m) => m.costCenterId));
+	if (role === "GESTOR") {
+		for (const membership of orgMemberships) {
+			for (const costCenter of membership.organization?.costCenters ?? []) {
+				ids.add(costCenter.id);
+			}
+		}
+	}
+	return [...ids];
 }
 
 export async function getUserScopes(userId: string) {

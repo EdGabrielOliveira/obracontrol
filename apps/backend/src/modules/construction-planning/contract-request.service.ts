@@ -455,7 +455,7 @@ export async function getContractRequest(
 	}
 	const request = await contractRequestRepository.findWithItems(
 		prisma,
-		actorId,
+		scope.resourceOwnerId,
 		workId,
 		requestId,
 	);

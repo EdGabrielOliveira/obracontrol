@@ -96,7 +96,9 @@ export const organizationController = new Elysia({
 			const { organizationFilterSchema } = await import("./schema");
 			const parsed = organizationFilterSchema.safeParse(query);
 			const filters = parsed.success ? parsed.data : {};
-			return repo.listOrganizations(user.id, filters);
+			return normalizeRole(user.role) === "ADMIN"
+				? repo.listOrganizations(user.id, filters, { includeCompany: true })
+				: repo.listOrganizations(user.id, filters);
 		},
 		{
 			detail: {
@@ -110,7 +112,12 @@ export const organizationController = new Elysia({
 	.get(
 		"/:id",
 		async ({ params, user }) => {
-			const org = await repo.getOrganizationById(user.id, params.id);
+			const org =
+				normalizeRole(user.role) === "ADMIN"
+					? await repo.getOrganizationById(user.id, params.id, {
+							includeCompany: true,
+						})
+					: await repo.getOrganizationById(user.id, params.id);
 			if (!org) {
 				throw new ConstructionError("NOT_FOUND", "Orgao nao encontrado", 404);
 			}
@@ -420,6 +427,7 @@ export const organizationController = new Elysia({
 	.patch(
 		"/:id",
 		async ({ params, body, user }) => {
+			assertRoleCan(user.role, "admin");
 			const parsed = updateOrganizationSchema.safeParse(body);
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);

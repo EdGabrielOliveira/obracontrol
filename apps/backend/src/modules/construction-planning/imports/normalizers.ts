@@ -82,6 +82,23 @@ export function normalizeDate(value: unknown): Date | null {
 				),
 			);
 		}
+		const brazilianDate = serial.match(/^(\d{1,2})[/.](\d{1,2})[/.]?(\d{4})$/);
+		const compactBrazilianDate = serial.match(/^(\d{2})(\d{2})(\d{4})$/);
+		const parts = brazilianDate ?? compactBrazilianDate;
+		if (parts) {
+			const day = Number(parts[1]);
+			const month = Number(parts[2]);
+			const year = Number(parts[3]);
+			const date = new Date(Date.UTC(year, month - 1, day));
+			if (
+				date.getUTCFullYear() === year &&
+				date.getUTCMonth() === month - 1 &&
+				date.getUTCDate() === day
+			) {
+				return date;
+			}
+			return null;
+		}
 		const parsed = new Date(value);
 		if (!Number.isNaN(parsed.getTime())) {
 			return new Date(

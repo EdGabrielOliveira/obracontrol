@@ -60,8 +60,9 @@ export async function createQuotationMapPreview(
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
+	const resourceOwnerId = scope.resourceOwnerId || actorId;
 	const request = await prisma.contractRequest.findFirst({
-		where: { id: requestId, ownerId: actorId, workId },
+		where: { id: requestId, ownerId: resourceOwnerId, workId },
 		select: { id: true, status: true },
 	});
 	if (!request) {
@@ -80,7 +81,7 @@ export async function createQuotationMapPreview(
 	}
 
 	const page = await constructionImportBatchService.createBatch(
-		actorId,
+		resourceOwnerId,
 		workId,
 		{
 			fileName: file.name,
@@ -88,6 +89,7 @@ export async function createQuotationMapPreview(
 			file: file.stream(),
 			contractRequestId: requestId,
 		},
+		actorId,
 	);
 	return page;
 }
@@ -104,10 +106,11 @@ export async function getQuotationMapPreview(
 	if (!scope.canRead) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
+	const resourceOwnerId = scope.resourceOwnerId || actorId;
 	const batch = await prisma.importBatch.findFirst({
 		where: {
 			id: batchId,
-			ownerId: actorId,
+			ownerId: resourceOwnerId,
 			workId,
 			contractRequestId: requestId,
 			model: "quotation-map",
@@ -122,7 +125,7 @@ export async function getQuotationMapPreview(
 		);
 	}
 	return constructionImportBatchService.getPreviewPage(
-		actorId,
+		resourceOwnerId,
 		workId,
 		batchId,
 		page,
@@ -142,8 +145,9 @@ export async function confirmQuotationMapBatch(
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
+	const resourceOwnerId = scope.resourceOwnerId || actorId;
 	const request = await prisma.contractRequest.findFirst({
-		where: { id: requestId, ownerId: actorId, workId },
+		where: { id: requestId, ownerId: resourceOwnerId, workId },
 		select: { id: true, status: true, confirmedBatchId: true },
 	});
 	if (!request) {
@@ -164,7 +168,7 @@ export async function confirmQuotationMapBatch(
 	const batch = await prisma.importBatch.findFirst({
 		where: {
 			id: batchId,
-			ownerId: actorId,
+			ownerId: resourceOwnerId,
 			workId,
 			contractRequestId: requestId,
 			model: "quotation-map",
@@ -255,7 +259,7 @@ export async function confirmQuotationMapBatch(
 		}
 		const winnerFlag = textValue(values.suggestedWinner);
 		proposals.push({
-			ownerId: actorId,
+			ownerId: resourceOwnerId,
 			workId,
 			batchId,
 			normalizedCnpj,

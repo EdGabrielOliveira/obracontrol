@@ -25,6 +25,7 @@ import { SearchInput } from "@/components/atoms/search-input";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { OrgTable } from "@/organisms/organizations/org-table";
 import { paginationSchema } from "@/schemas/pagination";
@@ -63,6 +64,8 @@ function RouteComponent() {
 	const searchParams = useSearch({ from: Route.id }) as OrganizationFilter;
 	const [searchInput, setSearchInput] = useState(searchParams.q ?? "");
 	const [deleteTarget, setDeleteTarget] = useState<Organization | null>(null);
+	const { role } = useAuth();
+	const canViewCompany = role === "ADMIN";
 
 	const {
 		data: response,
@@ -201,6 +204,7 @@ function RouteComponent() {
 		>
 			<OrgTable
 				organizations={data}
+				showCompany={canViewCompany}
 				searchValue={searchParams.q ?? ""}
 				onSearchChange={(value) => {
 					setSearchInput(value);

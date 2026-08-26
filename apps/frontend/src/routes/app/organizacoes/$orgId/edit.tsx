@@ -16,14 +16,18 @@ import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
+import { AccessDenied } from "@/components/atoms/access-denied";
 import { PageHeader } from "@/components/atoms/page-header";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { OrgForm } from "@/organisms/organizations/org-form";
 import type { CreateOrganizationInput } from "@/types/organizations";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/edit")({
+	beforeLoad: () => requireAuthorizationCapability("canAdministerCompanies"),
 	loader: async ({ params }) =>
 		await queryClient.prefetchQuery({
 			queryKey: organizationKeys.detail(params.orgId),
@@ -43,6 +47,9 @@ function RouteComponent() {
 	const { orgId } = useParams({ from: "/app/organizacoes/$orgId/edit" });
 	const navigate = useNavigate();
 	const client = useQueryClient();
+	const { role, capabilities, loading: authorizationLoading } = useAuth();
+	const canEditOrganization =
+		role === "ADMIN" || capabilities?.canAdministerCompanies === true;
 	const [showDelete, setShowDelete] = useState(false);
 	const query = useQuery({
 		queryKey: organizationKeys.detail(orgId),
@@ -71,6 +78,9 @@ function RouteComponent() {
 			toast.error(getErrorMessage(error, "Erro ao excluir organização.")),
 	});
 
+	if (authorizationLoading)
+		return <LoadingSpinner title="Carregando autorização..." />;
+	if (!canEditOrganization) return <AccessDenied />;
 	if (query.isLoading)
 		return <LoadingSpinner title="Carregando organização..." />;
 	if (query.error || !query.data) return <ErrorFeedback />;

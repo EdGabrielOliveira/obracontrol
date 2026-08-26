@@ -6,6 +6,19 @@ import {
 import type { ImportValidationError } from "../../../../../src/modules/construction-planning/types";
 
 describe("normalizeDate", () => {
+	it("accepts Brazilian and compact Brazilian dates", () => {
+		expect(normalizeDate("26/08/2026")?.toISOString()).toBe(
+			"2026-08-26T00:00:00.000Z",
+		);
+		expect(normalizeDate("26/082026")?.toISOString()).toBe(
+			"2026-08-26T00:00:00.000Z",
+		);
+	});
+
+	it("rejects impossible Brazilian dates", () => {
+		expect(normalizeDate("31/02/2026")).toBeNull();
+	});
+
 	it("converts Excel serial dates even when serialized as numeric text", () => {
 		expect(normalizeDate("46405")?.toISOString()).toBe(
 			"2027-01-18T00:00:00.000Z",

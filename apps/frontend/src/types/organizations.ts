@@ -5,6 +5,7 @@ export type Organization = {
 	id: string;
 	name: string;
 	companyId?: string | null;
+	company?: { id: string; name: string } | null;
 	managerName?: string | null;
 	structuredAddress?: AddressValue | null;
 	createdAt: string;

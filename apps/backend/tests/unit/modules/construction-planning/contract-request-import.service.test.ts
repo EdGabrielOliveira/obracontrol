@@ -76,7 +76,10 @@ const validRow = {
 describe("contract request quotation map import", () => {
 	beforeEach(() => {
 		mock.clearAllMocks();
-		resolveScopeMock.mockResolvedValue({ canWrite: true });
+		resolveScopeMock.mockResolvedValue({
+			canWrite: true,
+			resourceOwnerId: "owner-1",
+		});
 		requestFindFirst.mockResolvedValue({
 			id: "request-1",
 			status: "EM_ESPERA",
@@ -110,13 +113,18 @@ describe("contract request quotation map import", () => {
 		);
 
 		expect(result.batchId).toBe("batch-1");
+		expect(requestFindFirst).toHaveBeenCalledWith({
+			where: { id: "request-1", ownerId: "owner-1", workId: "work-1" },
+			select: { id: true, status: true },
+		});
 		expect(createBatchMock).toHaveBeenCalledWith(
-			"user-1",
+			"owner-1",
 			"work-1",
 			expect.objectContaining({
 				model: "quotation-map",
 				contractRequestId: "request-1",
 			}),
+			"user-1",
 		);
 		expect(importBatchUpdate).not.toHaveBeenCalled();
 	});
@@ -144,6 +152,7 @@ describe("contract request quotation map import", () => {
 		expect(proposalCreateMany).toHaveBeenCalledWith({
 			data: [
 				expect.objectContaining({
+					ownerId: "owner-1",
 					batchId: "batch-1",
 					normalizedCnpj: "11222333000181",
 					supplierName: "Construtora Modelo Ltda.",

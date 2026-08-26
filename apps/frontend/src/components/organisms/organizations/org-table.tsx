@@ -17,6 +17,7 @@ interface OrgTableProps {
 	searchValue?: string;
 	onSearchChange?: (value: string) => void;
 	onDelete?: (organization: Organization) => void;
+	showCompany?: boolean;
 }
 
 const helper = createColumnHelper<Organization>();
@@ -26,6 +27,7 @@ export function OrgTable({
 	searchValue,
 	onSearchChange,
 	onDelete,
+	showCompany = false,
 }: OrgTableProps) {
 	const columns = [
 		helper.accessor("name", {
@@ -42,6 +44,15 @@ export function OrgTable({
 			),
 			meta: { mobileLabel: "Nome" },
 		}),
+		...(showCompany
+			? [
+					helper.accessor((row) => row.company?.name ?? "-", {
+						id: "company",
+						header: "Empresa",
+						meta: { mobileLabel: "Empresa" },
+					}),
+				]
+			: []),
 		helper.accessor((row) => row._count?.costCenters ?? 0, {
 			id: "ccCount",
 			header: "Centros de Custo",

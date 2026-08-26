@@ -65,6 +65,7 @@ export async function createOrganization(
 export async function listOrganizations(
 	ownerId: string,
 	filters: Partial<OrganizationFilter> = {},
+	options: { includeCompany?: boolean } = {},
 ) {
 	const accessibleIds = await getAccessibleOrgIds(ownerId);
 	const where: Prisma.OrganizationWhereInput = { id: { in: accessibleIds } };
@@ -77,7 +78,12 @@ export async function listOrganizations(
 	const [data, total] = await Promise.all([
 		prisma.organization.findMany({
 			where,
-			include: { _count: { select: { costCenters: true } } },
+			include: {
+				_count: { select: { costCenters: true } },
+				...(options.includeCompany
+					? { company: { select: { id: true, name: true } } }
+					: {}),
+			},
 			orderBy: { createdAt: "desc" },
 			skip: (page - 1) * limit,
 			take: limit,
@@ -88,12 +94,23 @@ export async function listOrganizations(
 	return buildPaginatedResponse(data, total, page, limit);
 }
 
-export async function getOrganizationById(ownerId: string, id: string) {
+export async function getOrganizationById(
+	ownerId: string,
+	id: string,
+	options: { includeCompany?: boolean } = {},
+) {
 	const accessibleIds = await getAccessibleOrgIds(ownerId);
 	if (!accessibleIds.includes(id)) return null;
+	const accessibleCostCenterIds = await getAccessibleCostCenterIds(ownerId);
 	return prisma.organization.findFirst({
 		where: { id },
-		include: { costCenters: true, structuredAddress: true },
+		include: {
+			costCenters: { where: { id: { in: accessibleCostCenterIds } } },
+			structuredAddress: true,
+			...(options.includeCompany
+				? { company: { select: { id: true, name: true } } }
+				: {}),
+		},
 	});
 }
 

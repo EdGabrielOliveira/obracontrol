@@ -9,6 +9,10 @@ import type {
 	ContractQuotationSnapshot,
 	ContractService,
 } from "@/types/contracts";
+import {
+	calculateBillingPercentage,
+	calculateContractPlannedTotal,
+} from "@/utils/contract-financials";
 import { formatCurrency, labelFor, SERVICE_TYPE_LABEL } from "@/utils/format";
 
 interface ServicesTabProps {
@@ -29,13 +33,13 @@ export function ServicesTab({
 	quotation,
 }: ServicesTabProps) {
 	const services = externalServices ?? [];
-	const budgetTotal = services.reduce(
-		(sum, service) =>
-			sum + Number(service.budgetItem?.totalCost ?? service.totalCost ?? 0),
-		0,
-	);
+	const budgetTotal = calculateContractPlannedTotal(services);
 	const negotiatedValue = Number(
 		contractValue || quotation?.negotiatedValue || 0,
+	);
+	const billingPercentage = calculateBillingPercentage(
+		negotiatedValue,
+		budgetTotal,
 	);
 	const originalQuotationValue = quotation?.originalProposalValue ?? null;
 	const budgetReductionAmount = budgetTotal - negotiatedValue;
@@ -154,13 +158,26 @@ export function ServicesTab({
 				description="Atividades do orçamento com os custos planejados e o resultado da negociação."
 			/>
 			<CardContent>
-				<div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+				<div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
 					<div className="rounded-lg border bg-muted p-4">
 						<p className="text-xs font-medium text-muted-foreground">
 							Orçamento planejado
 						</p>
 						<p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
 							{formatCurrency(budgetTotal)}
+						</p>
+					</div>
+					<div className="rounded-lg border bg-muted p-4">
+						<p className="text-xs font-medium text-muted-foreground">
+							Faturamento previsto
+						</p>
+						<p className="mt-1 text-xl font-semibold tabular-nums text-foreground">
+							{billingPercentage == null
+								? "-"
+								: `${billingPercentage.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`}
+						</p>
+						<p className="text-xs text-muted-foreground">
+							Contrato negociado ÷ orçamento planejado
 						</p>
 					</div>
 					{originalQuotationValue != null ? (
