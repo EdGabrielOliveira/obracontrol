@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const userScopeSchema = z.object({
+	companyIds: z.array(z.string().min(1)),
 	organizationIds: z.array(z.string().min(1)),
 	costCenterIds: z.array(z.string().min(1)),
 	workIds: z.array(z.string().min(1)),

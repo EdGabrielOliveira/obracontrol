@@ -64,8 +64,9 @@ function RouteComponent() {
 	const searchParams = useSearch({ from: Route.id }) as OrganizationFilter;
 	const [searchInput, setSearchInput] = useState(searchParams.q ?? "");
 	const [deleteTarget, setDeleteTarget] = useState<Organization | null>(null);
-	const { role } = useAuth();
+	const { role, capabilities } = useAuth();
 	const canViewCompany = role === "ADMIN";
+	const canManageStructure = capabilities?.canManageStructure === true;
 
 	const {
 		data: response,
@@ -172,12 +173,14 @@ function RouteComponent() {
 					actions={
 						searchParams.q
 							? undefined
-							: [
-									{
-										label: "Criar órgão",
-										onClick: () => navigate({ to: "/app/organizacoes/new" }),
-									},
-								]
+							: canManageStructure
+								? [
+										{
+											label: "Criar órgão",
+											onClick: () => navigate({ to: "/app/organizacoes/new" }),
+										},
+									]
+								: undefined
 					}
 				/>
 			</PageContainer>
@@ -192,12 +195,14 @@ function RouteComponent() {
 					title="Organizações"
 					description="Órgãos, centros de custo e obras"
 					actions={
-						<Link to="/app/organizacoes/new">
-							<Button>
-								<Plus className="mr-2 h-4 w-4" />
-								Novo órgão
-							</Button>
-						</Link>
+						canManageStructure ? (
+							<Link to="/app/organizacoes/new">
+								<Button>
+									<Plus className="mr-2 h-4 w-4" />
+									Novo órgão
+								</Button>
+							</Link>
+						) : undefined
 					}
 				/>
 			}
@@ -205,6 +210,7 @@ function RouteComponent() {
 			<OrgTable
 				organizations={data}
 				showCompany={canViewCompany}
+				canManageStructure={canManageStructure}
 				searchValue={searchParams.q ?? ""}
 				onSearchChange={(value) => {
 					setSearchInput(value);

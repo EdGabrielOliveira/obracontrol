@@ -173,7 +173,7 @@ describe("GovernanceService", () => {
 		expect(audit.entries).toHaveLength(0);
 	});
 
-	it("does not allow a gerente to reopen a locked record", async () => {
+	it("allows a gerente to reopen a locked record with a reason", async () => {
 		const date = new Date("2026-08-01T12:00:00.000Z");
 		const store = createRepository({
 			id: "governance-1",
@@ -200,7 +200,7 @@ describe("GovernanceService", () => {
 				role: "GERENTE",
 				reason: "Necessita ajuste",
 			}),
-		).rejects.toMatchObject({ code: "GOVERNANCE_OVERRIDE_REQUIRED" });
+		).resolves.toMatchObject({ status: "EM_REVISAO", version: 5 });
 	});
 
 	it("maps a concurrent unique violation to 409 without duplicating the decision", async () => {
@@ -231,10 +231,9 @@ describe("GovernanceService", () => {
 	});
 
 	describe("normalizeGovernanceRole", () => {
-		it("rejects legacy APROVADOR", () => {
+		it("rejects legacy roles without a safe compatibility mapping", () => {
 			expect(() => normalizeGovernanceRole("APROVADOR")).toThrow();
 			expect(() => normalizeGovernanceRole("VISUALIZADOR")).toThrow();
-			expect(() => normalizeGovernanceRole("OPERADOR")).toThrow();
 		});
 
 		it("keeps ADMIN, GERENTE, GESTOR and SUPERVISOR", () => {
@@ -250,7 +249,8 @@ describe("GovernanceService", () => {
 			expect(() => normalizeGovernanceRole(undefined)).toThrow();
 		});
 
-		it("maps legacy OPERADOR to SUPERVISOR in measurement roles", () => {
+		it("maps legacy OPERADOR to SUPERVISOR in governance and measurement roles", () => {
+			expect(normalizeGovernanceRole("OPERADOR")).toBe("SUPERVISOR");
 			expect(normalizeMeasurementRole("OPERADOR")).toBe("SUPERVISOR");
 			expect(normalizeMeasurementRole("GESTOR")).toBe("GESTOR");
 		});

@@ -51,8 +51,8 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/")({
 function RouteComponent() {
 	const { orgId } = useParams({ from: "/app/organizacoes/$orgId/" });
 	const { role, capabilities } = useAuth();
-	const canEditOrganization =
-		role === "ADMIN" || capabilities?.canAdministerCompanies === true;
+	const canEditOrganization = capabilities?.canManageStructure === true;
+	const canManageStructure = capabilities?.canManageStructure === true;
 	const canViewManagement = role !== "SUPERVISOR";
 	const searchParams = useSearch({ from: Route.id });
 	const navigate = Route.useNavigate();
@@ -127,21 +127,26 @@ function RouteComponent() {
 									</Link>
 								</>
 							) : null}
-							<Link
-								to="/app/centros-de-custo/new"
-								search={{ organizationId: orgId }}
-							>
-								<Button size="sm">
-									<Plus className="mr-2 h-4 w-4" />
-									Novo Centro
-								</Button>
-							</Link>
+							{canManageStructure ? (
+								<Link
+									to="/app/centros-de-custo/new"
+									search={{ organizationId: orgId }}
+								>
+									<Button size="sm">
+										<Plus className="mr-2 h-4 w-4" />
+										Novo Centro
+									</Button>
+								</Link>
+							) : null}
 						</>
 					}
 				/>
 			}
 		>
-			<CostCenterTable costCenters={centerList} />
+			<CostCenterTable
+				costCenters={centerList}
+				canManageStructure={canManageStructure}
+			/>
 			{paginationMeta && (
 				<PaginationBar
 					meta={paginationMeta}

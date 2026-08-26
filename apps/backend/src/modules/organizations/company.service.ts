@@ -98,6 +98,7 @@ export type CompanyView = {
 export type CompanyAccess = {
 	canAccessAllCompanies?: boolean;
 	workspaceId?: string;
+	companyIds?: string[];
 };
 
 function companyWhere(ownerId: string, access?: CompanyAccess) {
@@ -105,7 +106,12 @@ function companyWhere(ownerId: string, access?: CompanyAccess) {
 		? access.workspaceId
 			? { workspaceId: access.workspaceId }
 			: {}
-		: { ownerId };
+		: access?.companyIds
+			? {
+					id: { in: access.companyIds },
+					...(access.workspaceId ? { workspaceId: access.workspaceId } : {}),
+				}
+			: { ownerId };
 }
 
 function toView(row: {
@@ -406,7 +412,10 @@ export const companyService = {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
 		}
 		const result = await prisma.organization.updateMany({
-			where: { id: organizationId, ...companyWhere(ownerId, access) },
+			where: {
+				id: organizationId,
+				workspaceId: company.workspaceId,
+			},
 			data: { companyId },
 		});
 		if (result.count === 0) {

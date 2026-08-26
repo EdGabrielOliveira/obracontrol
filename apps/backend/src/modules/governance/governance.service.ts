@@ -1,4 +1,5 @@
 import type { GovernanceRecord, Prisma } from "@prisma/client";
+import { normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import {
@@ -113,13 +114,14 @@ function toView(
 export function normalizeGovernanceRole(
 	role: string | null | undefined,
 ): GovernanceRole {
+	const normalized = normalizeRole(role);
 	if (
-		role === "ADMIN" ||
-		role === "GERENTE" ||
-		role === "GESTOR" ||
-		role === "SUPERVISOR"
+		normalized === "ADMIN" ||
+		normalized === "GERENTE" ||
+		normalized === "GESTOR" ||
+		normalized === "SUPERVISOR"
 	) {
-		return role;
+		return normalized;
 	}
 	throw new ConstructionError(
 		"FORBIDDEN",
@@ -133,7 +135,6 @@ export type MeasurementActorRole = GovernanceRole;
 export function normalizeMeasurementRole(
 	role: string | null | undefined,
 ): MeasurementActorRole {
-	if ((role ?? "").trim().toUpperCase() === "OPERADOR") return "SUPERVISOR";
 	return normalizeGovernanceRole(role);
 }
 

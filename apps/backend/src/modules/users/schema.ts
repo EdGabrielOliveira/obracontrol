@@ -10,10 +10,12 @@ export const membershipRoles = [
 export const membershipRoleSchema = z.enum(membershipRoles);
 
 const organizationIdsSchema = z.array(z.string().min(1)).default([]);
+const companyIdsSchema = z.array(z.string().min(1)).optional();
 const costCenterIdsSchema = z.array(z.string().min(1)).default([]);
 const workIdsSchema = z.array(z.string().min(1)).default([]);
 
 export const userScopeInputSchema = z.object({
+	companyIds: companyIdsSchema,
 	organizationIds: organizationIdsSchema,
 	costCenterIds: costCenterIdsSchema,
 	workIds: workIdsSchema,

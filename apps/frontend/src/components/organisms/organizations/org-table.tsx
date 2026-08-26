@@ -18,6 +18,7 @@ interface OrgTableProps {
 	onSearchChange?: (value: string) => void;
 	onDelete?: (organization: Organization) => void;
 	showCompany?: boolean;
+	canManageStructure?: boolean;
 }
 
 const helper = createColumnHelper<Organization>();
@@ -28,6 +29,7 @@ export function OrgTable({
 	onSearchChange,
 	onDelete,
 	showCompany = false,
+	canManageStructure = true,
 }: OrgTableProps) {
 	const columns = [
 		helper.accessor("name", {
@@ -88,13 +90,15 @@ export function OrgTable({
 								to: "/app/organizacoes/$orgId/multicentros",
 								params: { orgId },
 							},
-							{
-								label: "Cadastrar centro",
-								icon: <Plus className="h-4 w-4" />,
-								to: "/app/organizacoes/$orgId",
-								params: { orgId },
-								search: { createCostCenter: true },
-							},
+							canManageStructure
+								? {
+										label: "Cadastrar centro",
+										icon: <Plus className="h-4 w-4" />,
+										to: "/app/organizacoes/$orgId",
+										params: { orgId },
+										search: { createCostCenter: true },
+									}
+								: null,
 							onDelete
 								? {
 										label: "Excluir organização",

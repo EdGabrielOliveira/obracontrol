@@ -19,8 +19,9 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
 import Decimal from "decimal.js";
+import type { PrismaClient } from "../../generated/prisma/client";
+import { createLocalPrisma } from "../../src/lib/prisma-local";
 
 export const PREFLIGHT_REPORT_VERSION = "1";
 
@@ -328,6 +329,42 @@ async function collectOwnerMismatches(prisma: PrismaClient) {
 	return rows;
 }
 
+/** Concessoes de empresa devem ser exclusivas de Gerentes no mesmo workspace. */
+async function collectInvalidCompanyMemberships(prisma: PrismaClient) {
+	const memberships = await prisma.companyMembership.findMany({
+		where: { revokedAt: null },
+		select: {
+			id: true,
+			companyId: true,
+			userId: true,
+			role: true,
+			company: { select: { workspaceId: true } },
+			user: { select: { role: true, workspaceId: true } },
+		},
+		orderBy: { id: "asc" },
+	});
+	return memberships
+		.filter((membership) => {
+			const roleInvalid =
+				membership.role !== "GERENTE" || membership.user.role !== "GERENTE";
+			const workspaceInvalid =
+				membership.company.workspaceId !== null &&
+				membership.user.workspaceId !== null &&
+				membership.company.workspaceId !== membership.user.workspaceId;
+			return roleInvalid || workspaceInvalid;
+		})
+		.map((membership) => ({
+			id: membership.id,
+			membershipId: membership.id,
+			companyId: membership.companyId,
+			userId: membership.userId,
+			membershipRole: membership.role,
+			userRole: membership.user.role,
+			companyWorkspaceId: membership.company.workspaceId,
+			userWorkspaceId: membership.user.workspaceId,
+		}));
+}
+
 async function collectOriginContractAnomalies(prisma: PrismaClient) {
 	const quotationsWithContract = await prisma.quotation.findMany({
 		where: { contractId: { not: null } },
@@ -452,6 +489,12 @@ export async function runAuditRemediationPreflight(
 			await collectOwnerMismatches(prisma),
 		),
 		section(
+			"invalidCompanyMemberships",
+			"Concessoes de empresa invalidas (papel ou workspace divergente)",
+			true,
+			await collectInvalidCompanyMemberships(prisma),
+		),
+		section(
 			"originContractAnomalies",
 			"Cotacoes/solicitacoes com mais de um contrato resultante ou contrato com multiplas origens",
 			true,
@@ -512,6 +555,15 @@ const CSV_HEADERS: Record<string, string[]> = {
 		"resourceOwnerId",
 		"workOwnerId",
 	],
+	invalidCompanyMemberships: [
+		"membershipId",
+		"companyId",
+		"userId",
+		"membershipRole",
+		"userRole",
+		"companyWorkspaceId",
+		"userWorkspaceId",
+	],
 	originContractAnomalies: [
 		"originType",
 		"originId",
@@ -562,7 +614,7 @@ async function main() {
 			? args[outDirIndex + 1]
 			: "preflight-output";
 
-	const prisma = new PrismaClient();
+	const prisma = createLocalPrisma();
 	try {
 		const report = await runAuditRemediationPreflight({ prisma });
 		process.stdout.write(`${serializeReportJson(report)}\n`);

@@ -4,6 +4,7 @@ import {
 	assertRoleCan,
 	canPerformRoleAction,
 	isAuthorizationRole,
+	normalizeRole,
 	roleToScopeAccess,
 } from "../../../src/lib/authorization";
 import { ConstructionError } from "../../../src/lib/errors";
@@ -28,9 +29,9 @@ describe("authorization", () => {
 		["SUPERVISOR", "write", true],
 		["SUPERVISOR", "approve", false],
 		["SUPERVISOR", "admin", false],
-		// Roles legados nao sao aceitos apos a migracao.
-		["OPERADOR", "read", false],
-		["OPERADOR", "write", false],
+		// OPERADOR legado preserva somente a autoridade de SUPERVISOR.
+		["OPERADOR", "read", true],
+		["OPERADOR", "write", true],
 		["APROVADOR", "read", false],
 		["APROVADOR", "approve", false],
 		["VISUALIZADOR", "read", false],
@@ -55,14 +56,14 @@ describe("authorization", () => {
 		expect(isAuthorizationRole("GERENTE")).toBe(true);
 		expect(isAuthorizationRole("GESTOR")).toBe(true);
 		expect(isAuthorizationRole("SUPERVISOR")).toBe(true);
-		expect(isAuthorizationRole("OPERADOR")).toBe(false);
+		expect(isAuthorizationRole("OPERADOR")).toBe(true);
 		expect(isAuthorizationRole("APROVADOR")).toBe(false);
 		expect(isAuthorizationRole("VISUALIZADOR")).toBe(false);
 		expect(isAuthorizationRole("")).toBe(false);
 		expect(isAuthorizationRole(null)).toBe(false);
 	});
 
-	it("maps scope access flags from the final role only", () => {
+	it("maps scope access flags from final roles and the safe legacy alias", () => {
 		expect(roleToScopeAccess("GESTOR")).toMatchObject({
 			canRead: true,
 			canWrite: true,
@@ -77,11 +78,16 @@ describe("authorization", () => {
 			canAdmin: false,
 		});
 		expect(roleToScopeAccess("OPERADOR")).toMatchObject({
-			canRead: false,
-			canWrite: false,
+			canRead: true,
+			canWrite: true,
 			canApprove: false,
 			canAdmin: false,
 		});
+	});
+
+	it("normalizes legacy OPERADOR without changing unmapped roles", () => {
+		expect(normalizeRole(" operador ")).toBe("SUPERVISOR");
+		expect(normalizeRole("APROVADOR")).toBe("APROVADOR");
 	});
 
 	it("throws ConstructionError when role cannot perform action", () => {

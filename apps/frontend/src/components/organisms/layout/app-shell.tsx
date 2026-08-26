@@ -212,7 +212,7 @@ export function buildNavGroups(): NavGroup[] {
 					to: "/app/empresas",
 					icon: Building,
 					matches: (p: string) => p.startsWith("/app/empresas"),
-					adminOnly: true,
+					requiredCapability: "canManageScopedCompanies",
 				},
 				{
 					label: "Usuários",

@@ -229,7 +229,7 @@ export class ContractService {
 
 	/**
 	 * DEC-005 (USR-002): criacao de contrato e comando relevante. SUPERVISOR
-	 * e GESTOR geram solicitacao PENDING (sem efeito); GERENTE/ADMIN executam
+	 * gera solicitacao PENDING (sem efeito); GESTOR, GERENTE e ADMIN executam
 	 * o efeito direto (handler CONTRACT_CREATE) na mesma transacao.
 	 */
 	async createContract(

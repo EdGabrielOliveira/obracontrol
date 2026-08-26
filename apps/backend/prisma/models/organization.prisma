@@ -21,6 +21,7 @@ model Company {
   updatedAt               DateTime @updatedAt
 
   organizations     Organization[]
+  memberships       CompanyMembership[]
   workspace          Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   structuredAddress Address?       @relation(fields: [structuredAddressId], references: [id], onDelete: SetNull)
 

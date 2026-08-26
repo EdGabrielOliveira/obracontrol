@@ -34,7 +34,7 @@ import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/empresas/$companyId/")({
-	beforeLoad: () => requireAuthorizationCapability("canAdministerCompanies"),
+	beforeLoad: () => requireAuthorizationCapability("canManageScopedCompanies"),
 	loader: ({ params }) => {
 		void queryClient.prefetchQuery({
 			queryKey: companyKeys.detail(params.companyId),
@@ -91,7 +91,7 @@ function RouteComponent() {
 			toast.error(getErrorMessage(error, "Erro ao excluir empresa.")),
 	});
 	if (loading) return <LoadingSpinner title="Carregando autorização..." />;
-	if (!capabilities?.canAdministerCompanies) return <AccessDenied />;
+	if (!capabilities?.canManageScopedCompanies) return <AccessDenied />;
 	if (query.isLoading) return <LoadingSpinner title="Carregando empresa..." />;
 	if (query.error || !query.data)
 		return <ErrorFeedback onRetry={() => query.refetch()} />;

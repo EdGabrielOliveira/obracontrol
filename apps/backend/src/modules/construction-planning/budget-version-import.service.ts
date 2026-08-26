@@ -197,8 +197,9 @@ export async function createBudgetVersionImport(
 		);
 	}
 
+	const resourceOwnerId = scope.resourceOwnerId;
 	const page = await constructionImportBatchService.createBatch(
-		actorId,
+		resourceOwnerId,
 		workId,
 		{
 			fileName: input.file.name,
@@ -211,7 +212,7 @@ export async function createBudgetVersionImport(
 		},
 	);
 	const batch = await prisma.importBatch.findFirst({
-		where: { id: page.batchId, ownerId: actorId, workId },
+		where: { id: page.batchId, ownerId: resourceOwnerId, workId },
 		select: { parsedWorkbook: true },
 	});
 	if (!batch?.parsedWorkbook || typeof batch.parsedWorkbook !== "object") {
@@ -223,7 +224,7 @@ export async function createBudgetVersionImport(
 	}
 
 	const active = await prisma.budgetVersion.findFirst({
-		where: { ownerId: actorId, workId, isActive: true },
+		where: { ownerId: resourceOwnerId, workId, isActive: true },
 		include: { items: true },
 	});
 	const sourceItems = active ? sourceSnapshotItems(active.items) : [];
@@ -327,11 +328,12 @@ export async function getBudgetVersionImportPreview(
 	if (!scope.canRead) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
+	const resourceOwnerId = scope.resourceOwnerId;
 
 	const batch = await prisma.importBatch.findFirst({
 		where: {
 			id: importId,
-			ownerId: actorId,
+			ownerId: resourceOwnerId,
 			workId,
 			model: "orcamento-aditivo",
 		},
@@ -365,7 +367,7 @@ export async function getBudgetVersionImportPreview(
 		comparison = persisted.comparison;
 	} else {
 		const active = await prisma.budgetVersion.findFirst({
-			where: { ownerId: actorId, workId, isActive: true },
+			where: { ownerId: resourceOwnerId, workId, isActive: true },
 			include: { items: true },
 		});
 		const sourceItems = active ? sourceSnapshotItems(active.items) : [];
@@ -433,10 +435,11 @@ export async function confirmBudgetVersionImport(
 	const scope = await resolveResourceScope(actorId, { workId });
 	if (!scope.canWrite)
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+	const resourceOwnerId = scope.resourceOwnerId;
 	const batch = await prisma.importBatch.findFirst({
 		where: {
 			id: importId,
-			ownerId: actorId,
+			ownerId: resourceOwnerId,
 			workId,
 			model: "orcamento-aditivo",
 		},
@@ -460,7 +463,7 @@ export async function confirmBudgetVersionImport(
 		const confirmed = await prisma.budgetVersion.findFirst({
 			where: {
 				id: batch.confirmedImportId,
-				ownerId: actorId,
+				ownerId: resourceOwnerId,
 				workId,
 			},
 		});
@@ -493,7 +496,7 @@ export async function confirmBudgetVersionImport(
 	}
 
 	const active = await prisma.budgetVersion.findFirst({
-		where: { ownerId: actorId, workId, isActive: true },
+		where: { ownerId: resourceOwnerId, workId, isActive: true },
 		include: { items: true },
 	});
 	if ((input.expectedSourceVersionId ?? null) !== (active?.id ?? null)) {
@@ -518,18 +521,22 @@ export async function confirmBudgetVersionImport(
 			422,
 		);
 	}
-	const draft = await createDraftBudgetVersionFromSnapshot(actorId, workId, {
-		label: batch.title ?? "Aditivo importado",
-		sourceVersionId: active?.id ?? null,
-		budgetImportId: importId,
-		items: candidate,
-		impact: {
-			grossIncrease: new Decimal(comparison.grossIncrease),
-			suppression: new Decimal(comparison.suppression),
-			netImpact: new Decimal(comparison.netImpact),
-			impactPercent: new Decimal(comparison.impactPercent),
+	const draft = await createDraftBudgetVersionFromSnapshot(
+		resourceOwnerId,
+		workId,
+		{
+			label: batch.title ?? "Aditivo importado",
+			sourceVersionId: active?.id ?? null,
+			budgetImportId: importId,
+			items: candidate,
+			impact: {
+				grossIncrease: new Decimal(comparison.grossIncrease),
+				suppression: new Decimal(comparison.suppression),
+				netImpact: new Decimal(comparison.netImpact),
+				impactPercent: new Decimal(comparison.impactPercent),
+			},
 		},
-	});
+	);
 	await prisma.importBatch.update({
 		where: { id: importId },
 		data: {

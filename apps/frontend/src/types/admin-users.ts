@@ -23,6 +23,13 @@ export type AdminUser = {
 		revokedAt: string | null;
 		organization: { name: string } | null;
 	}>;
+	companyMemberships: Array<{
+		id: string;
+		companyId: string;
+		role: string;
+		revokedAt: string | null;
+		company: { name: string } | null;
+	}>;
 	costCenterMemberships: Array<{
 		id: string;
 		costCenterId: string;
@@ -40,6 +47,7 @@ export type AdminUser = {
 };
 
 export type UserScopeInput = {
+	companyIds?: string[];
 	organizationIds: string[];
 	costCenterIds: string[];
 	workIds: string[];

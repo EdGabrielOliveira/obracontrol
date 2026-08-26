@@ -26,11 +26,121 @@ import {
 function companyAccessFor(
 	role: string | null | undefined,
 	workspaceId?: string | null,
+	companyIds?: string[],
 ) {
 	return {
 		canAccessAllCompanies: normalizeRole(role) === "ADMIN",
 		workspaceId: workspaceId ?? undefined,
+		companyIds:
+			companyIds ?? (normalizeRole(role) === "ADMIN" ? undefined : []),
 	};
+}
+
+async function companyAccessForUser(user: {
+	id: string;
+	role?: string | null;
+	workspaceId?: string | null;
+}) {
+	if (normalizeRole(user.role) === "ADMIN")
+		return companyAccessFor(user.role, user.workspaceId);
+	if (normalizeRole(user.role) !== "GERENTE")
+		return companyAccessFor(user.role, user.workspaceId);
+	const [memberships, organizationMemberships] = await Promise.all([
+		prisma.companyMembership.findMany({
+			where: {
+				userId: user.id,
+				revokedAt: null,
+				company: user.workspaceId
+					? { workspaceId: user.workspaceId }
+					: { workspaceId: null },
+			},
+			select: { companyId: true },
+		}),
+		prisma.organizationMembership.findMany({
+			where: {
+				userId: user.id,
+				revokedAt: null,
+				organization: user.workspaceId
+					? { workspaceId: user.workspaceId }
+					: { workspaceId: null },
+			},
+			select: { organization: { select: { companyId: true } } },
+		}),
+	]);
+	return companyAccessFor(user.role, user.workspaceId, [
+		...new Set([
+			...memberships.map((m) => m.companyId),
+			...organizationMemberships.flatMap((m) =>
+				m.organization.companyId ? [m.organization.companyId] : [],
+			),
+		]),
+	]);
+}
+
+async function assertCompanyManagement(
+	user: { id: string; role?: string | null; workspaceId?: string | null },
+	companyId: string,
+) {
+	if (normalizeRole(user.role) === "ADMIN") return;
+	if (normalizeRole(user.role) !== "GERENTE") {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Somente Admin ou Gerente do escopo podem administrar a empresa",
+			403,
+		);
+	}
+	const company = await prisma.company.findFirst({
+		where: {
+			id: companyId,
+			workspaceId: user.workspaceId ?? null,
+		},
+		select: { organizations: { select: { id: true } } },
+	});
+	if (!company)
+		throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
+	const directMembership = await prisma.companyMembership.findFirst({
+		where: { companyId, userId: user.id, revokedAt: null },
+		select: { id: true },
+	});
+	if (directMembership) return;
+	for (const organization of company.organizations) {
+		const scope = await resolveResourceScope(user.id, {
+			organizationId: organization.id,
+		});
+		if (scope.canWrite) return;
+	}
+	throw new ConstructionError(
+		"FORBIDDEN",
+		"Empresa fora do escopo do Gerente",
+		403,
+	);
+}
+
+function assertStructuralRole(role: string | null | undefined) {
+	const normalized = normalizeRole(role);
+	if (normalized === "SUPERVISOR") {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Supervisor nao pode alterar a estrutura",
+			403,
+		);
+	}
+}
+
+async function assertOrganizationCreation(
+	user: { id: string; role?: string | null },
+	companyId?: string,
+) {
+	const role = normalizeRole(user.role);
+	if (role === "ADMIN") return;
+	if (role !== "GERENTE" || !companyId) {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Somente Admin ou Gerente do escopo podem criar organizacoes",
+			403,
+		);
+	}
+	await assertCompanyManagement(user, companyId);
 }
 
 export const organizationController = new Elysia({
@@ -330,6 +440,7 @@ export const organizationController = new Elysia({
 	.patch(
 		"/cost-centers/:ccId",
 		async ({ params, body, user }) => {
+			assertStructuralRole(user.role);
 			const { updateCostCenterSchema } = await import("./schema");
 			const parsed = updateCostCenterSchema.safeParse(body);
 			if (!parsed.success)
@@ -350,7 +461,7 @@ export const organizationController = new Elysia({
 				);
 			auditService.log({
 				userId: user.id,
-				ownerId: user.id,
+				ownerId: (cc as { ownerId?: string }).ownerId ?? user.id,
 				action: "UPDATE",
 				entityType: "COST_CENTER",
 				entityId: params.ccId,
@@ -373,6 +484,7 @@ export const organizationController = new Elysia({
 	.delete(
 		"/cost-centers/:ccId",
 		async ({ params, user }) => {
+			assertStructuralRole(user.role);
 			const old = await prisma.costCenter.findUnique({
 				where: { id: params.ccId },
 			});
@@ -386,7 +498,7 @@ export const organizationController = new Elysia({
 			if (old) {
 				auditService.log({
 					userId: user.id,
-					ownerId: user.id,
+					ownerId: (old as { ownerId?: string }).ownerId ?? user.id,
 					action: "DELETE",
 					entityType: "COST_CENTER",
 					entityId: params.ccId,
@@ -405,11 +517,12 @@ export const organizationController = new Elysia({
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
 			}
+			await assertOrganizationCreation(user, parsed.data.companyId);
 			const org = await repo.createOrganization(user.id, parsed.data);
 			if (org) {
 				auditService.log({
 					userId: user.id,
-					ownerId: user.id,
+					ownerId: (org as { ownerId?: string }).ownerId ?? user.id,
 					action: "CREATE",
 					entityType: "ORGANIZATION",
 					entityId: (org as { id: string }).id,
@@ -427,10 +540,30 @@ export const organizationController = new Elysia({
 	.patch(
 		"/:id",
 		async ({ params, body, user }) => {
-			assertRoleCan(user.role, "admin");
+			assertStructuralRole(user.role);
+			const scope = await resolveResourceScope(user.id, {
+				organizationId: params.id,
+			});
+			if (!scope.canWrite)
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Organizacao fora do escopo",
+					403,
+				);
 			const parsed = updateOrganizationSchema.safeParse(body);
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
+			}
+			if (parsed.data.companyId !== undefined) {
+				if (normalizeRole(user.role) === "GERENTE" && parsed.data.companyId) {
+					await assertCompanyManagement(user, parsed.data.companyId);
+				} else if (normalizeRole(user.role) !== "ADMIN") {
+					throw new ConstructionError(
+						"FORBIDDEN",
+						"Somente Admin ou Gerente do escopo podem alterar o vinculo da organizacao",
+						403,
+					);
+				}
 			}
 			const previous = await prisma.organization.findUnique({
 				where: { id: params.id },
@@ -445,7 +578,7 @@ export const organizationController = new Elysia({
 			}
 			auditService.log({
 				userId: user.id,
-				ownerId: user.id,
+				ownerId: scope.resourceOwnerId,
 				action: "UPDATE",
 				entityType: "ORGANIZATION",
 				entityId: params.id,
@@ -468,6 +601,16 @@ export const organizationController = new Elysia({
 	.delete(
 		"/:id",
 		async ({ params, user }) => {
+			assertStructuralRole(user.role);
+			const scope = await resolveResourceScope(user.id, {
+				organizationId: params.id,
+			});
+			if (!scope.canWrite)
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Organizacao fora do escopo",
+					403,
+				);
 			const old = await prisma.organization.findUnique({
 				where: { id: params.id },
 			});
@@ -478,7 +621,7 @@ export const organizationController = new Elysia({
 			if (old) {
 				auditService.log({
 					userId: user.id,
-					ownerId: user.id,
+					ownerId: scope.resourceOwnerId,
 					action: "DELETE",
 					entityType: "ORGANIZATION",
 					entityId: params.id,
@@ -493,6 +636,16 @@ export const organizationController = new Elysia({
 	.post(
 		"/:id/cost-centers",
 		async ({ params, body, user }) => {
+			assertStructuralRole(user.role);
+			const scope = await resolveResourceScope(user.id, {
+				organizationId: params.id,
+			});
+			if (!scope.canWrite)
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Organizacao fora do escopo",
+					403,
+				);
 			const parsed = createCostCenterSchema.safeParse(body);
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
@@ -505,7 +658,7 @@ export const organizationController = new Elysia({
 			if (cc) {
 				auditService.log({
 					userId: user.id,
-					ownerId: user.id,
+					ownerId: scope.resourceOwnerId,
 					action: "CREATE",
 					entityType: "COST_CENTER",
 					entityId: (cc as { id: string }).id,
@@ -523,6 +676,16 @@ export const organizationController = new Elysia({
 	.patch(
 		"/:id/cost-centers/:ccId",
 		async ({ params, body, user }) => {
+			assertStructuralRole(user.role);
+			const scope = await resolveResourceScope(user.id, {
+				costCenterId: params.ccId,
+			});
+			if (!scope.canWrite)
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Centro de custo fora do escopo",
+					403,
+				);
 			const parsed = updateCostCenterSchema.safeParse(body);
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
@@ -545,7 +708,7 @@ export const organizationController = new Elysia({
 			}
 			auditService.log({
 				userId: user.id,
-				ownerId: user.id,
+				ownerId: scope.resourceOwnerId,
 				action: "UPDATE",
 				entityType: "COST_CENTER",
 				entityId: params.ccId,
@@ -568,6 +731,16 @@ export const organizationController = new Elysia({
 	.delete(
 		"/:id/cost-centers/:ccId",
 		async ({ params, user }) => {
+			assertStructuralRole(user.role);
+			const scope = await resolveResourceScope(user.id, {
+				costCenterId: params.ccId,
+			});
+			if (!scope.canWrite)
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Centro de custo fora do escopo",
+					403,
+				);
 			const old = await prisma.costCenter.findUnique({
 				where: { id: params.ccId },
 			});
@@ -582,7 +755,7 @@ export const organizationController = new Elysia({
 			if (old) {
 				auditService.log({
 					userId: user.id,
-					ownerId: user.id,
+					ownerId: scope.resourceOwnerId,
 					action: "DELETE",
 					entityType: "COST_CENTER",
 					entityId: params.ccId,
@@ -595,16 +768,13 @@ export const organizationController = new Elysia({
 		{ detail: { tags: ["Organizations"] } },
 	)
 	// EMP-003 (DEC-013): Empresa (tenant acima de Organization).
-	// DEC-005: somente ADMIN cria, edita, exclui, vincula ou envia modelo de
-	// contrato; a leitura permanece disponivel para demais papeis.
+	// DEC-005: ADMIN possui escopo global; GERENTE administra empresas do seu
+	// escopo. A leitura permanece disponível para os demais papéis.
 	.use(requireRole("read"))
 	.get(
 		"/companies",
 		async ({ user }) =>
-			companyService.list(
-				user.id,
-				companyAccessFor(user.role, user.workspaceId),
-			),
+			companyService.list(user.id, await companyAccessForUser(user)),
 		{
 			detail: {
 				tags: ["Companies"],
@@ -740,7 +910,7 @@ export const organizationController = new Elysia({
 			companyService.get(
 				user.id,
 				params.companyId,
-				companyAccessFor(user.role, user.workspaceId),
+				await companyAccessForUser(user),
 			),
 		{
 			detail: {
@@ -754,12 +924,12 @@ export const organizationController = new Elysia({
 	.patch(
 		"/companies/:companyId",
 		async ({ params, body, user }) => {
-			assertRoleCan(user.role, "admin");
+			await assertCompanyManagement(user, params.companyId);
 			return companyService.update(
 				user.id,
 				params.companyId,
 				body,
-				companyAccessFor(user.role, user.workspaceId),
+				await companyAccessForUser(user),
 			);
 		},
 		{
@@ -799,11 +969,11 @@ export const organizationController = new Elysia({
 	.delete(
 		"/companies/:companyId",
 		async ({ params, user }) => {
-			assertRoleCan(user.role, "admin");
+			await assertCompanyManagement(user, params.companyId);
 			await companyService.delete(
 				user.id,
 				params.companyId,
-				companyAccessFor(user.role, user.workspaceId),
+				await companyAccessForUser(user),
 			);
 			return new Response(null, { status: 204 });
 		},
@@ -819,12 +989,12 @@ export const organizationController = new Elysia({
 	.post(
 		"/companies/:companyId/link/:orgId",
 		async ({ params, user }) => {
-			assertRoleCan(user.role, "admin");
+			await assertCompanyManagement(user, params.companyId);
 			return companyService.linkOrganization(
 				user.id,
 				params.companyId,
 				params.orgId,
-				companyAccessFor(user.role, user.workspaceId),
+				await companyAccessForUser(user),
 			);
 		},
 		{
@@ -839,7 +1009,7 @@ export const organizationController = new Elysia({
 	.post(
 		"/companies/:companyId/template",
 		async ({ params, body, user }) => {
-			assertRoleCan(user.role, "admin");
+			await assertCompanyManagement(user, params.companyId);
 			if (!body.file) {
 				throw new ConstructionError("MISSING_FILE", "Arquivo obrigatorio", 400);
 			}
@@ -847,7 +1017,7 @@ export const organizationController = new Elysia({
 				user.id,
 				params.companyId,
 				body.file,
-				companyAccessFor(user.role, user.workspaceId),
+				await companyAccessForUser(user),
 			);
 		},
 		{

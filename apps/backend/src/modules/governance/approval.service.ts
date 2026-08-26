@@ -1,9 +1,13 @@
 import { Prisma } from "../../../generated/prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
-import type { AuthorizationRole } from "../../lib/authorization";
+import { type AuthorizationRole, normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { resolveResourceScope } from "../../lib/resource-scope";
+import {
+	getAccessibleCostCenterIds,
+	getAccessibleOrgIds,
+} from "../../lib/scope-access";
 import { withSerializableRetry } from "../../lib/transaction-retry";
 import type {
 	ApprovalDecisionMode,
@@ -131,7 +135,8 @@ export async function submitApproval<T>(
 	if (!actorRole) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	const isTrustedRole = actorRole === "ADMIN" || actorRole === "GERENTE";
+	const isTrustedRole =
+		actorRole === "ADMIN" || actorRole === "GERENTE" || actorRole === "GESTOR";
 
 	const payloadHash = hashApprovalPayload(input.payload);
 	const existing = await prisma.approvalRequest.findUnique({
@@ -383,28 +388,38 @@ async function notifyEligibleApprovers(input: {
 	scope: { path: { organizationId: string; costCenterId: string | null } };
 	requiredApproverRole: "GERENTE" | "GESTOR";
 }) {
-	const [organizationMembers, costCenterMembers, admins] = await Promise.all([
-		prisma.organizationMembership.findMany({
-			where: {
-				organizationId: input.scope.path.organizationId,
-				revokedAt: null,
-			},
-			select: { userId: true, user: { select: { role: true } } },
-		}),
-		input.scope.path.costCenterId
-			? prisma.costCenterMembership.findMany({
-					where: {
-						costCenterId: input.scope.path.costCenterId,
-						revokedAt: null,
+	const [organizationMembers, costCenterMembers, companyMembers, admins] =
+		await Promise.all([
+			prisma.organizationMembership.findMany({
+				where: {
+					organizationId: input.scope.path.organizationId,
+					revokedAt: null,
+				},
+				select: { userId: true, user: { select: { role: true } } },
+			}),
+			input.scope.path.costCenterId
+				? prisma.costCenterMembership.findMany({
+						where: {
+							costCenterId: input.scope.path.costCenterId,
+							revokedAt: null,
+						},
+						select: { userId: true, user: { select: { role: true } } },
+					})
+				: Promise.resolve([]),
+			prisma.companyMembership.findMany({
+				where: {
+					revokedAt: null,
+					company: {
+						organizations: { some: { id: input.scope.path.organizationId } },
 					},
-					select: { userId: true, user: { select: { role: true } } },
-				})
-			: Promise.resolve([]),
-		prisma.user.findMany({
-			where: { role: "ADMIN", banned: false },
-			select: { id: true },
-		}),
-	]);
+				},
+				select: { userId: true, user: { select: { role: true } } },
+			}),
+			prisma.user.findMany({
+				where: { role: "ADMIN", banned: false },
+				select: { id: true },
+			}),
+		]);
 
 	const recipients = new Set(admins.map((admin) => admin.id));
 	for (const member of organizationMembers) {
@@ -419,6 +434,16 @@ async function notifyEligibleApprovers(input: {
 		if (
 			input.requiredApproverRole === "GESTOR" &&
 			member.user?.role === "GESTOR"
+		) {
+			recipients.add(member.userId);
+		}
+	}
+	for (const member of companyMembers) {
+		if (
+			(input.requiredApproverRole === "GESTOR" &&
+				member.user?.role === "GESTOR") ||
+			(input.requiredApproverRole === "GERENTE" &&
+				member.user?.role === "GERENTE")
 		) {
 			recipients.add(member.userId);
 		}
@@ -454,9 +479,10 @@ export async function decideApproval(input: {
 		where: { id: input.approverId },
 		select: { role: true },
 	});
-	const isAdminOverride = approverUser?.role === "ADMIN";
+	const approverRole = normalizeRole(approverUser?.role);
+	const isAdminOverride = approverRole === "ADMIN";
 	const requiresDecisionReason =
-		approverUser?.role === "GESTOR" || input.decision === "REJECT";
+		approverRole === "GESTOR" || input.decision === "REJECT";
 	if (requiresDecisionReason && !input.reason?.trim()) {
 		throw new ConstructionError(
 			"APPROVAL_REASON_REQUIRED",
@@ -479,7 +505,7 @@ export async function decideApproval(input: {
 		);
 	}
 	const isTrustedApprover =
-		approverUser?.role === "ADMIN" || approverUser?.role === "GERENTE";
+		approverRole === "ADMIN" || approverRole === "GERENTE";
 	const isTrustedRequestActor =
 		request.actorRole === "ADMIN" || request.actorRole === "GERENTE";
 	if (
@@ -609,7 +635,7 @@ export async function decideApproval(input: {
 			input.decision === "APPROVE" &&
 			request.actorRole === "SUPERVISOR" &&
 			!isAdminOverride &&
-			approverUser?.role === "GESTOR";
+			approverRole === "GESTOR";
 
 		if (input.decision === "APPROVE" && !requiresManagerReview) {
 			await handler.apply({ tx, request: view, decision });
@@ -723,11 +749,23 @@ async function notifyManagersForReview(
 		where: { organizationId: managerRequest.organizationId, revokedAt: null },
 		select: { userId: true, user: { select: { role: true } } },
 	});
+	const companyMemberships = await tx.companyMembership.findMany({
+		where: {
+			revokedAt: null,
+			company: {
+				organizations: { some: { id: managerRequest.organizationId } },
+			},
+		},
+		select: { userId: true, user: { select: { role: true } } },
+	});
 	const managerIds = new Set(
 		memberships
 			.filter((membership) => membership.user?.role === "GERENTE")
 			.map((membership) => membership.userId),
 	);
+	for (const membership of companyMemberships) {
+		if (membership.user?.role === "GERENTE") managerIds.add(membership.userId);
+	}
 	for (const managerId of managerIds) {
 		await notificationService.create(
 			{
@@ -791,6 +829,13 @@ async function notifyGerentesAfterSupervisorExecution(
 		where: { organizationId: request.organizationId, revokedAt: null },
 		select: { userId: true, user: { select: { role: true } } },
 	});
+	const companyMemberships = await tx.companyMembership.findMany({
+		where: {
+			revokedAt: null,
+			company: { organizations: { some: { id: request.organizationId } } },
+		},
+		select: { userId: true, user: { select: { role: true } } },
+	});
 	const gerenteIds = [
 		...new Set(
 			memberships
@@ -798,6 +843,9 @@ async function notifyGerentesAfterSupervisorExecution(
 				.map((membership) => membership.userId),
 		),
 	];
+	for (const membership of companyMemberships) {
+		if (membership.user?.role === "GERENTE") gerenteIds.push(membership.userId);
+	}
 	for (const gerenteId of gerenteIds) {
 		await notificationService.create(
 			{
@@ -843,7 +891,8 @@ async function assertApproverAuthorized(
 		where: { id: approverId },
 		select: { role: true },
 	});
-	if (user?.role === "ADMIN") return;
+	const approverRole = normalizeRole(user?.role);
+	const isAdmin = approverRole === "ADMIN";
 
 	const workId = getApprovalWorkId(request);
 	const scope = workId
@@ -858,7 +907,14 @@ async function assertApproverAuthorized(
 
 	const gerenteOverride =
 		request.requiredApproverRole === "GESTOR" && scope.role === "GERENTE";
-	if (scope.role !== request.requiredApproverRole && !gerenteOverride) {
+	if (!scope.canRead) {
+		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+	}
+	if (
+		!isAdmin &&
+		scope.role !== request.requiredApproverRole &&
+		!gerenteOverride
+	) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
 	if (scope.path.organizationId !== request.organizationId) {
@@ -902,7 +958,10 @@ export async function requestReversal(input: {
 		where: { id: input.actorId },
 		select: { role: true },
 	});
-	const actorRole = actor?.role as AuthorizationRole | null | undefined;
+	const actorRole = normalizeRole(actor?.role) as
+		| AuthorizationRole
+		| null
+		| undefined;
 	if (actorRole !== "ADMIN" && actorRole !== "GERENTE") {
 		throw new ConstructionError(
 			"FORBIDDEN",
@@ -1030,11 +1089,24 @@ export async function listPendingApprovals(actorId: string, workId?: string) {
 
 	const user = await prisma.user.findUnique({
 		where: { id: actorId },
-		select: { role: true },
+		select: { role: true, workspaceId: true },
 	});
-	if (user?.role === "ADMIN") {
+	const actorRole = normalizeRole(user?.role);
+	if (actorRole === "ADMIN") {
+		const workspaceId = user?.workspaceId;
+		const organizationIds = workspaceId
+			? (
+					await prisma.organization.findMany({
+						where: { workspaceId },
+						select: { id: true },
+					})
+				).map((organization) => organization.id)
+			: undefined;
 		const rows = await prisma.approvalRequest.findMany({
-			where: { status: "PENDING" },
+			where: {
+				status: "PENDING",
+				...(organizationIds ? { organizationId: { in: organizationIds } } : {}),
+			},
 			include,
 			orderBy: { createdAt: "desc" },
 			take: 100,
@@ -1043,23 +1115,15 @@ export async function listPendingApprovals(actorId: string, workId?: string) {
 		return rows.filter((row) => getApprovalWorkId(row) === workId);
 	}
 
-	const role = user?.role as AuthorizationRole | null | undefined;
+	const role = actorRole as AuthorizationRole | null | undefined;
 	if (role !== "GESTOR" && role !== "GERENTE") {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
 
-	const [orgMemberships, ccMemberships] = await Promise.all([
-		prisma.organizationMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
-			select: { organizationId: true },
-		}),
-		prisma.costCenterMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
-			select: { costCenterId: true },
-		}),
+	const [orgIds, ccIds] = await Promise.all([
+		getAccessibleOrgIds(actorId),
+		getAccessibleCostCenterIds(actorId),
 	]);
-	const orgIds = orgMemberships.map((m) => m.organizationId);
-	const ccIds = ccMemberships.map((m) => m.costCenterId);
 
 	const rows = await prisma.approvalRequest.findMany({
 		where: {

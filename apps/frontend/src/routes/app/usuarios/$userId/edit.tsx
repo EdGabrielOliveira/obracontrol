@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { requireAuthorizationCapability } from "@/lib/route-authorization";
+import type { UserScopeInput } from "@/types/admin-users";
 import type { Role } from "@/types/authorization";
 import { ROLE_LABELS } from "@/types/authorization";
 
@@ -98,11 +99,7 @@ function RouteComponent() {
 		onError: () => toast.error("Erro ao atualizar os dados do usuário."),
 	});
 	const saveScopeMutation = useMutation({
-		mutationFn: (scope: {
-			organizationIds: string[];
-			costCenterIds: string[];
-			workIds: string[];
-		}) => replaceAdminUserScope(userId, scope),
+		mutationFn: (scope: UserScopeInput) => replaceAdminUserScope(userId, scope),
 		onSuccess: () => {
 			toast.success("Escopo atualizado.");
 			queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
@@ -157,6 +154,9 @@ function RouteComponent() {
 			: [],
 	);
 	const initialScope = {
+		companyIds: user.companyMemberships
+			.filter((item) => !item.revokedAt)
+			.map((item) => item.companyId),
 		organizationIds: user.organizationMemberships
 			.filter((item) => !item.revokedAt)
 			.map((item) => item.organizationId),
@@ -228,6 +228,7 @@ function RouteComponent() {
 				</Button>
 			</div>
 			<UserScopeForm
+				role={form.watch("role")}
 				isPending={saveScopeMutation.isPending}
 				submitLabel="Salvar escopo"
 				organizations={organizations}

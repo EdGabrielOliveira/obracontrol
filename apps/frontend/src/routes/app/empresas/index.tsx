@@ -23,7 +23,7 @@ import { getErrorMessage } from "@/utils/api-error";
 const columnHelper = createColumnHelper<Company>();
 
 export const Route = createFileRoute("/app/empresas/")({
-	beforeLoad: () => requireAuthorizationCapability("canAdministerCompanies"),
+	beforeLoad: () => requireAuthorizationCapability("canManageScopedCompanies"),
 	loader: () => {
 		void queryClient.prefetchQuery({
 			queryKey: companyKeys.all,
@@ -64,7 +64,7 @@ function RouteComponent() {
 	});
 
 	if (loading) return <LoadingSpinner title="Carregando autorizacao..." />;
-	if (!capabilities?.canAdministerCompanies) return <AccessDenied />;
+	if (!capabilities?.canManageScopedCompanies) return <AccessDenied />;
 	if (isLoading) return <LoadingSpinner title="Carregando empresas..." />;
 	if (error)
 		return (

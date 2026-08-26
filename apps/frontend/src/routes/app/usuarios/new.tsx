@@ -71,12 +71,14 @@ function RouteComponent() {
 			email: "",
 			password: "",
 			role: "SUPERVISOR",
+			companyIds: [],
 			organizationIds: [],
 			costCenterIds: [],
 			workIds: [],
 		},
 	});
 	const [scope, setScope] = useState<UserScopeInput>({
+		companyIds: [],
 		organizationIds: [],
 		costCenterIds: [],
 		workIds: [],
@@ -153,6 +155,7 @@ function RouteComponent() {
 			email: values.email,
 			password: values.password,
 			role: values.role,
+			companyIds: selectedScope.companyIds,
 			organizationIds: selectedScope.organizationIds,
 			costCenterIds: selectedScope.costCenterIds,
 			workIds: selectedScope.workIds,
@@ -272,6 +275,7 @@ function RouteComponent() {
 
 			{form.watch("role") && form.watch("role") !== "ADMIN" ? (
 				<UserScopeForm
+					role={form.watch("role")}
 					isPending={mutation.isPending}
 					organizations={organizations}
 					costCenters={costCenters}

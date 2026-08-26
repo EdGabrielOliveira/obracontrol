@@ -45,7 +45,10 @@ const orgMembershipFindMany = mock(
 	async (): Promise<Array<Record<string, unknown>>> => [],
 );
 const ccMembershipFindMany = mock(
-	async (): Promise<{ costCenterId: string }[]> => [],
+	async (): Promise<Array<Record<string, unknown>>> => [],
+);
+const companyMembershipFindMany = mock(
+	async (): Promise<Array<Record<string, unknown>>> => [],
 );
 const budgetVersionFindFirst = mock(async () => ({
 	id: "version-2",
@@ -82,6 +85,7 @@ const transactionMock = mock(
 			},
 			auditLog: { create: auditLogCreate },
 			organizationMembership: { findMany: orgMembershipFindMany },
+			companyMembership: { findMany: companyMembershipFindMany },
 			budgetVersion: {
 				findFirst: budgetVersionFindFirst,
 				updateMany: budgetVersionUpdateMany,
@@ -112,6 +116,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		},
 		approvalPolicy: { findMany: approvalPolicyFindMany },
 		organizationMembership: { findMany: orgMembershipFindMany },
+		companyMembership: { findMany: companyMembershipFindMany },
 		costCenterMembership: { findMany: ccMembershipFindMany },
 		notification: {
 			findUnique: notificationFindUnique,
@@ -233,8 +238,16 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 				...args.data,
 			}),
 		);
-		orgMembershipFindMany.mockResolvedValue([{ organizationId: "org-1" }]);
-		ccMembershipFindMany.mockResolvedValue([{ costCenterId: "cc-1" }]);
+		orgMembershipFindMany.mockResolvedValue([
+			{
+				organizationId: "org-1",
+				organization: { costCenters: [{ id: "cc-1" }] },
+			},
+		]);
+		ccMembershipFindMany.mockResolvedValue([
+			{ costCenterId: "cc-1", costCenter: { organizationId: "org-1" } },
+		]);
+		companyMembershipFindMany.mockResolvedValue([]);
 	});
 
 	it("ADMIN executa diretamente e grava decisao AUTOMATICO_POR_POLITICA", async () => {
@@ -405,7 +418,7 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 		expect(applyHandler).not.toHaveBeenCalled();
 	});
 
-	it("GESTOR gera solicitacao PENDING para GERENTE", async () => {
+	it("GESTOR executa diretamente dentro do escopo", async () => {
 		userFindUnique.mockResolvedValue({ role: "GESTOR" });
 		resolveResourceScopeMock.mockResolvedValue(
 			makeScopeMock({ role: "GESTOR" }),
@@ -422,17 +435,16 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 			idempotencyKey: "gestor-1",
 		});
 
-		expect(result.status).toBe("PENDING");
+		expect(result.status).toBe("APPROVED");
 		expect(approvalRequestCreate).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
 					actorRole: "GESTOR",
-					requiredApproverRole: "GERENTE",
-					status: "PENDING",
+					status: "APPROVED",
 				}),
 			}),
 		);
-		expect(applyHandler).not.toHaveBeenCalled();
+		expect(applyHandler).toHaveBeenCalledTimes(1);
 	});
 
 	it("persiste payload com hash na solicitacao", async () => {
@@ -981,8 +993,15 @@ describe("approval service - listPendingApprovals por escopo de aprovador", () =
 		mock.clearAllMocks();
 		approvalRequestFindMany.mockResolvedValue([]);
 		userFindUnique.mockResolvedValue({ role: "ADMIN" });
-		orgMembershipFindMany.mockResolvedValue([{ organizationId: "org-1" }]);
-		ccMembershipFindMany.mockResolvedValue([{ costCenterId: "cc-1" }]);
+		orgMembershipFindMany.mockResolvedValue([
+			{
+				organizationId: "org-1",
+				organization: { costCenters: [{ id: "cc-1" }] },
+			},
+		]);
+		ccMembershipFindMany.mockResolvedValue([
+			{ costCenterId: "cc-1", costCenter: { organizationId: "org-1" } },
+		]);
 	});
 
 	function pendingRow(id: string, requiredApproverRole: string) {

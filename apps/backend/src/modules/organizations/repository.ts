@@ -42,6 +42,16 @@ export async function createOrganization(
 ) {
 	const workspaceId = await ensureWorkspaceForUser(ownerId);
 	return prisma.$transaction(async (tx) => {
+		const company = data.companyId
+			? await tx.company.findFirst({
+					where: {
+						id: data.companyId,
+						workspaceId,
+					},
+					select: { ownerId: true },
+				})
+			: null;
+		const resourceOwnerId = company?.ownerId ?? ownerId;
 		const address = data.structuredAddress
 			? await tx.address.create({
 					data: addressCreateInput(data.structuredAddress),
@@ -49,7 +59,7 @@ export async function createOrganization(
 			: null;
 		return tx.organization.create({
 			data: {
-				ownerId,
+				ownerId: resourceOwnerId,
 				workspaceId,
 				name: data.name,
 				companyId: data.companyId || null,
@@ -131,6 +141,18 @@ export async function updateOrganization(
 		where: { id },
 	});
 	if (!org) return null;
+	if (data.companyId) {
+		const company = await prisma.company.findFirst({
+			where: {
+				id: data.companyId,
+				...(org.workspaceId
+					? { workspaceId: org.workspaceId }
+					: { workspaceId: null }),
+			},
+			select: { id: true },
+		});
+		if (!company) return null;
+	}
 
 	const updateData: Record<string, unknown> = {};
 	if (data.name !== undefined) updateData.name = data.name;
