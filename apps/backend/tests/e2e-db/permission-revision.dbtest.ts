@@ -18,7 +18,7 @@ import {
 
 /**
  * DEC-004/DEC-005: modelo final de autorizacao.
- * - Papel legado nao autentica (sessao invalidada).
+ * - OPERADOR legado e compatibilizado como SUPERVISOR, sem escopo implicito.
  * - SUPERVISOR sem membership nao acessa obra de outro escopo.
  * - Gerente segue acessando o portfolio das organizacoes vinculadas.
  * - Cadeia fixa: Supervisor solicita contrato ao Gestor do centro e o
@@ -54,7 +54,7 @@ describe("permission revision - migracao e escopo", () => {
 		);
 	}
 
-	it("papel legado (OPERADOR) nao autentica em rota protegida", async () => {
+	it("papel legado (OPERADOR) autentica como SUPERVISOR e exige escopo explicito", async () => {
 		const legacy = await prisma.user.create({
 			data: {
 				id: "legacy-operador",
@@ -83,7 +83,8 @@ describe("permission revision - migracao e escopo", () => {
 			cookie,
 			`/construction/works/${WORK_A}`,
 		);
-		expect(response.status).toBe(401);
+		// A sessao e valida; a ausencia de membership continua bloqueando a obra.
+		expect(response.status).toBe(404);
 	});
 
 	it("SUPERVISOR sem membership nao acessa obra do portfolio", async () => {

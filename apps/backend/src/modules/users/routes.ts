@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { resolveAuth } from "../../lib/resolve-auth";
 import { invitationService } from "./invitation.service";
@@ -8,17 +9,25 @@ import { userService } from "./service";
 const roleUnion = t.Union(membershipRoles.map((role) => t.Literal(role)));
 
 const scopeShape = {
+	companyIds: t.Optional(t.Array(t.String())),
 	organizationIds: t.Array(t.String()),
 	costCenterIds: t.Array(t.String()),
 	workIds: t.Optional(t.Array(t.String())),
 };
 
 function normalizeScope(scope: {
+	companyIds?: string[];
 	organizationIds: string[];
 	costCenterIds: string[];
 	workIds?: string[];
-}): { organizationIds: string[]; costCenterIds: string[]; workIds: string[] } {
+}): {
+	companyIds: string[];
+	organizationIds: string[];
+	costCenterIds: string[];
+	workIds: string[];
+} {
 	return {
+		companyIds: scope.companyIds ?? [],
 		organizationIds: scope.organizationIds,
 		costCenterIds: scope.costCenterIds,
 		workIds: scope.workIds ?? [],
@@ -36,7 +45,7 @@ function requireUserAdministration() {
 			const user = (context as Record<string, unknown>).user as
 				| { role?: string | null }
 				| undefined;
-			const role = user?.role;
+			const role = normalizeRole(user?.role);
 			if (role !== "ADMIN" && role !== "GERENTE") {
 				throw new ConstructionError(
 					"FORBIDDEN",
@@ -69,6 +78,7 @@ export const userRoutes = new Elysia({
 				role: roleUnion,
 				scope: t.Optional(
 					t.Object({
+						companyIds: t.Optional(t.Array(t.String())),
 						organizationIds: t.Array(t.String()),
 						costCenterIds: t.Array(t.String()),
 						workIds: t.Optional(t.Array(t.String())),
@@ -133,6 +143,7 @@ export const userRoutes = new Elysia({
 				role: t.Optional(roleUnion),
 				scope: t.Optional(
 					t.Object({
+						companyIds: t.Optional(t.Array(t.String())),
 						organizationIds: t.Array(t.String()),
 						costCenterIds: t.Array(t.String()),
 						workIds: t.Optional(t.Array(t.String())),

@@ -21,6 +21,8 @@ interface AuthContextValue {
 const EMPTY_CAPABILITIES: AuthorizationCapabilities = {
 	canManageUsers: false,
 	canAdministerCompanies: false,
+	canManageScopedCompanies: false,
+	canManageStructure: false,
 	canManageApiKeys: false,
 	canDecideSupervisorRequests: false,
 	canReviewExecutedSupervisorRequests: false,

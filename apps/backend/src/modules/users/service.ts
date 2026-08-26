@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
 import type { AuthorizationRole } from "../../lib/authorization";
-import { isAuthorizationRole } from "../../lib/authorization";
+import { isAuthorizationRole, normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { hashPassword } from "../../lib/password-hasher";
@@ -16,6 +16,7 @@ import type {
 
 function normalizeScope(scope?: Partial<UserScopeInput>): UserScopeInput {
 	return {
+		companyIds: scope?.companyIds ?? [],
 		organizationIds: scope?.organizationIds ?? [],
 		costCenterIds: scope?.costCenterIds ?? [],
 		workIds: scope?.workIds ?? [],
@@ -64,9 +65,11 @@ function assertNoDuplicates(scope: UserScopeInput): void {
 	const duplicate = (ids: string[]): string[] =>
 		ids.filter((id, index) => ids.indexOf(id) !== index);
 	const duplicatedOrganizations = duplicate(scope.organizationIds);
+	const duplicatedCompanies = duplicate(scope.companyIds ?? []);
 	const duplicatedCostCenters = duplicate(scope.costCenterIds);
 	const duplicatedWorks = duplicate(scope.workIds);
 	if (
+		duplicatedCompanies.length > 0 ||
 		duplicatedOrganizations.length > 0 ||
 		duplicatedCostCenters.length > 0 ||
 		duplicatedWorks.length > 0
@@ -75,6 +78,7 @@ function assertNoDuplicates(scope: UserScopeInput): void {
 			"DUPLICATED_SCOPE_ENTRY",
 			"Escopo contem vinculos duplicados: " +
 				[
+					duplicatedCompanies.length > 0 ? "empresas" : "",
 					duplicatedOrganizations.length > 0 ? "organizacoes" : "",
 					duplicatedCostCenters.length > 0 ? "centros de custo" : "",
 					duplicatedWorks.length > 0 ? "obras" : "",
@@ -94,17 +98,65 @@ async function assertValidScope(
 
 	if (targetRole === "ADMIN") return;
 
-	if (scope.organizationIds.length === 0) {
+	const companyIds = scope.companyIds ?? [];
+	if (
+		targetRole === "GERENTE" &&
+		companyIds.length === 0 &&
+		scope.organizationIds.length === 0
+	) {
 		throw new ConstructionError(
 			"ORGANIZATION_REQUIRED",
-			"Usuario nao administrador exige vinculo com ao menos uma organizacao",
+			"Gerente exige vinculo com ao menos uma empresa ou organizacao",
+			422,
+		);
+	}
+	if (
+		targetRole === "GESTOR" &&
+		scope.organizationIds.length === 0 &&
+		scope.costCenterIds.length === 0 &&
+		scope.workIds.length === 0
+	) {
+		throw new ConstructionError(
+			"SCOPE_REQUIRED",
+			"Gestor exige ao menos uma organizacao, centro de custo ou obra",
+			422,
+		);
+	}
+	if (targetRole === "GESTOR" && companyIds.length > 0) {
+		throw new ConstructionError(
+			"GESTOR_SCOPE_INVALID",
+			"Gestor deve ser vinculado por organizacao, centro de custo ou obra",
+			422,
+		);
+	}
+	if (
+		targetRole === "SUPERVISOR" &&
+		(companyIds.length > 0 ||
+			scope.organizationIds.length > 0 ||
+			scope.workIds.length > 0 ||
+			scope.costCenterIds.length === 0)
+	) {
+		throw new ConstructionError(
+			"SUPERVISOR_COST_CENTER_ONLY",
+			"Supervisor exige somente centros de custo",
+			422,
+		);
+	}
+	const companies = await prisma.company.findMany({
+		where: { id: { in: companyIds } },
+		select: { id: true },
+	});
+	if (companies.length !== companyIds.length) {
+		throw new ConstructionError(
+			"INVALID_COMPANY",
+			"Empresa selecionada nao existe",
 			422,
 		);
 	}
 
 	const organizations = await prisma.organization.findMany({
 		where: { id: { in: scope.organizationIds } },
-		select: { id: true },
+		select: { id: true, companyId: true },
 	});
 	const validOrgIds = new Set(organizations.map((org) => org.id));
 	const invalidOrg = scope.organizationIds.filter((id) => !validOrgIds.has(id));
@@ -115,17 +167,31 @@ async function assertValidScope(
 			422,
 		);
 	}
-	if (targetRole === "GERENTE") return;
-
-	const workIds = scope.workIds ?? [];
-	if (scope.costCenterIds.length === 0 && workIds.length === 0) {
+	const selectedCompanies = new Set(scope.companyIds);
+	if (
+		selectedCompanies.size > 0 &&
+		organizations.some(
+			(org) => org.companyId && !selectedCompanies.has(org.companyId),
+		)
+	) {
 		throw new ConstructionError(
-			"COST_CENTER_REQUIRED",
-			`O papel ${targetRole} exige vinculo com ao menos um centro de custo ou obra`,
+			"ORGANIZATION_OUTSIDE_COMPANY",
+			"Organizacao nao pertence a empresa vinculada",
 			422,
 		);
 	}
+	if (targetRole === "GERENTE") {
+		if (scope.costCenterIds.length > 0 || scope.workIds.length > 0) {
+			throw new ConstructionError(
+				"GERENTE_SCOPE_INVALID",
+				"Gerente deve ser vinculado por empresa ou organizacao",
+				422,
+			);
+		}
+		return;
+	}
 
+	const workIds = scope.workIds ?? [];
 	const costCenters = await prisma.costCenter.findMany({
 		where: { id: { in: scope.costCenterIds } },
 		select: { id: true, organizationId: true },
@@ -146,12 +212,15 @@ async function assertValidScope(
 			422,
 		);
 	}
-	const orphan = scope.costCenterIds.filter(
-		(id) =>
-			!scope.organizationIds.some((orgId) =>
-				(centersByOrg.get(orgId) ?? []).includes(id),
-			),
-	);
+	const orphan =
+		scope.organizationIds.length > 0
+			? scope.costCenterIds.filter(
+					(id) =>
+						!scope.organizationIds.some((orgId) =>
+							(centersByOrg.get(orgId) ?? []).includes(id),
+						),
+				)
+			: [];
 	if (orphan.length > 0) {
 		throw new ConstructionError(
 			"COST_CENTER_OUTSIDE_ORGANIZATION",
@@ -175,23 +244,19 @@ async function assertValidScope(
 			422,
 		);
 	}
+	const allowedWorkOrganizations = new Set([
+		...scope.organizationIds,
+		...costCenters.map((cc) => cc.organizationId),
+	]);
 	if (
+		allowedWorkOrganizations.size > 0 &&
 		works.some(
-			(work) => !scope.organizationIds.includes(work.costCenter.organizationId),
+			(work) => !allowedWorkOrganizations.has(work.costCenter.organizationId),
 		)
 	) {
 		throw new ConstructionError(
 			"WORK_OUTSIDE_ORGANIZATION",
 			"Obra nao pertence a uma organizacao vinculada ao usuario",
-			422,
-		);
-	}
-	// Work membership so e valida com centro pai ativo (spec 6.1): cada obra
-	// listada exige membership ativa do proprio centro no mesmo escopo.
-	if (works.some((work) => !scope.costCenterIds.includes(work.costCenter.id))) {
-		throw new ConstructionError(
-			"WORK_WITHOUT_CENTER_ACCESS",
-			"Obra exige vinculo com o centro de custo pai no mesmo escopo",
 			422,
 		);
 	}
@@ -216,6 +281,15 @@ const adminUserSelect = {
 			role: true,
 			revokedAt: true,
 			organization: { select: { name: true } },
+		},
+	},
+	companyMemberships: {
+		select: {
+			id: true,
+			companyId: true,
+			role: true,
+			revokedAt: true,
+			company: { select: { name: true } },
 		},
 	},
 	costCenterMemberships: {
@@ -252,6 +326,13 @@ type AdminUserResponse = {
 		revokedAt: Date | null;
 		organization: { name: string } | null;
 	}>;
+	companyMemberships: Array<{
+		id: string;
+		companyId: string;
+		role: string;
+		revokedAt: Date | null;
+		company: { name: string } | null;
+	}>;
 	costCenterMemberships: Array<{
 		id: string;
 		costCenterId: string;
@@ -287,6 +368,13 @@ function serializeAdminUser(user: AdminUserResponse): AdminUserResponse {
 					: null,
 			}),
 		),
+		companyMemberships: (user.companyMemberships ?? []).map((membership) => ({
+			id: membership.id,
+			companyId: membership.companyId,
+			role: membership.role,
+			revokedAt: membership.revokedAt,
+			company: membership.company ? { name: membership.company.name } : null,
+		})),
 		costCenterMemberships: (user.costCenterMemberships ?? []).map(
 			(membership) => ({
 				id: membership.id,
@@ -309,6 +397,7 @@ function serializeAdminUser(user: AdminUserResponse): AdminUserResponse {
 }
 
 type AdminScope = {
+	companyIds: string[];
 	organizationIds: string[];
 	isGlobalAdmin: boolean;
 	workspaceId: string | null;
@@ -324,26 +413,53 @@ async function resolveAdminScope(actorId: string): Promise<AdminScope> {
 		where: { id: actorId },
 		select: { role: true, banned: true, workspaceId: true },
 	});
-	if (actor?.role === "ADMIN" && !actor.banned) {
+	if (!actor || actor.banned) {
+		return {
+			companyIds: [],
+			organizationIds: [],
+			isGlobalAdmin: false,
+			workspaceId: null,
+		};
+	}
+	if (normalizeRole(actor.role) === "ADMIN") {
 		const orgs = await prisma.organization.findMany({
 			where: actor.workspaceId ? { workspaceId: actor.workspaceId } : undefined,
 			select: { id: true },
 		});
 		return {
+			companyIds: [],
 			organizationIds: orgs.map((org) => org.id),
 			isGlobalAdmin: true,
 			workspaceId: actor.workspaceId ?? null,
 		};
 	}
 
-	const [owned, memberships] = await Promise.all([
+	const workspaceFilter = actor.workspaceId
+		? { workspaceId: actor.workspaceId }
+		: { workspaceId: null };
+	const [owned, memberships, companyMemberships] = await Promise.all([
 		prisma.organization.findMany({
-			where: { ownerId: actorId },
+			where: { ownerId: actorId, ...workspaceFilter },
 			select: { id: true },
 		}),
 		prisma.organizationMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
+			where: {
+				userId: actorId,
+				revokedAt: null,
+				organization: workspaceFilter,
+			},
 			select: { organizationId: true },
+		}),
+		prisma.companyMembership.findMany({
+			where: {
+				userId: actorId,
+				revokedAt: null,
+				company: workspaceFilter,
+			},
+			select: {
+				companyId: true,
+				company: { select: { organizations: { select: { id: true } } } },
+			},
 		}),
 	]);
 
@@ -351,9 +467,17 @@ async function resolveAdminScope(actorId: string): Promise<AdminScope> {
 		...new Set([
 			...owned.map((org) => org.id),
 			...memberships.map((m) => m.organizationId),
+			...companyMemberships.flatMap((m) =>
+				m.company.organizations.map((o) => o.id),
+			),
 		]),
 	];
-	return { organizationIds, isGlobalAdmin: false, workspaceId: null };
+	return {
+		companyIds: companyMemberships.map((m) => m.companyId),
+		organizationIds,
+		isGlobalAdmin: false,
+		workspaceId: null,
+	};
 }
 
 function assertAdminWorkspace(
@@ -371,9 +495,48 @@ function assertAdminWorkspace(
 
 function inScopeWhere(scope: AdminScope) {
 	return {
-		organizationMemberships: {
-			some: { organizationId: { in: scope.organizationIds } },
-		},
+		OR: [
+			...(scope.organizationIds.length > 0
+				? [
+						{
+							organizationMemberships: {
+								some: { organizationId: { in: scope.organizationIds } },
+							},
+						},
+					]
+				: []),
+			...(scope.companyIds.length > 0
+				? [
+						{
+							companyMemberships: {
+								some: { companyId: { in: scope.companyIds } },
+							},
+						},
+					]
+				: []),
+			...(scope.organizationIds.length > 0
+				? [
+						{
+							costCenterMemberships: {
+								some: {
+									costCenter: { organizationId: { in: scope.organizationIds } },
+								},
+							},
+						},
+						{
+							workMemberships: {
+								some: {
+									work: {
+										costCenter: {
+											organizationId: { in: scope.organizationIds },
+										},
+									},
+								},
+							},
+						},
+					]
+				: []),
+		],
 	};
 }
 
@@ -384,7 +547,7 @@ async function assertUserInScope(
 ): Promise<void> {
 	if (userId === actorId) return;
 	if (scope.isGlobalAdmin) return;
-	if (scope.organizationIds.length === 0) {
+	if (scope.organizationIds.length === 0 && scope.companyIds.length === 0) {
 		throw notFoundUser();
 	}
 	const found = await prisma.user.findFirst({
@@ -402,7 +565,12 @@ async function applyScope(
 	tx: Prisma.TransactionClient,
 	userId: string,
 	scope: UserScopeInput,
+	role: AuthorizationRole,
 ): Promise<void> {
+	await tx.companyMembership.updateMany({
+		where: { userId, revokedAt: null },
+		data: { revokedAt: new Date() },
+	});
 	await tx.organizationMembership.updateMany({
 		where: { userId, revokedAt: null },
 		data: { revokedAt: new Date() },
@@ -421,22 +589,29 @@ async function applyScope(
 			where: {
 				organizationId_userId: { organizationId, userId },
 			},
-			create: { organizationId, userId, role: "GERENTE" },
-			update: { revokedAt: null },
+			create: { organizationId, userId, role },
+			update: { revokedAt: null, role },
 		});
 	}
 	for (const costCenterId of scope.costCenterIds) {
 		await tx.costCenterMembership.upsert({
 			where: { costCenterId_userId: { costCenterId, userId } },
-			create: { costCenterId, userId, role: "GESTOR" },
-			update: { revokedAt: null },
+			create: { costCenterId, userId, role },
+			update: { revokedAt: null, role },
 		});
 	}
 	for (const workId of scope.workIds ?? []) {
 		await tx.workMembership.upsert({
 			where: { workId_userId: { workId, userId } },
-			create: { workId, userId, role: "GESTOR" },
-			update: { revokedAt: null },
+			create: { workId, userId, role },
+			update: { revokedAt: null, role },
+		});
+	}
+	for (const companyId of scope.companyIds ?? []) {
+		await tx.companyMembership.upsert({
+			where: { companyId_userId: { companyId, userId } },
+			create: { companyId, userId, role },
+			update: { revokedAt: null, role },
 		});
 	}
 }
@@ -452,13 +627,14 @@ export const userService = {
 				where: { id: ctx.actorId },
 				select: { role: true },
 			});
-			if (!isAuthorizationRole(actor?.role)) {
+			const actorRole = normalizeRole(actor?.role);
+			if (!isAuthorizationRole(actorRole)) {
 				throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 			}
 			const adminScope = await resolveAdminScope(ctx.actorId);
-			const orgIds = scope.organizationIds;
+			const orgIds = await resolveScopeOrganizationIds(scope);
 			assertActorCanManage(
-				actor?.role as AuthorizationRole,
+				actorRole as AuthorizationRole,
 				adminScope.organizationIds,
 				input.role,
 				orgIds,
@@ -512,7 +688,7 @@ export const userService = {
 				where: { id: userId },
 				data: { role: input.role },
 			});
-			await applyScope(tx, userId, scope);
+			await applyScope(tx, userId, scope, input.role);
 			if (ctx?.actorId) {
 				await writeAudit(tx, {
 					userId: ctx.actorId,
@@ -602,14 +778,14 @@ export const userService = {
 				actor?.role as AuthorizationRole,
 				adminScope.organizationIds,
 				input.role,
-				targetScope.organizationIds,
+				await resolveScopeOrganizationIds(targetScope),
 			);
 		} else if (scope) {
 			assertActorCanManage(
 				actor?.role as AuthorizationRole,
 				adminScope.organizationIds,
 				nextRole,
-				scope.organizationIds,
+				await resolveScopeOrganizationIds(scope),
 			);
 		}
 
@@ -621,7 +797,7 @@ export const userService = {
 				await tx.user.update({ where: { id }, data });
 			}
 			if (scope) {
-				await applyScope(tx, id, scope);
+				await applyScope(tx, id, scope, nextRole);
 			}
 			if (input.role || input.scope) {
 				await writeAudit(tx, {
@@ -734,11 +910,11 @@ export const userService = {
 			actor?.role as AuthorizationRole,
 			adminScope.organizationIds,
 			targetRole,
-			scope.organizationIds,
+			await resolveScopeOrganizationIds(scope),
 		);
 
 		await prisma.$transaction(async (tx) => {
-			await applyScope(tx, userId, scope);
+			await applyScope(tx, userId, scope, targetRole);
 			await writeAudit(tx, {
 				userId: actorId,
 				ownerId: actorId,
@@ -757,7 +933,11 @@ export const userService = {
 };
 
 async function getCurrentScope(userId: string): Promise<UserScopeInput> {
-	const [organizations, costCenters, works] = await Promise.all([
+	const [companies, organizations, costCenters, works] = await Promise.all([
+		prisma.companyMembership.findMany({
+			where: { userId, revokedAt: null },
+			select: { companyId: true },
+		}),
 		prisma.organizationMembership.findMany({
 			where: { userId, revokedAt: null },
 			select: { organizationId: true },
@@ -772,10 +952,33 @@ async function getCurrentScope(userId: string): Promise<UserScopeInput> {
 		}),
 	]);
 	return {
+		companyIds: companies.map((m) => m.companyId),
 		organizationIds: organizations.map((m) => m.organizationId),
 		costCenterIds: costCenters.map((m) => m.costCenterId),
 		workIds: works.map((m) => m.workId),
 	};
+}
+
+async function resolveScopeOrganizationIds(
+	scope: UserScopeInput,
+): Promise<string[]> {
+	const [centers, works] = await Promise.all([
+		prisma.costCenter.findMany({
+			where: { id: { in: scope.costCenterIds } },
+			select: { organizationId: true },
+		}),
+		prisma.constructionWork.findMany({
+			where: { id: { in: scope.workIds } },
+			select: { costCenter: { select: { organizationId: true } } },
+		}),
+	]);
+	return [
+		...new Set([
+			...scope.organizationIds,
+			...centers.map((center) => center.organizationId),
+			...works.map((work) => work.costCenter.organizationId),
+		]),
+	];
 }
 
 async function getByIdUnscoped(id: string) {

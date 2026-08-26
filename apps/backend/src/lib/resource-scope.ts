@@ -42,6 +42,7 @@ export type PortfolioPath = {
 
 type ResourceChain = {
 	organizationId: string;
+	companyId: string | null;
 	costCenterId: string | null;
 	workId: string | null;
 	ownerId: string;
@@ -49,6 +50,7 @@ type ResourceChain = {
 };
 
 type MembershipSet = {
+	companyIds: string[];
 	organizationIds: string[];
 	costCenterIds: string[];
 	workIds: string[];
@@ -112,11 +114,12 @@ async function resolveWorkChain(workId: string): Promise<ResourceChain | null> {
 	if (!costCenter) return null;
 	const organization = await prisma.organization.findUnique({
 		where: { id: costCenter.organizationId },
-		select: { id: true, ownerId: true, workspaceId: true },
+		select: { id: true, ownerId: true, workspaceId: true, companyId: true },
 	});
 	if (!organization) return null;
 	return {
 		organizationId: organization.id,
+		companyId: organization.companyId,
 		costCenterId: costCenter.id,
 		workId: work.id,
 		// `ownerId` permanece como contexto de compatibilidade para os
@@ -138,11 +141,12 @@ async function resolveCostCenterChain(
 	if (!costCenter) return null;
 	const organization = await prisma.organization.findUnique({
 		where: { id: costCenter.organizationId },
-		select: { id: true, ownerId: true, workspaceId: true },
+		select: { id: true, ownerId: true, workspaceId: true, companyId: true },
 	});
 	if (!organization) return null;
 	return {
 		organizationId: organization.id,
+		companyId: organization.companyId,
 		costCenterId: costCenter.id,
 		workId: null,
 		ownerId: organization.ownerId,
@@ -155,11 +159,12 @@ async function resolveOrganizationChain(
 ): Promise<ResourceChain | null> {
 	const organization = await prisma.organization.findUnique({
 		where: { id: organizationId },
-		select: { id: true, ownerId: true, workspaceId: true },
+		select: { id: true, ownerId: true, workspaceId: true, companyId: true },
 	});
 	if (!organization) return null;
 	return {
 		organizationId: organization.id,
+		companyId: organization.companyId,
 		costCenterId: null,
 		workId: null,
 		ownerId: organization.ownerId,
@@ -170,22 +175,31 @@ async function resolveOrganizationChain(
 async function resolveActiveMemberships(
 	actorId: string,
 ): Promise<MembershipSet> {
-	const [organizationMemberships, costCenterMemberships, workMemberships] =
-		await Promise.all([
-			prisma.organizationMembership.findMany({
-				where: { userId: actorId, revokedAt: null },
-				select: { organizationId: true },
-			}),
-			prisma.costCenterMembership.findMany({
-				where: { userId: actorId, revokedAt: null },
-				select: { costCenterId: true },
-			}),
-			prisma.workMembership.findMany({
-				where: { userId: actorId, revokedAt: null },
-				select: { workId: true },
-			}),
-		]);
+	const [
+		organizationMemberships,
+		companyMemberships,
+		costCenterMemberships,
+		workMemberships,
+	] = await Promise.all([
+		prisma.organizationMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: { organizationId: true },
+		}),
+		prisma.companyMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: { companyId: true },
+		}),
+		prisma.costCenterMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: { costCenterId: true },
+		}),
+		prisma.workMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: { workId: true },
+		}),
+	]);
 	return {
+		companyIds: companyMemberships.map((m) => m.companyId),
 		organizationIds: organizationMemberships.map((m) => m.organizationId),
 		costCenterIds: costCenterMemberships.map((m) => m.costCenterId),
 		workIds: workMemberships.map((m) => m.workId),
@@ -243,7 +257,13 @@ export async function resolveResourceScope(
 	const memberships = await resolveActiveMemberships(actorId);
 
 	if (role === "GERENTE") {
-		if (!memberships.organizationIds.includes(chain.organizationId)) {
+		const companyAccess = chain.companyId
+			? memberships.companyIds.includes(chain.companyId)
+			: false;
+		if (
+			!companyAccess &&
+			!memberships.organizationIds.includes(chain.organizationId)
+		) {
 			return deniedContext(actorId, resourceType);
 		}
 		return grantedContext(actorId, chain, resourceType, "GERENTE");
@@ -260,6 +280,10 @@ export async function resolveResourceScope(
 		// Gestor pode receber uma organização inteira ou apenas centros de
 		// custo. Supervisor sempre fica limitado ao centro explicitamente
 		// direcionado. A obra herda o acesso do centro pai.
+		const hasDirectWorkAccess = chain.workId
+			? memberships.workIds.includes(chain.workId)
+			: false;
+
 		if (role === "SUPERVISOR") {
 			if (resourceType === "ORGANIZATION" || !hasCostCenterAccess) {
 				return deniedContext(actorId, resourceType);
@@ -268,52 +292,17 @@ export async function resolveResourceScope(
 			(resourceType === "ORGANIZATION" && !hasOrganizationAccess) ||
 			(resourceType !== "ORGANIZATION" &&
 				!hasOrganizationAccess &&
-				!hasCostCenterAccess)
+				!hasCostCenterAccess &&
+				!hasDirectWorkAccess)
 		) {
 			return deniedContext(actorId, resourceType);
 		}
-		if (resourceType === "WORK") {
-			// A Gestor assigned to an organization inherits every work below it;
-			// work-level assignments only restrict a Gestor assigned to CCs.
-			if (!(role === "GESTOR" && hasOrganizationAccess)) {
-				const restrictedWorkIds = await resolveRestrictedWorkIds(
-					actorId,
-					memberships,
-				);
-				if (
-					restrictedWorkIds.length > 0 &&
-					(chain.workId === null || !restrictedWorkIds.includes(chain.workId))
-				) {
-					return deniedContext(actorId, resourceType);
-				}
-			}
-		}
+		// Grants are cumulative: a direct work grant never narrows an
+		// organization or cost-center grant.
 		return grantedContext(actorId, chain, resourceType, role);
 	}
 
 	return deniedContext(actorId, resourceType);
-}
-
-async function resolveRestrictedWorkIds(
-	actorId: string,
-	memberships: MembershipSet,
-): Promise<string[]> {
-	const workMemberships = await prisma.workMembership.findMany({
-		where: { userId: actorId, revokedAt: null },
-		select: {
-			work: {
-				select: {
-					id: true,
-					costCenterId: true,
-				},
-			},
-		},
-	});
-	const assignedCenters = new Set(memberships.costCenterIds);
-	const validWorkIds = workMemberships
-		.filter((membership) => assignedCenters.has(membership.work.costCenterId))
-		.map((membership) => membership.work.id);
-	return [...new Set(validWorkIds)].sort();
 }
 
 export async function resolvePortfolioScope(actorId: string): Promise<{
@@ -324,10 +313,11 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 		where: { id: actorId },
 		select: { role: true, banned: true, workspaceId: true },
 	});
-	if (!user || user.banned || !isAuthorizationRole(user.role)) {
+	const normalizedRole = normalizeRole(user?.role);
+	if (!user || user.banned || !isAuthorizationRole(normalizedRole)) {
 		return { actorId, paths: [] };
 	}
-	const role = user.role as AuthorizationRole;
+	const role = normalizedRole as AuthorizationRole;
 
 	const candidates: PortfolioPath[] = [];
 
@@ -347,24 +337,49 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 			});
 		}
 	} else if (role === "GERENTE") {
-		const orgMemberships = await prisma.organizationMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
-			select: {
-				organization: {
-					select: {
-						id: true,
-						costCenters: {
-							select: { id: true, works: { select: { id: true } } },
+		const [orgMemberships, companyMemberships] = await Promise.all([
+			prisma.organizationMembership.findMany({
+				where: { userId: actorId, revokedAt: null },
+				select: {
+					organization: {
+						select: {
+							id: true,
+							costCenters: {
+								select: { id: true, works: { select: { id: true } } },
+							},
 						},
 					},
 				},
-			},
-		});
-		for (const membership of orgMemberships) {
-			for (const costCenter of membership.organization.costCenters) {
+			}),
+			prisma.companyMembership.findMany({
+				where: { userId: actorId, revokedAt: null },
+				select: {
+					company: {
+						select: {
+							organizations: {
+								select: {
+									id: true,
+									costCenters: {
+										select: { id: true, works: { select: { id: true } } },
+									},
+								},
+							},
+						},
+					},
+				},
+			}),
+		]);
+		const organizations = [
+			...orgMemberships.map((membership) => membership.organization),
+			...companyMemberships.flatMap(
+				(membership) => membership.company.organizations,
+			),
+		];
+		for (const organization of organizations) {
+			for (const costCenter of organization.costCenters) {
 				for (const work of costCenter.works) {
 					candidates.push({
-						organizationId: membership.organization.id,
+						organizationId: organization.id,
 						costCenterId: costCenter.id,
 						workId: work.id,
 					});
@@ -439,29 +454,25 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 			grantedOrgIds.add(costCenter.organizationId);
 		}
 
-		const validWorkIds = new Set(
-			workMemberships
-				.filter(
-					(membership) =>
-						membership.work.costCenter &&
-						(grantedCenterIds.has(membership.work.costCenter.id) ||
-							grantedOrgIds.has(membership.work.costCenter.organizationId)),
-				)
-				.map((membership) => membership.work.id),
-		);
-		const restrictionActive =
-			!(role === "GESTOR" && orgMemberships.length > 0) &&
-			validWorkIds.size > 0;
 		for (const costCenter of centers.values()) {
 			if (!grantedOrgIds.has(costCenter.organizationId)) continue;
 			for (const work of costCenter.works) {
-				if (restrictionActive && !validWorkIds.has(work.id)) continue;
 				candidates.push({
 					organizationId: costCenter.organizationId,
 					costCenterId: costCenter.id,
 					workId: work.id,
 				});
 			}
+		}
+		for (const membership of workMemberships) {
+			if (role !== "GESTOR") continue;
+			const work = membership.work;
+			if (!work.costCenter) continue;
+			candidates.push({
+				organizationId: work.costCenter.organizationId,
+				costCenterId: work.costCenter.id,
+				workId: work.id,
+			});
 		}
 	}
 

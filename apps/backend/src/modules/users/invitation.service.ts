@@ -43,12 +43,38 @@ async function assertActorCanInvite(
 			403,
 		);
 	}
-	const memberships = await prisma.organizationMembership.findMany({
-		where: { userId: actorId, revokedAt: null },
-		select: { organizationId: true },
-	});
-	const allowed = new Set(memberships.map((m) => m.organizationId));
-	if (scope.organizationIds.some((id) => !allowed.has(id))) {
+	const [memberships, companyMemberships, centers, works] = await Promise.all([
+		prisma.organizationMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: { organizationId: true },
+		}),
+		prisma.companyMembership.findMany({
+			where: { userId: actorId, revokedAt: null },
+			select: {
+				company: { select: { organizations: { select: { id: true } } } },
+			},
+		}),
+		prisma.costCenter.findMany({
+			where: { id: { in: scope.costCenterIds } },
+			select: { organizationId: true },
+		}),
+		prisma.constructionWork.findMany({
+			where: { id: { in: scope.workIds } },
+			select: { costCenter: { select: { organizationId: true } } },
+		}),
+	]);
+	const allowed = new Set([
+		...memberships.map((m) => m.organizationId),
+		...companyMemberships.flatMap((m) =>
+			m.company.organizations.map((o) => o.id),
+		),
+	]);
+	const targetOrganizations = new Set([
+		...scope.organizationIds,
+		...centers.map((c) => c.organizationId),
+		...works.map((w) => w.costCenter.organizationId),
+	]);
+	if ([...targetOrganizations].some((id) => !allowed.has(id))) {
 		throw new ConstructionError(
 			"FORBIDDEN",
 			"Convite fora das organizacoes do Gerente",
@@ -61,22 +87,48 @@ function assertInvitationScope(
 	targetRole: AuthorizationRole,
 	scope: UserScopeInput,
 ) {
+	const companyIds = scope.companyIds ?? [];
 	if (targetRole === "ADMIN") return;
-	if (scope.organizationIds.length === 0) {
+	if (
+		targetRole === "GERENTE" &&
+		companyIds.length === 0 &&
+		scope.organizationIds.length === 0
+	) {
 		throw new ConstructionError(
 			"ORGANIZATION_REQUIRED",
-			"Convite exige ao menos uma organizacao",
+			"Convite de Gerente exige empresa ou organizacao",
+			422,
+		);
+	}
+	if (targetRole === "GESTOR" && companyIds.length > 0) {
+		throw new ConstructionError(
+			"GESTOR_SCOPE_INVALID",
+			"Gestor nao pode receber escopo de empresa",
 			422,
 		);
 	}
 	if (
-		(targetRole === "GESTOR" || targetRole === "SUPERVISOR") &&
+		targetRole === "GESTOR" &&
+		scope.organizationIds.length === 0 &&
 		scope.costCenterIds.length === 0 &&
 		scope.workIds.length === 0
 	) {
 		throw new ConstructionError(
-			"COST_CENTER_REQUIRED",
-			`O papel ${targetRole} exige vinculo com ao menos um centro de custo ou obra`,
+			"SCOPE_REQUIRED",
+			"Convite de Gestor exige organizacao, centro de custo ou obra",
+			422,
+		);
+	}
+	if (
+		targetRole === "SUPERVISOR" &&
+		(companyIds.length > 0 ||
+			scope.organizationIds.length > 0 ||
+			scope.workIds.length > 0 ||
+			scope.costCenterIds.length === 0)
+	) {
+		throw new ConstructionError(
+			"SUPERVISOR_COST_CENTER_ONLY",
+			"Supervisor exige somente centros de custo",
 			422,
 		);
 	}
@@ -97,18 +149,12 @@ async function assertWorksHaveCenterAccess(
 			422,
 		);
 	}
-	if (works.some((work) => !scope.costCenterIds.includes(work.costCenterId))) {
-		throw new ConstructionError(
-			"WORK_WITHOUT_CENTER_ACCESS",
-			"Obra do convite exige vinculo com o centro de custo pai no mesmo escopo",
-			422,
-		);
-	}
 }
 
 export const invitationService = {
 	async createInvitation(actorId: string, input: CreateInvitationInput) {
 		const scope: UserScopeInput = {
+			companyIds: input.scope.companyIds ?? [],
 			organizationIds: input.scope.organizationIds,
 			costCenterIds: input.scope.costCenterIds,
 			workIds: input.scope.workIds ?? [],
@@ -213,11 +259,14 @@ export const invitationService = {
 		}
 
 		const role = invitation.role as AuthorizationRole;
-		const scope = (invitation.scopeJson as UserScopeInput | null) ?? {
+		const persistedScope = invitation.scopeJson as UserScopeInput | null;
+		const scope: UserScopeInput = {
+			companyIds: persistedScope?.companyIds ?? [],
 			organizationIds:
-				invitation.scopeType === "organization" ? [invitation.scopeId] : [],
-			costCenterIds: [],
-			workIds: [],
+				persistedScope?.organizationIds ??
+				(invitation.scopeType === "organization" ? [invitation.scopeId] : []),
+			costCenterIds: persistedScope?.costCenterIds ?? [],
+			workIds: persistedScope?.workIds ?? [],
 		};
 		assertInvitationScope(role, scope);
 		await assertWorksHaveCenterAccess(scope);
@@ -226,6 +275,10 @@ export const invitationService = {
 			await tx.user.update({
 				where: { id: userId },
 				data: { role, workspaceId: invitation.workspaceId },
+			});
+			await tx.companyMembership.updateMany({
+				where: { userId, revokedAt: null },
+				data: { revokedAt: new Date() },
 			});
 			await tx.organizationMembership.updateMany({
 				where: { userId, revokedAt: null },
@@ -244,22 +297,29 @@ export const invitationService = {
 					where: {
 						organizationId_userId: { organizationId, userId },
 					},
-					create: { organizationId, userId, role: "GERENTE" },
-					update: { revokedAt: null },
+					create: { organizationId, userId, role },
+					update: { revokedAt: null, role },
 				});
 			}
 			for (const costCenterId of scope.costCenterIds) {
 				await tx.costCenterMembership.upsert({
 					where: { costCenterId_userId: { costCenterId, userId } },
-					create: { costCenterId, userId, role: "GESTOR" },
-					update: { revokedAt: null },
+					create: { costCenterId, userId, role },
+					update: { revokedAt: null, role },
 				});
 			}
 			for (const workId of scope.workIds) {
 				await tx.workMembership.upsert({
 					where: { workId_userId: { workId, userId } },
-					create: { workId, userId, role: "GESTOR" },
-					update: { revokedAt: null },
+					create: { workId, userId, role },
+					update: { revokedAt: null, role },
+				});
+			}
+			for (const companyId of scope.companyIds ?? []) {
+				await tx.companyMembership.upsert({
+					where: { companyId_userId: { companyId, userId } },
+					create: { companyId, userId, role },
+					update: { revokedAt: null, role },
 				});
 			}
 			await tx.userInvitation.update({
@@ -292,6 +352,7 @@ export const invitationService = {
 			);
 		}
 		const scope = (invitation.scopeJson as UserScopeInput | null) ?? {
+			companyIds: [],
 			organizationIds: [invitation.scopeId],
 			costCenterIds: [],
 			workIds: [],
@@ -365,6 +426,7 @@ export const invitationService = {
 			);
 		}
 		const scope = (invitation.scopeJson as UserScopeInput | null) ?? {
+			companyIds: [],
 			organizationIds: [invitation.scopeId],
 			costCenterIds: [],
 			workIds: [],
@@ -398,15 +460,38 @@ export const invitationService = {
 
 		const actor = await prisma.user.findUnique({
 			where: { id: actorId },
-			select: { role: true },
+			select: {
+				role: true,
+				companyMemberships: {
+					where: { revokedAt: null },
+					select: { companyId: true },
+				},
+			},
 		});
 		let where = {};
 		if (actor?.role !== "ADMIN") {
-			const memberships = await prisma.organizationMembership.findMany({
-				where: { userId: actorId, revokedAt: null },
-				select: { organizationId: true },
-			});
-			const orgIds = memberships.map((m) => m.organizationId);
+			const [memberships, companyOrganizations] = await Promise.all([
+				prisma.organizationMembership.findMany({
+					where: { userId: actorId, revokedAt: null },
+					select: { organizationId: true },
+				}),
+				actor?.companyMemberships?.length
+					? prisma.organization.findMany({
+							where: {
+								companyId: {
+									in: actor.companyMemberships.map((m) => m.companyId),
+								},
+							},
+							select: { id: true },
+						})
+					: Promise.resolve([]),
+			]);
+			const orgIds = [
+				...new Set([
+					...memberships.map((m) => m.organizationId),
+					...companyOrganizations.map((organization) => organization.id),
+				]),
+			];
 			if (orgIds.length === 0) {
 				return buildPaginatedResponse([], 0, page, limit);
 			}

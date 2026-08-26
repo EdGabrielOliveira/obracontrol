@@ -3,6 +3,8 @@ export type Role = "ADMIN" | "GERENTE" | "GESTOR" | "SUPERVISOR";
 export type AuthorizationCapabilities = {
 	canManageUsers: boolean;
 	canAdministerCompanies: boolean;
+	canManageScopedCompanies?: boolean;
+	canManageStructure?: boolean;
 	canManageApiKeys: boolean;
 	canDecideSupervisorRequests: boolean;
 	canReviewExecutedSupervisorRequests: boolean;

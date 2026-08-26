@@ -18,6 +18,7 @@ model User {
   accounts                Account[]
   apiKeys                 ApiKey[]
   organizationMemberships OrganizationMembership[]
+  companyMemberships      CompanyMembership[]
   workMemberships         WorkMembership[]
   costCenterMemberships   CostCenterMembership[]
   invitationsCreated      UserInvitation[]         @relation("UserInvitationCreator")
@@ -163,6 +164,23 @@ model ApiKey {
 
   @@unique([keyPrefix])
   @@index([ownerId])
+  @@index([userId])
+}
+
+model CompanyMembership {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  role      String   @default("GERENTE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revokedAt DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([companyId])
   @@index([userId])
 }
 

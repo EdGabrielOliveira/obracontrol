@@ -1,5 +1,6 @@
 import { Elysia, t } from "elysia";
 import { env } from "../../../env";
+import { normalizeRole } from "../../../lib/authorization";
 import {
 	requireRole,
 	requireWorkAccess,
@@ -8,6 +9,7 @@ import { ConstructionError } from "../../../lib/errors";
 import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { resolveResourceScope } from "../../../lib/resource-scope";
+import { getAccessibleCostCenterIds } from "../../../lib/scope-access";
 import { throwInvalidInput } from "../../../lib/zod-validation";
 import { auditService } from "../../audit/audit.service";
 import { budgetService } from "../budget.service";
@@ -54,6 +56,16 @@ function parseStructuredAddress(
 
 const scheduleService = new ConstructionScheduleService(repository);
 
+function assertStructuralRole(role: string | null | undefined): void {
+	if (normalizeRole(role) === "SUPERVISOR") {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Supervisor nao pode alterar a estrutura da obra",
+			403,
+		);
+	}
+}
+
 export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.use(resolveAuth)
 	.use(requireRole("read"))
@@ -82,12 +94,16 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		"/gestores",
 		async ({ user }) => {
 			const where =
-				user.role === "ADMIN"
+				normalizeRole(user.role) === "ADMIN"
 					? { role: "GESTOR" }
 					: {
 							role: "GESTOR",
 							costCenterMemberships: {
-								some: { costCenter: { ownerId: user.id } },
+								some: {
+									costCenterId: {
+										in: await getAccessibleCostCenterIds(user.id),
+									},
+								},
 							},
 						};
 			return prisma.user.findMany({
@@ -184,6 +200,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.post(
 		"/",
 		async ({ body, user }) => {
+			assertStructuralRole(user.role);
 			if (!body.name?.trim() || !body.costCenterId?.trim()) {
 				throw new ConstructionError(
 					"MISSING_FIELDS",
@@ -263,6 +280,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.post(
 		"/with-budget",
 		async ({ body, headers, user, set }) => {
+			assertStructuralRole(user.role);
 			if (!body.name?.trim() || !body.costCenterId?.trim()) {
 				throw new ConstructionError(
 					"MISSING_FIELDS",
@@ -280,7 +298,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					404,
 				);
 			}
-			const resourceOwnerId = parentScope.resourceOwnerId || user.id;
+			const resourceOwnerId = parentScope.resourceOwnerId;
 			const idempotencyKey = headers["idempotency-key"]?.trim();
 			const work = (await constructionWorkService.create(resourceOwnerId, {
 				code: body.code?.trim(),
@@ -380,6 +398,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.patch(
 		"/:workId",
 		async ({ params, body, user, scope }) => {
+			assertStructuralRole(user.role);
 			if (
 				!body.code &&
 				!body.name &&
@@ -402,7 +421,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				where: { id: params.workId },
 			});
 			const result = await constructionWorkService.update(
-				user.id,
+				scope.resourceOwnerId,
 				params.workId,
 				body,
 			);
@@ -451,6 +470,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.delete(
 		"/:workId",
 		async ({ params, user, scope }) => {
+			assertStructuralRole(user.role);
 			const old = await prisma.constructionWork.findUnique({
 				where: { id: params.workId },
 			});
@@ -632,7 +652,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	)
 	.post(
 		"/:workId/schedule",
-		async ({ params, body, scope }) => {
+		async ({ params, body, scope, user }) => {
+			assertStructuralRole(user.role);
 			if (
 				!body.items ||
 				!Array.isArray(body.items) ||
@@ -667,6 +688,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.post(
 		"/:workId/schedule/items",
 		async ({ params, body, scope, user }) => {
+			assertStructuralRole(user.role);
 			const result = await scheduleService.upsertManualScheduleItem(
 				scope.resourceOwnerId,
 				params.workId,
@@ -698,6 +720,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.post(
 		"/:workId/schedule/revisions",
 		async ({ params, body, user, scope }) => {
+			assertStructuralRole(user.role);
 			const revision = await scheduleService.addScheduleRevision(
 				scope.resourceOwnerId,
 				params.workId,
@@ -730,6 +753,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.post(
 		"/:workId/schedule/import",
 		async ({ params, body, user, scope }) => {
+			assertStructuralRole(user.role);
 			assertValidXlsxUpload(body.file);
 			const bytes = new Uint8Array(await body.file.arrayBuffer());
 			const parsed = parseWorkbookByKind(bytes, body.file.name, "cronograma");

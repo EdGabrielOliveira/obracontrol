@@ -14,8 +14,9 @@ export async function loadBudgetExposure(
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
 
+	const resourceOwnerId = scope.resourceOwnerId;
 	const version = await prisma.budgetVersion.findFirst({
-		where: { ownerId: actorId, workId, isActive: true },
+		where: { ownerId: resourceOwnerId, workId, isActive: true },
 		select: { id: true },
 	});
 	if (!version) return new Map();
@@ -32,7 +33,7 @@ export async function loadBudgetExposure(
 		(identityIds) =>
 			prisma.constructionBudgetImpact.findMany({
 				where: {
-					ownerId: actorId,
+					ownerId: resourceOwnerId,
 					workId,
 					budgetItemIdentityId: { in: [...new Set(identityIds)] },
 					reversedAt: null,

@@ -75,7 +75,7 @@ export function validateGovernanceTransition(
 	) {
 		throw new ConstructionError(
 			"GOVERNANCE_OVERRIDE_REQUIRED",
-			"Somente ADMIN pode executar override administrativo",
+			"Somente ADMIN ou GERENTE podem executar override administrativo",
 			403,
 		);
 	}

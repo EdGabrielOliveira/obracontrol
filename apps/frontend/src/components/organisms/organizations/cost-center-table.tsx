@@ -17,6 +17,7 @@ interface CostCenterTableProps {
 	searchValue?: string;
 	onSearchChange?: (value: string) => void;
 	onDelete?: (costCenter: CostCenterListingRow) => void;
+	canManageStructure?: boolean;
 }
 
 const helper = createColumnHelper<CostCenterListingRow>();
@@ -27,6 +28,7 @@ export function CostCenterTable({
 	searchValue,
 	onSearchChange,
 	onDelete,
+	canManageStructure = true,
 }: CostCenterTableProps) {
 	const columns = [
 		helper.accessor("name", {
@@ -91,7 +93,7 @@ export function CostCenterTable({
 								to: "/app/centros-de-custo/$ccId/multiobras",
 								params: { ccId },
 							},
-							onDelete
+							canManageStructure && onDelete
 								? {
 										label: "Excluir centro de custo",
 										icon: <Trash2 className="h-4 w-4" />,

@@ -13,11 +13,11 @@ export type ApprovalDecisionMode =
  * | Origem | Fluxo | Decisor |
  * | --- | --- | --- |
  * | SUPERVISOR | PENDING, sem efeito | GESTOR do mesmo centro |
- * | GESTOR | PENDING, sem efeito | GERENTE da mesma organizacao |
+ * | GESTOR | AUTONOMOUS direto auditado | — |
  * | GERENTE | AUTONOMOUS direto auditado | — |
  * | ADMIN | AUTONOMOUS direto; override exige motivo (ADMIN_OVERRIDE) | — |
  *
- * ADMIN/GERENTE executam diretamente também a ativação de uma versão de
+ * ADMIN/GERENTE/GESTOR executam diretamente também a ativação de uma versão de
  * orçamento; a decisão automática fica registrada para auditoria.
  */
 
@@ -107,9 +107,8 @@ export function hashApprovalPayload(payload: unknown): string {
 }
 
 /**
- * DEC-004: papel exigido para decidir cada solicitacao na cadeia fixa.
- * Supervisor solicita a Gestor do mesmo centro de custo; Gestor solicita a
- * Gerente da mesma organizacao.
+ * DEC-004: papel exigido para decidir solicitações pendentes. Supervisor
+ * solicita ao Gestor do mesmo centro; papéis confiáveis executam diretamente.
  */
 export function requiredApproverRoleFor(
 	actorRole: AuthorizationRole,

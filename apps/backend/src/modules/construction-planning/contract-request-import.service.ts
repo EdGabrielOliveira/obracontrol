@@ -60,7 +60,7 @@ export async function createQuotationMapPreview(
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	const resourceOwnerId = scope.resourceOwnerId || actorId;
+	const resourceOwnerId = scope.resourceOwnerId;
 	const request = await prisma.contractRequest.findFirst({
 		where: { id: requestId, ownerId: resourceOwnerId, workId },
 		select: { id: true, status: true },
@@ -106,7 +106,7 @@ export async function getQuotationMapPreview(
 	if (!scope.canRead) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	const resourceOwnerId = scope.resourceOwnerId || actorId;
+	const resourceOwnerId = scope.resourceOwnerId;
 	const batch = await prisma.importBatch.findFirst({
 		where: {
 			id: batchId,
@@ -145,7 +145,7 @@ export async function confirmQuotationMapBatch(
 	if (!scope.canWrite) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	const resourceOwnerId = scope.resourceOwnerId || actorId;
+	const resourceOwnerId = scope.resourceOwnerId;
 	const request = await prisma.contractRequest.findFirst({
 		where: { id: requestId, ownerId: resourceOwnerId, workId },
 		select: { id: true, status: true, confirmedBatchId: true },

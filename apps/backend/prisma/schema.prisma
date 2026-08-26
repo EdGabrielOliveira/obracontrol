@@ -1,6 +1,7 @@
 generator client {
 	provider  = "prisma-client-js"
 	engineType = "library"
+	previewFeatures = ["prismaSchemaFolder"]
 }
 
 // Generated client nodejs usado pelos adapters (PrismaLibSQL) e pela API.

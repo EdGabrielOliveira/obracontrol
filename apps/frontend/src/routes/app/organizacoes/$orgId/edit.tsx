@@ -27,7 +27,7 @@ import type { CreateOrganizationInput } from "@/types/organizations";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/edit")({
-	beforeLoad: () => requireAuthorizationCapability("canAdministerCompanies"),
+	beforeLoad: () => requireAuthorizationCapability("canManageStructure"),
 	loader: async ({ params }) =>
 		await queryClient.prefetchQuery({
 			queryKey: organizationKeys.detail(params.orgId),
@@ -47,9 +47,8 @@ function RouteComponent() {
 	const { orgId } = useParams({ from: "/app/organizacoes/$orgId/edit" });
 	const navigate = useNavigate();
 	const client = useQueryClient();
-	const { role, capabilities, loading: authorizationLoading } = useAuth();
-	const canEditOrganization =
-		role === "ADMIN" || capabilities?.canAdministerCompanies === true;
+	const { capabilities, loading: authorizationLoading } = useAuth();
+	const canEditOrganization = capabilities?.canManageStructure === true;
 	const [showDelete, setShowDelete] = useState(false);
 	const query = useQuery({
 		queryKey: organizationKeys.detail(orgId),

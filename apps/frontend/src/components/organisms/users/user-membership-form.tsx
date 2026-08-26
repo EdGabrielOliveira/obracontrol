@@ -27,6 +27,7 @@ type WorkOption = {
 };
 
 type UserScopeFormProps = {
+	role?: string;
 	isPending?: boolean;
 	submitLabel?: string;
 	organizations: OrganizationOption[];
@@ -40,13 +41,19 @@ type UserScopeFormProps = {
 };
 
 export function UserScopeForm({
+	role,
 	isPending = false,
 	submitLabel = "Salvar escopo",
 	organizations,
 	costCenters,
 	companies = [],
 	works = [],
-	initial = { organizationIds: [], costCenterIds: [], workIds: [] },
+	initial = {
+		companyIds: [],
+		organizationIds: [],
+		costCenterIds: [],
+		workIds: [],
+	},
 	onSubmit,
 	onChange,
 	showSubmit = true,
@@ -58,7 +65,9 @@ export function UserScopeForm({
 		initial.costCenterIds,
 	);
 	const [workIds, setWorkIds] = useState<string[]>(initial.workIds);
-	const [companyIds, setCompanyIds] = useState<string[]>([]);
+	const [companyIds, setCompanyIds] = useState<string[]>(
+		initial.companyIds ?? [],
+	);
 
 	const centersByOrg = useMemo(() => {
 		const map = new Map<string, CostCenterOption[]>();
@@ -81,8 +90,8 @@ export function UserScopeForm({
 	};
 
 	const scope = useMemo(
-		() => ({ organizationIds, costCenterIds, workIds }),
-		[organizationIds, costCenterIds, workIds],
+		() => ({ companyIds, organizationIds, costCenterIds, workIds }),
+		[companyIds, organizationIds, costCenterIds, workIds],
 	);
 
 	useEffect(() => {
@@ -91,6 +100,7 @@ export function UserScopeForm({
 
 	const handleSubmit = () => {
 		const parsed = userScopeSchema.safeParse({
+			companyIds,
 			organizationIds,
 			costCenterIds,
 			workIds,
@@ -133,7 +143,7 @@ export function UserScopeForm({
 
 	return (
 		<div className="space-y-5">
-			{companies.length > 0 && (
+			{role === "GERENTE" && companies.length > 0 && (
 				<div className="space-y-2">
 					<Label>Empresas</Label>
 					<p className="text-sm text-muted-foreground">
@@ -157,99 +167,117 @@ export function UserScopeForm({
 					</div>
 				</div>
 			)}
-			<div className="space-y-2">
-				<Label>Organizações</Label>
-				{organizations.length === 0 ? (
-					<p className="text-sm text-muted-foreground">
-						Nenhuma organização disponível no seu escopo.
-					</p>
-				) : (
-					<div className="grid gap-2 sm:grid-cols-2">
-						{organizations.map((org) => (
-							<div
-								key={org.id}
-								className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
-							>
-								<Checkbox
-									aria-label={`Vincular ${org.name}`}
-									checked={organizationIds.includes(org.id)}
-									onCheckedChange={() =>
-										toggleId(organizationIds, setOrganizationIds, org.id)
-									}
-								/>
-								{org.name}
-							</div>
-						))}
-					</div>
-				)}
-			</div>
+			{role !== "SUPERVISOR" && (
+				<div className="space-y-2">
+					<Label>Organizações</Label>
+					{organizations.length === 0 ? (
+						<p className="text-sm text-muted-foreground">
+							Nenhuma organização disponível no seu escopo.
+						</p>
+					) : (
+						<div className="grid gap-2 sm:grid-cols-2">
+							{organizations.map((org) => (
+								<div
+									key={org.id}
+									className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
+								>
+									<Checkbox
+										aria-label={`Vincular ${org.name}`}
+										checked={organizationIds.includes(org.id)}
+										onCheckedChange={() =>
+											toggleId(organizationIds, setOrganizationIds, org.id)
+										}
+									/>
+									{org.name}
+								</div>
+							))}
+						</div>
+					)}
+				</div>
+			)}
 
 			<div className="space-y-2">
 				<Label>Centros de custo (obrigatórios para Gestor/Supervisor)</Label>
-				{organizationIds.length === 0 ? (
+				{organizationIds.length === 0 &&
+				role !== "SUPERVISOR" &&
+				role !== "GESTOR" ? (
 					<p className="text-sm text-muted-foreground">
 						Selecione ao menos uma organização para escolher centros.
 					</p>
 				) : (
-					organizationIds.flatMap((orgId) => {
-						const centers = centersByOrg.get(orgId) ?? [];
-						if (centers.length === 0) return [];
-						return [
-							<div key={orgId} className="space-y-1">
-								<p className="text-xs font-medium text-muted-foreground">
-									{organizations.find((org) => org.id === orgId)?.name ?? orgId}
-								</p>
-								<div className="grid gap-2 sm:grid-cols-2">
-									{centers.map((cc) => (
-										<div
-											key={cc.id}
-											className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
-										>
-											<Checkbox
-												aria-label={`Vincular centro ${cc.name}`}
-												checked={costCenterIds.includes(cc.id)}
-												onCheckedChange={() =>
-													toggleId(costCenterIds, setCostCenterIds, cc.id)
-												}
-											/>
-											{cc.name}
-										</div>
-									))}
-								</div>
-							</div>,
-						];
-					})
+					(role === "SUPERVISOR" ? ["__all__"] : organizationIds).flatMap(
+						(orgId) => {
+							const centers =
+								orgId === "__all__"
+									? costCenters
+									: (centersByOrg.get(orgId) ?? []);
+							if (centers.length === 0) return [];
+							return [
+								<div key={orgId} className="space-y-1">
+									<p className="text-xs font-medium text-muted-foreground">
+										{orgId === "__all__"
+											? "Centros direcionados"
+											: (organizations.find((org) => org.id === orgId)?.name ??
+												orgId)}
+									</p>
+									<div className="grid gap-2 sm:grid-cols-2">
+										{centers.map((cc) => (
+											<div
+												key={cc.id}
+												className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
+											>
+												<Checkbox
+													aria-label={`Vincular centro ${cc.name}`}
+													checked={costCenterIds.includes(cc.id)}
+													onCheckedChange={() =>
+														toggleId(costCenterIds, setCostCenterIds, cc.id)
+													}
+												/>
+												{cc.name}
+											</div>
+										))}
+									</div>
+								</div>,
+							];
+						},
+					)
 				)}
 			</div>
 
-			<div className="space-y-2">
-				<Label>Obras</Label>
-				{organizationIds.length === 0 ? (
-					<p className="text-sm text-muted-foreground">
-						Selecione ao menos uma organização para escolher obras.
-					</p>
-				) : (
-					<div className="grid gap-2 sm:grid-cols-2">
-						{works
-							.filter((work) => organizationIds.includes(work.organizationId))
-							.map((work) => (
-								<div
-									key={work.id}
-									className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
-								>
-									<Checkbox
-										aria-label={`Vincular obra ${work.name}`}
-										checked={workIds.includes(work.id)}
-										onCheckedChange={() =>
-											toggleId(workIds, setWorkIds, work.id)
-										}
-									/>
-									{work.name}
-								</div>
-							))}
-					</div>
-				)}
-			</div>
+			{role !== "SUPERVISOR" && (
+				<div className="space-y-2">
+					<Label>Obras</Label>
+					{organizationIds.length === 0 && role !== "GESTOR" ? (
+						<p className="text-sm text-muted-foreground">
+							Selecione ao menos uma organização para escolher obras.
+						</p>
+					) : (
+						<div className="grid gap-2 sm:grid-cols-2">
+							{works
+								.filter(
+									(work) =>
+										organizationIds.length === 0 ||
+										organizationIds.includes(work.organizationId),
+								)
+								.map((work) => (
+									<div
+										key={work.id}
+										className="flex items-center gap-2 rounded-md border border-border p-3 text-sm"
+									>
+										<Checkbox
+											aria-label={`Vincular obra ${work.name}`}
+											checked={workIds.includes(work.id)}
+											onCheckedChange={() =>
+												toggleId(workIds, setWorkIds, work.id)
+											}
+										/>
+										{work.name}
+									</div>
+								))}
+						</div>
+					)}
+				</div>
+			)}
 
 			{showSubmit && (
 				<Button type="button" onClick={handleSubmit} loading={isPending}>

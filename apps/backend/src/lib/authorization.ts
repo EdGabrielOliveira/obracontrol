@@ -4,6 +4,14 @@ export const AUTH_ROLES = ["ADMIN", "GERENTE", "GESTOR", "SUPERVISOR"] as const;
 
 export type AuthorizationRole = (typeof AUTH_ROLES)[number];
 
+// `OPERADOR` was the operational role used before the four-role authority
+// model. Keep the alias at the boundary so pre-existing accounts continue to
+// work with the least-privileged equivalent; do not promote them or grant
+// scope during the CompanyMembership migration.
+const LEGACY_ROLE_ALIASES: Readonly<Record<string, AuthorizationRole>> = {
+	OPERADOR: "SUPERVISOR",
+};
+
 export type RoleAction =
 	| "read"
 	| "write"
@@ -46,7 +54,8 @@ export function roleToScopeAccess(role?: string | null): ScopeAccessFlags {
 
 export function normalizeRole(role: string | null | undefined): string | null {
 	if (!role) return null;
-	return role.trim().toUpperCase();
+	const normalized = role.trim().toUpperCase();
+	return LEGACY_ROLE_ALIASES[normalized] ?? normalized;
 }
 
 export function isAuthorizationRole(

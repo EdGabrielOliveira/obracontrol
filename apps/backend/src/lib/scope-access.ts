@@ -43,19 +43,47 @@ export async function getAccessibleOrgIds(userId: string): Promise<string[]> {
 		});
 		return orgs.map((o) => o.id);
 	}
-	const [memberships, centerMemberships] = await Promise.all([
-		prisma.organizationMembership.findMany({
-			where: { userId, revokedAt: null },
-			select: { organizationId: true },
-		}),
-		prisma.costCenterMembership.findMany({
-			where: { userId, revokedAt: null },
-			select: { costCenter: { select: { organizationId: true } } },
-		}),
-	]);
+	const [memberships, companyMemberships, centerMemberships] =
+		await Promise.all([
+			prisma.organizationMembership.findMany({
+				where: {
+					userId,
+					revokedAt: null,
+					organization: user.workspaceId
+						? { workspaceId: user.workspaceId }
+						: { workspaceId: null },
+				},
+				select: { organizationId: true },
+			}),
+			prisma.companyMembership.findMany({
+				where: {
+					userId,
+					revokedAt: null,
+					company: user.workspaceId
+						? { workspaceId: user.workspaceId }
+						: { workspaceId: null },
+				},
+				select: {
+					company: { select: { organizations: { select: { id: true } } } },
+				},
+			}),
+			prisma.costCenterMembership.findMany({
+				where: {
+					userId,
+					revokedAt: null,
+					costCenter: user.workspaceId
+						? { workspaceId: user.workspaceId }
+						: { workspaceId: null },
+				},
+				select: { costCenter: { select: { organizationId: true } } },
+			}),
+		]);
 	return [
 		...new Set([
 			...memberships.map((m) => m.organizationId),
+			...companyMemberships.flatMap((m) =>
+				m.company.organizations.map((o) => o.id),
+			),
 			...centerMemberships.map((m) => m.costCenter.organizationId),
 		]),
 	];
@@ -78,26 +106,69 @@ export async function getAccessibleCostCenterIds(
 		return ccs.map((c) => c.id);
 	}
 	if (role === "GERENTE") {
-		const orgMemberships = await prisma.organizationMembership.findMany({
-			where: { userId, revokedAt: null },
-			select: {
-				organization: { select: { costCenters: { select: { id: true } } } },
-			},
-		});
+		const [orgMemberships, companyMemberships] = await Promise.all([
+			prisma.organizationMembership.findMany({
+				where: {
+					userId,
+					revokedAt: null,
+					organization: user.workspaceId
+						? { workspaceId: user.workspaceId }
+						: { workspaceId: null },
+				},
+				select: {
+					organization: { select: { costCenters: { select: { id: true } } } },
+				},
+			}),
+			prisma.companyMembership.findMany({
+				where: {
+					userId,
+					revokedAt: null,
+					company: user.workspaceId
+						? { workspaceId: user.workspaceId }
+						: { workspaceId: null },
+				},
+				select: {
+					company: {
+						select: {
+							organizations: {
+								select: { costCenters: { select: { id: true } } },
+							},
+						},
+					},
+				},
+			}),
+		]);
 		const ccIds = new Set<string>();
 		for (const om of orgMemberships) {
 			for (const cc of om.organization.costCenters) ccIds.add(cc.id);
+		}
+		for (const membership of companyMemberships) {
+			for (const org of membership.company.organizations) {
+				for (const cc of org.costCenters) ccIds.add(cc.id);
+			}
 		}
 		return [...ccIds];
 	}
 	const [ccMemberships, orgMemberships] = await Promise.all([
 		prisma.costCenterMembership.findMany({
-			where: { userId, revokedAt: null },
+			where: {
+				userId,
+				revokedAt: null,
+				costCenter: user.workspaceId
+					? { workspaceId: user.workspaceId }
+					: { workspaceId: null },
+			},
 			select: { costCenterId: true },
 		}),
 		role === "GESTOR"
 			? prisma.organizationMembership.findMany({
-					where: { userId, revokedAt: null },
+					where: {
+						userId,
+						revokedAt: null,
+						organization: user.workspaceId
+							? { workspaceId: user.workspaceId }
+							: { workspaceId: null },
+					},
 					select: {
 						organization: { select: { costCenters: { select: { id: true } } } },
 					},
@@ -116,14 +187,16 @@ export async function getAccessibleCostCenterIds(
 }
 
 export async function getUserScopes(userId: string) {
-	const [orgMemberships, ccMemberships, workMemberships] = await Promise.all([
-		prisma.organizationMembership.findMany({
-			where: { userId, revokedAt: null },
-		}),
-		prisma.costCenterMembership.findMany({
-			where: { userId, revokedAt: null },
-		}),
-		prisma.workMembership.findMany({ where: { userId, revokedAt: null } }),
-	]);
-	return { orgMemberships, ccMemberships, workMemberships };
+	const [companyMemberships, orgMemberships, ccMemberships, workMemberships] =
+		await Promise.all([
+			prisma.companyMembership.findMany({ where: { userId, revokedAt: null } }),
+			prisma.organizationMembership.findMany({
+				where: { userId, revokedAt: null },
+			}),
+			prisma.costCenterMembership.findMany({
+				where: { userId, revokedAt: null },
+			}),
+			prisma.workMembership.findMany({ where: { userId, revokedAt: null } }),
+		]);
+	return { companyMemberships, orgMemberships, ccMemberships, workMemberships };
 }

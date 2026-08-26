@@ -161,8 +161,8 @@ export class ConstructionWorkService {
 	}
 
 	/**
-	 * DEC-005 (USR-003): exclusao de obra e comando relevante. GESTOR/SUPERVISOR
-	 * geram solicitacao PENDING; GERENTE/ADMIN executam o efeito direto
+	 * DEC-005 (USR-003): exclusao de obra e comando relevante. SUPERVISOR
+	 * gera solicitacao PENDING; GESTOR, GERENTE e ADMIN executam o efeito direto
 	 * (handler WORK_DELETE) na mesma transacao.
 	 */
 	async delete(ownerId: string, workId: string, ctx?: { userId: string }) {
