@@ -15,7 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getCurrentCostBudgetItems } from "@/api/budget";
 import { deleteActualCost, getActualCost } from "@/api/costs";
-import { decideApproval } from "@/api/governance";
+import { decideApproval, getGovernanceRecord } from "@/api/governance";
 import { governanceKeys, workKeys, workSupplierKeys } from "@/api/query-keys";
 import { listWorkSuppliers } from "@/api/work-suppliers";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
@@ -24,6 +24,10 @@ import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
+import {
+	GovernanceStatusBadge,
+	GovernanceStatusModal,
+} from "@/components/organisms/governance/governance-status-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -106,9 +110,14 @@ function RouteComponent() {
 		requestId: string;
 	} | null>(null);
 	const [approvalReason, setApprovalReason] = useState("");
+	const [governanceOpen, setGovernanceOpen] = useState(false);
 	const costQuery = useQuery({
 		queryKey: workKeys.costDetail(workId, costId),
 		queryFn: () => getActualCost(workId, costId),
+	});
+	const governanceQuery = useQuery({
+		queryKey: governanceKeys.detail("COST_STATUS", costId),
+		queryFn: () => getGovernanceRecord("COST_STATUS", costId),
 	});
 	const deleteMutation = useMutation({
 		mutationFn: () => deleteActualCost(workId, costId),
@@ -182,6 +191,12 @@ function RouteComponent() {
 				description={`${formatDate(cost.costDate)} · ${formatCurrency(cost.amount)}`}
 				actions={
 					<>
+						<GovernanceStatusBadge record={governanceQuery.data} />
+						{role !== "SUPERVISOR" && (
+							<Button variant="outline" onClick={() => setGovernanceOpen(true)}>
+								Alterar status
+							</Button>
+						)}
 						<Link to="/app/obras/$workId/custos" params={{ workId }}>
 							<Button variant="outline">
 								<ArrowLeft className="mr-2 h-4 w-4" />
@@ -240,6 +255,14 @@ function RouteComponent() {
 						</Button>
 					</>
 				}
+			/>
+			<GovernanceStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				entityType="COST_STATUS"
+				entityId={costId}
+				current={governanceQuery.data}
+				onChanged={() => governanceQuery.refetch()}
 			/>
 
 			{isUnappropriated && (

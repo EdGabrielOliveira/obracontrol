@@ -450,16 +450,7 @@ export async function findWorkByOwnerAndCreationIdempotencyKey(
 async function mergeWorksWithChildren<
 	T extends { id: string; activeImportId: string | null; ownerId?: string },
 >(ownerId: string, works: T[]): Promise<(T & ActiveImportChildren)[]> {
-	const groups = new Map<
-		string,
-		Array<{ workId: string; activeImportId: string | null }>
-	>();
-	for (const work of works) {
-		const scopeOwnerId = work.ownerId ?? ownerId;
-		const group = groups.get(scopeOwnerId) ?? [];
-		group.push({ workId: work.id, activeImportId: work.activeImportId });
-		groups.set(scopeOwnerId, group);
-	}
+	const groups = groupWorkIdsByOwner(ownerId, works);
 	const childMaps = await Promise.all(
 		[...groups].map(
 			async ([scopeOwnerId, activeImportIds]) =>
@@ -484,6 +475,23 @@ async function mergeWorksWithChildren<
 		...work,
 		...(childMap.get(work.id) ?? empty),
 	}));
+}
+
+/** Groups child loading by the resource owner, never by the querying actor. */
+export function groupWorkIdsByOwner<
+	T extends { id: string; activeImportId: string | null; ownerId?: string },
+>(ownerId: string, works: T[]) {
+	const groups = new Map<
+		string,
+		Array<{ workId: string; activeImportId: string | null }>
+	>();
+	for (const work of works) {
+		const scopeOwnerId = work.ownerId ?? ownerId;
+		const group = groups.get(scopeOwnerId) ?? [];
+		group.push({ workId: work.id, activeImportId: work.activeImportId });
+		groups.set(scopeOwnerId, group);
+	}
+	return groups;
 }
 
 export async function listWorks(
@@ -522,13 +530,18 @@ export async function listWorks(
 			include: workListInclude,
 		});
 
-		const activeImportIds = works.map((w) => ({
-			workId: w.id,
-			activeImportId: w.activeImportId,
-		}));
-		const childMap = await getBatchActiveImportChildren(
-			ownerId,
-			activeImportIds,
+		const mergedWorks = await mergeWorksWithChildren(ownerId, works);
+		const childMap = new Map(
+			mergedWorks.map((work) => [
+				work.id,
+				{
+					items: work.items,
+					baselineSchedules: work.baselineSchedules,
+					scheduleRevisions: work.scheduleRevisions,
+					measurements: work.measurements,
+					actualCosts: work.actualCosts,
+				},
+			]),
 		);
 
 		return buildPaginatedResponse(
@@ -545,11 +558,19 @@ export async function listWorks(
 		include: workListInclude,
 	});
 
-	const activeImportIds = works.map((w) => ({
-		workId: w.id,
-		activeImportId: w.activeImportId,
-	}));
-	const childMap = await getBatchActiveImportChildren(ownerId, activeImportIds);
+	const mergedWorks = await mergeWorksWithChildren(ownerId, works);
+	const childMap = new Map(
+		mergedWorks.map((work) => [
+			work.id,
+			{
+				items: work.items,
+				baselineSchedules: work.baselineSchedules,
+				scheduleRevisions: work.scheduleRevisions,
+				measurements: work.measurements,
+				actualCosts: work.actualCosts,
+			},
+		]),
+	);
 
 	let filteredData = attachHierarchy(
 		works,

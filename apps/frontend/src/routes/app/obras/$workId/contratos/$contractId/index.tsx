@@ -47,6 +47,7 @@ import {
 	listContractAmendments,
 	updateContractAmendment,
 } from "@/api/contracts";
+import { getGovernanceRecord } from "@/api/governance";
 import {
 	budgetVersionKeys,
 	contractKeys,
@@ -76,10 +77,15 @@ import { MeasurementsTab } from "@/components/organisms/contracts/measurements-t
 import { PaymentsTab } from "@/components/organisms/contracts/payments-tab";
 import { ServicesTab } from "@/components/organisms/contracts/services-tab";
 import { SupplierSummaryCard } from "@/components/organisms/contracts/supplier-summary-card";
+import {
+	GovernanceStatusBadge,
+	GovernanceStatusModal,
+} from "@/components/organisms/governance/governance-status-modal";
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/auth-context";
 import { buildVersionChangeMap } from "@/lib/budget-version-diff";
 import { invalidateContractRelated } from "@/lib/invalidate-contract";
 import { queryClient } from "@/lib/query-client";
@@ -180,6 +186,7 @@ async function downloadArtifactFile(
 }
 
 function RouteComponent() {
+	const { role } = useAuth();
 	const { requestCreationConfirmation } = useCreationConfirmation();
 	const { workId, contractId } = useParams({
 		from: "/app/obras/$workId/contratos/$contractId/",
@@ -656,6 +663,11 @@ function RouteComponent() {
 				getErrorMessage(error, "Não foi possível revisar o aditivo."),
 			),
 	});
+	const [governanceOpen, setGovernanceOpen] = useState(false);
+	const governanceQuery = useQuery({
+		queryKey: governanceKeys.detail("CONTRACT_STATUS", contractId),
+		queryFn: () => getGovernanceRecord("CONTRACT_STATUS", contractId),
+	});
 
 	if (isLoading) return <LoadingSpinner title="Carregando..." />;
 	if (!contract) return null;
@@ -669,6 +681,16 @@ function RouteComponent() {
 				actions={
 					<>
 						<StatusBadge status={contract.status} map={CONTRACT_STATUS_MAP} />
+						<GovernanceStatusBadge record={governanceQuery.data} />
+						{role !== "SUPERVISOR" && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setGovernanceOpen(true)}
+							>
+								Alterar status
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -714,6 +736,14 @@ function RouteComponent() {
 						) : null}
 					</>
 				}
+			/>
+			<GovernanceStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				entityType="CONTRACT_STATUS"
+				entityId={contractId}
+				current={governanceQuery.data}
+				onChanged={() => governanceQuery.refetch()}
 			/>
 			<InstrumentReadinessCard
 				readiness={readinessQuery.data}

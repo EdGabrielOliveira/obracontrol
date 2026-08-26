@@ -11,7 +11,8 @@ import {
 	getContractMeasurement,
 	updateContractMeasurementItems,
 } from "@/api/contract-measurements";
-import { contractKeys, workKeys } from "@/api/query-keys";
+import { getGovernanceRecord } from "@/api/governance";
+import { contractKeys, governanceKeys, workKeys } from "@/api/query-keys";
 import { getWork } from "@/api/works";
 import { EmptyState } from "@/components/atoms/empty-state";
 import { ErrorFeedback } from "@/components/atoms/error-feedback";
@@ -20,6 +21,10 @@ import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { InputFormField } from "@/components/molecules/FormField";
+import {
+	GovernanceStatusBadge,
+	GovernanceStatusModal,
+} from "@/components/organisms/governance/governance-status-modal";
 import { Breadcrumb } from "@/components/organisms/layout/breadcrumb";
 
 import { Button } from "@/components/ui/button";
@@ -38,6 +43,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
 import { useBreadcrumb } from "@/lib/use-breadcrumb";
@@ -78,6 +84,16 @@ export const Route = createFileRoute(
 function RouteComponent() {
 	const { workId, contractId, measurementId } = useParams({
 		from: "/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/",
+	});
+	const { role } = useAuth();
+	const [governanceOpen, setGovernanceOpen] = useState(false);
+	const governanceQuery = useQuery({
+		queryKey: governanceKeys.detail(
+			"CONTRACT_MEASUREMENT_STATUS",
+			measurementId,
+		),
+		queryFn: () =>
+			getGovernanceRecord("CONTRACT_MEASUREMENT_STATUS", measurementId),
 	});
 
 	const { data: workData } = useQuery({
@@ -176,6 +192,16 @@ function RouteComponent() {
 				description={`#${measurement.number} - ${formatDate(measurement.date)}`}
 				actions={
 					<>
+						<GovernanceStatusBadge record={governanceQuery.data} />
+						{role !== "SUPERVISOR" && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setGovernanceOpen(true)}
+							>
+								Alterar status
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -195,6 +221,14 @@ function RouteComponent() {
 						</Button>
 					</>
 				}
+			/>
+			<GovernanceStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				entityType="CONTRACT_MEASUREMENT_STATUS"
+				entityId={measurementId}
+				current={governanceQuery.data}
+				onChanged={() => governanceQuery.refetch()}
 			/>
 			<div className="mb-6 flex flex-wrap items-center gap-3">
 				{data.totals.contractValue > 0 && (

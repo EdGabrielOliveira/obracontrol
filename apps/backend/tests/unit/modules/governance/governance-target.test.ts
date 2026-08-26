@@ -3,10 +3,26 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 const workFindUnique = mock(
 	async (): Promise<{ id: string } | null> => ({ id: "work-1" }),
 );
+const contractFindUnique = mock(async () => ({
+	work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+}));
+const costFindUnique = mock(async () => ({
+	work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+}));
+const measurementFindUnique = mock(async () => ({
+	work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+}));
+const contractMeasurementFindUnique = mock(async () => ({
+	contract: { work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" } },
+}));
 
 mock.module("../../../../src/lib/prisma", () => ({
 	prisma: {
 		constructionWork: { findUnique: workFindUnique },
+		contract: { findUnique: contractFindUnique },
+		constructionActualCost: { findUnique: costFindUnique },
+		constructionMeasurement: { findUnique: measurementFindUnique },
+		contractMeasurement: { findUnique: contractMeasurementFindUnique },
 	},
 }));
 
@@ -17,6 +33,10 @@ const { resolveGovernanceTarget } = await import(
 describe("resolveGovernanceTarget", () => {
 	beforeEach(() => {
 		workFindUnique.mockClear();
+		contractFindUnique.mockClear();
+		costFindUnique.mockClear();
+		measurementFindUnique.mockClear();
+		contractMeasurementFindUnique.mockClear();
 		workFindUnique.mockResolvedValue({ id: "work-1" });
 	});
 
@@ -50,6 +70,22 @@ describe("resolveGovernanceTarget", () => {
 
 		expect(result).toBeNull();
 		expect(workFindUnique).not.toHaveBeenCalled();
+	});
+
+	it("resolves resource status entities through their owning work", async () => {
+		for (const [entityType, delegate] of [
+			["CONTRACT_STATUS", contractFindUnique],
+			["COST_STATUS", costFindUnique],
+			["WORK_MEASUREMENT_STATUS", measurementFindUnique],
+			["CONTRACT_MEASUREMENT_STATUS", contractMeasurementFindUnique],
+		] as const) {
+			expect(await resolveGovernanceTarget(entityType, "resource-1")).toEqual({
+				workId: "work-1",
+				resourceOwnerId: "owner-1",
+				workspaceId: "ws-1",
+			});
+			expect(delegate).toHaveBeenCalled();
+		}
 	});
 
 	it("returns null when the work does not exist", async () => {

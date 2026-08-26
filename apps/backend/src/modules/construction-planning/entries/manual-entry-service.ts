@@ -188,6 +188,11 @@ export class ConstructionManualEntryService {
 		measurementId: string,
 	) {
 		await this.assertWritable(ownerId, workId, "WORK_MEASUREMENTS");
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
 		const result = await this.repository.deleteMeasurement(
 			ownerId,
 			workId,
@@ -421,6 +426,7 @@ export class ConstructionManualEntryService {
 		input: UpdateActualCostInput,
 	) {
 		await this.assertWritable(ownerId, workId, "WORK_COSTS");
+		await this.governance.assertWritable(ownerId, "COST_STATUS", costId);
 		if (input.supplierId) {
 			await this.supplierScope.assertLinkedToWork(
 				ownerId,
@@ -596,6 +602,7 @@ export class ConstructionManualEntryService {
 
 	async deleteActualCost(ownerId: string, workId: string, costId: string) {
 		await this.assertWritable(ownerId, workId, "WORK_COSTS");
+		await this.governance.assertWritable(ownerId, "COST_STATUS", costId);
 		return withSerializableRetry(async (tx) => {
 			const existing = await this.repository.getActualCostById(
 				ownerId,

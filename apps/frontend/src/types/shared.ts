@@ -29,6 +29,7 @@ export type Indicator<T> = {
 };
 
 export type DataCompleteness = {
+	hasBudget: boolean;
 	hasBaselineSchedule: boolean;
 	hasMeasurements: boolean;
 	hasActualCosts: boolean;

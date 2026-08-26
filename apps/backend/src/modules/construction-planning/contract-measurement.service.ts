@@ -80,6 +80,11 @@ export class ContractMeasurementService {
 		const workId = await this.scope.getWorkId(ownerId, contractId);
 		if (workId) {
 			await this.governance.assertWritable(ownerId, "CONTRACT", workId);
+			await this.governance.assertWritable(
+				ownerId,
+				"CONTRACT_STATUS",
+				contractId,
+			);
 		}
 	}
 

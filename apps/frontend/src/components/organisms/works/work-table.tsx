@@ -38,7 +38,13 @@ function getWorkHealth(work: WorkListingRow): {
 	if (tones.includes("attention")) {
 		return { label: "Atenção", tone: "attention" };
 	}
-	if (tones.includes("unknown")) return { label: "Sem dados", tone: "unknown" };
+	const hasBudget =
+		work.dataCompleteness?.hasBudget === true ||
+		work.activeBudget > 0 ||
+		work.totalBudget > 0;
+	if (!hasBudget || tones.includes("unknown")) {
+		return { label: "Aguardando dados", tone: "unknown" };
+	}
 	return { label: "Saudável", tone: "good" };
 }
 
@@ -59,6 +65,13 @@ export function WorkTable({
 }: WorkTableProps) {
 	const { role } = useAuth();
 	const canViewManagement = role !== "SUPERVISOR";
+	const hasBudgetData = (work: WorkListingRow) =>
+		work.dataCompleteness?.hasBudget === true ||
+		work.activeBudget > 0 ||
+		work.totalBudget > 0;
+	const hasMeasurementData = (work: WorkListingRow) =>
+		work.dataCompleteness?.hasMeasurements === true ||
+		work.measuredPercentage > 0;
 	const columns = [
 		helper.accessor("name", {
 			header: "Obra",
@@ -109,7 +122,11 @@ export function WorkTable({
 		helper.accessor("activeBudget", {
 			header: "Orçamento",
 			cell: (info) => (
-				<span className="tabular-nums">{formatCurrency(info.getValue())}</span>
+				<span className="tabular-nums">
+					{hasBudgetData(info.row.original)
+						? formatCurrency(info.getValue())
+						: "Sem orçamento"}
+				</span>
 			),
 			meta: { mobileLabel: "Orçamento" },
 		}),
@@ -117,7 +134,9 @@ export function WorkTable({
 			header: "% Medido",
 			cell: (info) => (
 				<span className="tabular-nums">
-					{formatRatioAsPercentage(info.getValue())}
+					{hasMeasurementData(info.row.original)
+						? formatRatioAsPercentage(info.getValue())
+						: "Sem medição"}
 				</span>
 			),
 			meta: { mobileLabel: "% Medido" },

@@ -444,6 +444,11 @@ export class WorkMeasurementService {
 	) {
 		const work = await getWorkOrThrow(ownerId, workId);
 		await this.governance.assertWritable(ownerId, "WORK_MEASUREMENTS", workId);
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
 
 		if (
 			input.items === undefined &&
@@ -580,6 +585,11 @@ export class WorkMeasurementService {
 	async delete(ownerId: string, workId: string, measurementId: string) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.governance.assertWritable(ownerId, "WORK_MEASUREMENTS", workId);
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
 		const result = await wmRepository.deleteWorkMeasurement(
 			ownerId,
 			workId,

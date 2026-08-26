@@ -140,6 +140,7 @@ function aggregateDataCompleteness(
 ) {
 	return workMetrics.reduce(
 		(acc, { metrics }) => ({
+			hasBudget: acc.hasBudget || metrics.dataCompleteness.hasBudget,
 			hasBaselineSchedule:
 				acc.hasBaselineSchedule || metrics.dataCompleteness.hasBaselineSchedule,
 			hasMeasurements:
@@ -156,6 +157,7 @@ function aggregateDataCompleteness(
 				metrics.dataCompleteness.hasUnappropriatedFutureCosts,
 		}),
 		{
+			hasBudget: false,
 			hasBaselineSchedule: false,
 			hasMeasurements: false,
 			hasActualCosts: false,

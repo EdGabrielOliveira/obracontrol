@@ -12,7 +12,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getWorkAudit } from "@/api/audit";
 import { getWorkBI } from "@/api/bi";
-import { decideApproval, listPendingApprovals } from "@/api/governance";
+import {
+	decideApproval,
+	getGovernanceRecord,
+	listPendingApprovals,
+} from "@/api/governance";
 import { getWorkManagement } from "@/api/management";
 import {
 	auditKeys,
@@ -26,6 +30,10 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
+import {
+	GovernanceStatusBadge,
+	GovernanceStatusModal,
+} from "@/components/organisms/governance/governance-status-modal";
 import { AprovacoesSection } from "@/components/organisms/works/approvals-section";
 import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
 import type { AuditFilters } from "@/components/organisms/works/audit-log-table";
@@ -97,6 +105,11 @@ function RouteComponent() {
 	const [auditFilters, setAuditFilters] = useState<AuditFilters>({});
 	const [auditPage, setAuditPage] = useState(1);
 	const [auditDetail, setAuditDetail] = useState<AuditLogEntry | null>(null);
+	const [governanceOpen, setGovernanceOpen] = useState(false);
+	const governanceQuery = useQuery({
+		queryKey: governanceKeys.detail("WORK_STATUS", workId),
+		queryFn: () => getGovernanceRecord("WORK_STATUS", workId),
+	});
 
 	const handleAuditFiltersChange = (filters: AuditFilters) => {
 		setAuditFilters(filters);
@@ -209,15 +222,40 @@ function RouteComponent() {
 				title={work.name}
 				description={`Código: ${work.code}`}
 				actions={
-					role !== "SUPERVISOR" ? (
-						<Link to="/app/obras/$workId/configuracoes" params={{ workId }}>
-							<Button size="sm">
-								<Settings className="mr-2 h-4 w-4" />
-								Configurações
+					<>
+						<GovernanceStatusBadge
+							record={governanceQuery.data}
+							loading={governanceQuery.isLoading}
+							error={governanceQuery.isError}
+						/>
+						{role !== "SUPERVISOR" && (
+							<Button
+								size="sm"
+								variant="outline"
+								disabled={governanceQuery.isLoading || governanceQuery.isError}
+								onClick={() => setGovernanceOpen(true)}
+							>
+								Alterar status
 							</Button>
-						</Link>
-					) : undefined
+						)}
+						{role !== "SUPERVISOR" && (
+							<Link to="/app/obras/$workId/configuracoes" params={{ workId }}>
+								<Button size="sm">
+									<Settings className="mr-2 h-4 w-4" />
+									Configurações
+								</Button>
+							</Link>
+						)}
+					</>
 				}
+			/>
+			<GovernanceStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				entityType="WORK_STATUS"
+				entityId={workId}
+				current={governanceQuery.data}
+				onChanged={() => governanceQuery.refetch()}
 			/>
 			<WorkDetailHeader work={work} />
 			<WorkHub

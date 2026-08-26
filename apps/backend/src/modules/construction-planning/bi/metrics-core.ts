@@ -97,6 +97,7 @@ export type Indicator<T> = {
 };
 
 export type DataCompleteness = {
+	hasBudget: boolean;
 	hasBaselineSchedule: boolean;
 	hasMeasurements: boolean;
 	hasActualCosts: boolean;
@@ -480,6 +481,7 @@ export function calculateWorkMetrics(
 	const tcpi =
 		bac - actualCost !== 0 ? (bac - earnedValue) / (bac - actualCost) : null;
 	const dataCompleteness: DataCompleteness = {
+		hasBudget: activeItems.length > 0,
 		hasBaselineSchedule,
 		hasMeasurements,
 		hasActualCosts,

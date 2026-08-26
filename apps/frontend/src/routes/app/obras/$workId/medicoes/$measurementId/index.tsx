@@ -6,7 +6,8 @@ import {
 } from "@tanstack/react-router";
 import { FileDown, Info, Layers, Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
-import { workKeys } from "@/api/query-keys";
+import { getGovernanceRecord } from "@/api/governance";
+import { governanceKeys, workKeys } from "@/api/query-keys";
 import {
 	downloadWorkMeasurementPdf,
 	getWorkMeasurement,
@@ -17,11 +18,16 @@ import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
+import {
+	GovernanceStatusBadge,
+	GovernanceStatusModal,
+} from "@/components/organisms/governance/governance-status-modal";
 import { MeasurementDetailCharts } from "@/components/organisms/measurements/measurement-detail-charts";
 import { MeasurementDetailHeader } from "@/components/organisms/measurements/measurement-detail-header";
 import { MeasurementItemTree } from "@/components/organisms/measurements/measurement-item-tree";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
 import { formatCurrency, formatDate } from "@/utils/format";
@@ -51,7 +57,9 @@ function RouteComponent() {
 	});
 
 	const navigate = useNavigate();
+	const { role } = useAuth();
 	const [downloading, setDownloading] = useState(false);
+	const [governanceOpen, setGovernanceOpen] = useState(false);
 
 	const handleDownloadPdf = useCallback(async () => {
 		setDownloading(true);
@@ -66,6 +74,11 @@ function RouteComponent() {
 	const { data, isLoading, error } = useQuery({
 		queryKey: workKeys.measurementDetail(workId, measurementId),
 		queryFn: () => getWorkMeasurement(workId, measurementId),
+	});
+	const governanceQuery = useQuery({
+		queryKey: governanceKeys.detail("WORK_MEASUREMENT_STATUS", measurementId),
+		queryFn: () =>
+			getGovernanceRecord("WORK_MEASUREMENT_STATUS", measurementId),
 	});
 
 	if (isLoading) return <LoadingSpinner title="Carregando medição..." />;
@@ -86,6 +99,16 @@ function RouteComponent() {
 				retentionValue={measurement.retentionValue}
 				actions={
 					<>
+						<GovernanceStatusBadge record={governanceQuery.data} />
+						{role !== "SUPERVISOR" && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setGovernanceOpen(true)}
+							>
+								Alterar status
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -110,6 +133,14 @@ function RouteComponent() {
 						</Button>
 					</>
 				}
+			/>
+			<GovernanceStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				entityType="WORK_MEASUREMENT_STATUS"
+				entityId={measurementId}
+				current={governanceQuery.data}
+				onChanged={() => governanceQuery.refetch()}
 			/>
 
 			<div className="mt-6 space-y-6">

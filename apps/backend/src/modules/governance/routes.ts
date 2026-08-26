@@ -133,7 +133,7 @@ async function resolveGovernanceScope(
 	const scope = await resolveResourceScope(actorId, { workId: target.workId });
 	return {
 		workId: target.workId,
-		ownerId: scope.resourceOwnerId,
+		ownerId: target.resourceOwnerId ?? scope.resourceOwnerId,
 		role: scope.role,
 		canRead: scope.canRead,
 		canWrite: scope.canWrite,
@@ -184,7 +184,10 @@ export const governanceRoutes = new Elysia({
 				params.entityType,
 				params.entityId,
 			);
-			if (!resolved.canWrite && !resolved.canApprove) {
+			if (
+				(!resolved.canWrite && !resolved.canApprove) ||
+				normalizeGovernanceRole(resolved.role) === "SUPERVISOR"
+			) {
 				throw new ConstructionError(
 					"FORBIDDEN",
 					"Voce nao tem permissao para alterar o estado de governanca",

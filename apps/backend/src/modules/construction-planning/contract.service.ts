@@ -49,8 +49,19 @@ export class ContractService {
 		private readonly governance: GovernanceMutationGuard = constructionGovernanceGuard,
 	) {}
 
-	private assertWritable(ownerId: string, workId: string) {
-		return this.governance.assertWritable(ownerId, "CONTRACT", workId);
+	private async assertWritable(
+		ownerId: string,
+		workId: string,
+		contractId?: string,
+	) {
+		await this.governance.assertWritable(ownerId, "CONTRACT", workId);
+		if (contractId) {
+			await this.governance.assertWritable(
+				ownerId,
+				"CONTRACT_STATUS",
+				contractId,
+			);
+		}
 	}
 
 	// Guarda compartilhada entre previa, criacao e lote: o item precisa de
@@ -306,7 +317,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
@@ -350,7 +361,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		await this.resolveSupplier(ownerId, workId, { supplierId });
 		const commandId = `contract-supplier-link-${contractId}-${crypto.randomUUID()}`;
 		const { submitApproval } = await import("../governance/approval.service");
@@ -386,7 +397,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
@@ -530,7 +541,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -607,7 +618,7 @@ export class ContractService {
 		}
 
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -703,7 +714,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -850,7 +861,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const result = await withSerializableRetry(async (tx) => {
 			const existing = await contractRepository.getContractServiceById(
 				tx,
@@ -905,7 +916,7 @@ export class ContractService {
 		ctx?: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx?.userId ?? ownerId,
@@ -1007,7 +1018,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		if (input.value <= 0) {
 			throw new ConstructionError(
 				"INVALID_AMENDMENT_VALUE",
@@ -1181,7 +1192,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		if (input.value !== undefined && input.value <= 0) {
 			throw new ConstructionError(
 				"INVALID_AMENDMENT_VALUE",
@@ -1243,7 +1254,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const result = await withSerializableRetry(async (tx) => {
 			await findLedgerEventsBySourcePrefix(tx, {
 				sourceType: AMENDMENT_SOURCE_TYPE,
