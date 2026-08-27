@@ -1226,6 +1226,30 @@ describe("listWorks", () => {
 		mock.clearAllMocks();
 	});
 
+	it("includes legacy works without an operational status by default", async () => {
+		findMany.mockResolvedValueOnce([]);
+		const { listWorks } = await import(
+			"../../../../src/modules/construction-planning/repository"
+		);
+
+		await listWorks("owner-1", { page: 1, limit: 10 });
+
+		expect(findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: [
+						{
+							OR: [
+								{ operationalStatus: { not: "IGNORED" } },
+								{ operationalStatus: null },
+							],
+						},
+					],
+				}),
+			}),
+		);
+	});
+
 	it("uses active budget semantics for list totals", async () => {
 		findMany.mockResolvedValueOnce([
 			{

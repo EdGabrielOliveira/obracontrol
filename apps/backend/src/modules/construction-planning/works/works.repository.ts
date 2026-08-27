@@ -528,13 +528,26 @@ export async function listWorks(
 	const where: Prisma.ConstructionWorkWhereInput = {
 		id: { in: accessibleWorkIds },
 	};
+	const conditions: Prisma.ConstructionWorkWhereInput[] = [];
 	// Arquivadas são históricas e ficam fora da listagem padrão; o filtro
 	// explícito de status=IGNORED continua permitindo consultá-las.
-	if (status !== "IGNORED") where.operationalStatus = { not: "IGNORED" };
+	if (status !== "IGNORED") {
+		// SQL comparisons with NULL do not match. Legacy works without an
+		// operational status are active and must remain visible by default.
+		conditions.push({
+			OR: [
+				{ operationalStatus: { not: "IGNORED" } },
+				{ operationalStatus: null },
+			],
+		});
+	}
 	if (costCenterId) where.costCenterId = costCenterId;
 	if (q) {
-		where.OR = [{ name: { contains: q } }, { code: { contains: q } }];
+		conditions.push({
+			OR: [{ name: { contains: q } }, { code: { contains: q } }],
+		});
 	}
+	if (conditions.length > 0) where.AND = conditions;
 
 	if (!hasComputedFilters) {
 		const totalCount = await prisma.constructionWork.count({ where });
