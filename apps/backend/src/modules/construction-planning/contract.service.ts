@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { validateStatusTransition } from "../../lib/status-machine";
 import { withSerializableRetry } from "../../lib/transaction-retry";
 import { auditService } from "../audit/audit.service";
 import { findActiveImpactsBySource } from "./budget-control/budget-control.repository";
@@ -12,6 +13,7 @@ import type {
 } from "./budget-control/budget-control.types";
 import { withOverflowApproval } from "./budget-control/overflow-approval";
 import * as contractRepository from "./contract.repository";
+import { CONTRACT_TRANSITIONS } from "./contract-status";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
@@ -49,8 +51,19 @@ export class ContractService {
 		private readonly governance: GovernanceMutationGuard = constructionGovernanceGuard,
 	) {}
 
-	private assertWritable(ownerId: string, workId: string) {
-		return this.governance.assertWritable(ownerId, "CONTRACT", workId);
+	private async assertWritable(
+		ownerId: string,
+		workId: string,
+		contractId?: string,
+	) {
+		await this.governance.assertWritable(ownerId, "CONTRACT", workId);
+		if (contractId) {
+			await this.governance.assertWritable(
+				ownerId,
+				"CONTRACT_STATUS",
+				contractId,
+			);
+		}
 	}
 
 	// Guarda compartilhada entre previa, criacao e lote: o item precisa de
@@ -306,7 +319,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
@@ -314,6 +327,24 @@ export class ContractService {
 		);
 		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
+		}
+		if (input.status !== undefined) {
+			validateStatusTransition(
+				"Contrato",
+				CONTRACT_TRANSITIONS,
+				existing.status,
+				input.status,
+			);
+			if (
+				(input.status === "PARALISADO" || input.status === "ARQUIVADO") &&
+				!input.statusReason?.trim()
+			) {
+				throw new ConstructionError(
+					"STATUS_REASON_REQUIRED",
+					"Informe o motivo para suspender ou arquivar o contrato",
+					422,
+				);
+			}
 		}
 		const { submitApproval } = await import("../governance/approval.service");
 		const commandId = `contract-update-${contractId}-${crypto.randomUUID()}`;
@@ -350,7 +381,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		await this.resolveSupplier(ownerId, workId, { supplierId });
 		const commandId = `contract-supplier-link-${contractId}-${crypto.randomUUID()}`;
 		const { submitApproval } = await import("../governance/approval.service");
@@ -386,7 +417,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const existing = await contractRepository.getContractById(
 			ownerId,
 			workId,
@@ -530,7 +561,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -607,7 +638,7 @@ export class ContractService {
 		}
 
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -703,7 +734,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx.userId,
@@ -850,7 +881,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const result = await withSerializableRetry(async (tx) => {
 			const existing = await contractRepository.getContractServiceById(
 				tx,
@@ -905,7 +936,7 @@ export class ContractService {
 		ctx?: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		return withOverflowApproval({
 			ownerId,
 			actorId: ctx?.userId ?? ownerId,
@@ -921,6 +952,7 @@ export class ContractService {
 						ownerId,
 						workId,
 						link.budgetItemId,
+						tx,
 					);
 					if (!ref) {
 						throw new ConstructionError(
@@ -1007,7 +1039,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		if (input.value <= 0) {
 			throw new ConstructionError(
 				"INVALID_AMENDMENT_VALUE",
@@ -1181,7 +1213,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		if (input.value !== undefined && input.value <= 0) {
 			throw new ConstructionError(
 				"INVALID_AMENDMENT_VALUE",
@@ -1243,7 +1275,7 @@ export class ContractService {
 		ctx: { userId: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
-		await this.assertWritable(ownerId, workId);
+		await this.assertWritable(ownerId, workId, contractId);
 		const result = await withSerializableRetry(async (tx) => {
 			await findLedgerEventsBySourcePrefix(tx, {
 				sourceType: AMENDMENT_SOURCE_TYPE,

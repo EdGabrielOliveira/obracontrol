@@ -19,6 +19,10 @@ import {
 import { PAYMENT_STATUS_OPTIONS } from "@/constants/status-options";
 import { useAuth } from "@/lib/auth-context";
 import {
+	optionsForStatus,
+	PAYMENT_STATUS_TRANSITIONS,
+} from "@/lib/status-transitions";
+import {
 	type ContractPaymentEditValues,
 	contractPaymentEditSchema,
 } from "@/schemas/contracts";
@@ -61,6 +65,11 @@ export function ContractPaymentEditModal({
 				label: measurementLabel(measurement),
 			})),
 	];
+	const availablePaymentStatusOptions = optionsForStatus(
+		PAYMENT_STATUS_OPTIONS,
+		payment.status,
+		PAYMENT_STATUS_TRANSITIONS,
+	);
 
 	const { control, handleSubmit } = useForm<ContractPaymentEditValues>({
 		resolver: zodResolver(contractPaymentEditSchema),
@@ -243,7 +252,7 @@ export function ContractPaymentEditModal({
 								field={field}
 								fieldState={fieldState}
 								placeholder="Selecione o status"
-								options={PAYMENT_STATUS_OPTIONS}
+								options={availablePaymentStatusOptions}
 							/>
 						)}
 					/>

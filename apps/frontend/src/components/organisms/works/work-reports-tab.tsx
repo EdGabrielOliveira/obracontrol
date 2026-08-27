@@ -14,7 +14,6 @@ import {
 	exportMedicoes,
 	exportOrcamento,
 } from "@/api/export";
-import { AsOfDatePicker } from "@/components/molecules/as-of-date-picker";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,14 +55,9 @@ const EXPORT_ITEMS = [
 type WorkReportsTabProps = {
 	workId: string;
 	asOfDate?: string;
-	onAsOfDateChange: (value: string | undefined) => void;
 };
 
-export function WorkReportsTab({
-	workId,
-	asOfDate,
-	onAsOfDateChange,
-}: WorkReportsTabProps) {
+export function WorkReportsTab({ workId, asOfDate }: WorkReportsTabProps) {
 	return (
 		<div className="space-y-6">
 			<Card>

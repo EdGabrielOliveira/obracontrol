@@ -146,6 +146,7 @@ export async function getMeasurementsForExport(
 		where: {
 			ownerId,
 			workId,
+			status: "ACEITO",
 			budgetItemId: { in: budgetItemIds },
 			...(asOfDate ? { measurementDate: { lte: asOfDate } } : {}),
 		},
@@ -163,6 +164,7 @@ export async function getMeasurementsWithBudgetItemForExport(
 		where: {
 			ownerId,
 			workId,
+			status: "ACEITO",
 			budgetItemId: { in: budgetItemIds },
 			...(asOfDate ? { measurementDate: { lte: asOfDate } } : {}),
 		},

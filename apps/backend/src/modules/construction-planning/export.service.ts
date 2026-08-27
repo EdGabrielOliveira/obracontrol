@@ -836,21 +836,7 @@ export class ExportService {
 				: input.fileName;
 
 		const wb = XLSX.utils.book_new();
-		const budgetItems = await exportRepo.getBudgetItemsForExport(
-			input.ownerId,
-			input.workId,
-		);
-		XLSX.utils.book_append_sheet(
-			wb,
-			buildGuiaSheet(
-				undefined,
-				budgetItems.map((item) => ({
-					index: item.index,
-					description: item.description,
-				})),
-			),
-			"Guia",
-		);
+		XLSX.utils.book_append_sheet(wb, buildGuiaSheet(undefined), "Guia");
 		appendMetadados(wb, {
 			work,
 			asOfDate: opts?.asOfDate,
@@ -976,6 +962,38 @@ export class ExportService {
 				),
 			),
 			"modelo-cronograma.xlsx",
+		);
+	}
+
+	async exportMedicaoObraTemplate(
+		ownerId: string,
+		workId: string,
+	): Promise<Response> {
+		const budgetItems = await exportRepo.getBudgetItemsForExport(
+			ownerId,
+			workId,
+		);
+		const rows = budgetItems.map((item) => ({
+			Índice: item.index,
+			"Nome do item": item.description,
+			"Data da medição": "",
+			"Percentual medido acumulado": "",
+			"Quantidade medida acumulada": "",
+			Observação: "",
+		}));
+
+		return xlsxResponse(
+			Buffer.from(
+				buildWorkbookTemplate(
+					"medicao-obra",
+					{ "Medicoes Obra": rows },
+					budgetItems.map((item) => ({
+						index: item.index,
+						description: item.description,
+					})),
+				),
+			),
+			"modelo-medicao-obra.xlsx",
 		);
 	}
 

@@ -341,6 +341,7 @@ export type AnalysisFilter = {
 };
 
 export type BIWorkStatus =
+	| "DRAFT"
 	| "NOT_STARTED"
 	| "IN_PROGRESS"
 	| "DONE"

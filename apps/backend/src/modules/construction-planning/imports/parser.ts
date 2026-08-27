@@ -32,7 +32,7 @@ export const REQUIRED_SHEETS = [
 	{ displayName: "Replanejamento", aliases: ["Replanejamento"] },
 	{
 		displayName: "Medicoes",
-		aliases: ["Medicoes Obra", "Medicoes", "Medições"],
+		aliases: ["Medições de Obra", "Medicoes Obra", "Medicoes", "Medições"],
 	},
 	{ displayName: "Custos Realizados", aliases: ["Custos Realizados"] },
 ] as const;
@@ -111,6 +111,20 @@ function cell(
 function hasAnyValue(values: unknown[]): boolean {
 	return values.some(
 		(value) => value !== null && value !== undefined && value !== "",
+	);
+}
+
+function extractSheetHeaders(
+	workbook: XLSX.WorkBook,
+): Record<string, string[]> {
+	return Object.fromEntries(
+		workbook.SheetNames.map((sheetName) => {
+			const rows = sheetRows(workbook.Sheets[sheetName]);
+			const headers = (rows[0] ?? [])
+				.map(textValue)
+				.filter((header): header is string => header !== null);
+			return [sheetName, headers];
+		}),
 	);
 }
 
@@ -233,9 +247,12 @@ function parseMeasurementRows(sheet: XLSX.WorkSheet): ParsedMeasurementRow[] {
 	return rows.slice(1).flatMap((row, index) => {
 		const values = {
 			index: textValue(cell(row, headers, ["Indice"])),
+			itemName: textValue(cell(row, headers, ["Nome do item", "Descricao"])),
 			measurementDate: cell(row, headers, ["Data da medicao"]),
 			measuredPercentageAccumulated: cell(row, headers, [
 				"Percentual medido acumulado",
+				"Percentual medido",
+				"% medido",
 			]),
 			measuredQuantityAccumulated: cell(row, headers, [
 				"Quantidade medida acumulada",
@@ -243,7 +260,15 @@ function parseMeasurementRows(sheet: XLSX.WorkSheet): ParsedMeasurementRow[] {
 			notes: textValue(cell(row, headers, ["Observacao"])),
 		};
 
-		if (!hasAnyValue(Object.values(values))) return [];
+		if (
+			!hasAnyValue([
+				values.measurementDate,
+				values.measuredPercentageAccumulated,
+				values.measuredQuantityAccumulated,
+				values.notes,
+			])
+		)
+			return [];
 
 		return [{ rowNumber: index + 2, ...values }];
 	});
@@ -306,7 +331,12 @@ function parseActualCostRows(sheet: XLSX.WorkSheet): ParsedActualCostRow[] {
 }
 
 export const SHEET_NAME_ALIASES: Record<string, string[]> = {
-	"Medicoes Obra": ["Medicoes Obra", "Medicoes", "Medições"],
+	"Medicoes Obra": [
+		"Medições de Obra",
+		"Medicoes Obra",
+		"Medicoes",
+		"Medições",
+	],
 	Orcamento: ["Orcamento", "Orçamento"],
 	"Cronograma Original": ["Cronograma Original", "Cronograma"],
 	"Itens do Orcamento": ["Itens do Orcamento", "Itens do Orçamento"],
@@ -597,6 +627,7 @@ export function parseWorkbookByKind(
 		actualCostRows: [],
 		quotationRows: [],
 		sheetNames: workbook.SheetNames,
+		sheetHeaders: extractSheetHeaders(workbook),
 	};
 
 	for (const [expectedName, actualName] of sheetMap) {

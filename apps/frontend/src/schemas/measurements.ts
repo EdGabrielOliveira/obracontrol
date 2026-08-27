@@ -8,6 +8,14 @@ export const positiveQuantity = (message: string) =>
 export const measurementItemSchema = z.object({
 	budgetItemId: z.string().min(1, "Item obrigatório"),
 	measuredQuantity: positiveQuantity("Quantidade deve ser maior que zero"),
+	measuredPercentage: z
+		.string()
+		.optional()
+		.refine(
+			(value) =>
+				value === undefined || (Number(value) > 0 && Number(value) <= 100),
+			"Percentual deve estar entre 0 e 100",
+		),
 });
 
 export type MeasurementItemValues = z.infer<typeof measurementItemSchema>;

@@ -66,6 +66,7 @@ export type ParsedReplanningRow = {
 export type ParsedMeasurementRow = {
 	rowNumber: number;
 	index: string | null;
+	itemName?: string | null;
 	measurementDate: unknown;
 	measuredPercentageAccumulated: unknown;
 	measuredQuantityAccumulated: unknown;
@@ -174,6 +175,8 @@ export type ParsedWorkbookUnifiedFields = {
 	actualCostRows: ParsedActualCostRow[];
 	quotationRows: ParsedQuotationRow[];
 	sheetNames: string[];
+	/** First-row headers keyed by the workbook's actual sheet name. */
+	sheetHeaders?: Record<string, string[]>;
 };
 
 export type ParsedWorkbookUnified = ParsedWorkbookUnifiedFields &

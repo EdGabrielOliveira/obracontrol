@@ -103,6 +103,10 @@
 	@apply border-success/30 bg-success/10 text-success;
 }
 
+@utility status-neutral {
+	@apply border-border bg-muted/50 text-muted-foreground;
+}
+
 @utility status-warning {
 	@apply border-warning/30 bg-warning/10 text-warning;
 }

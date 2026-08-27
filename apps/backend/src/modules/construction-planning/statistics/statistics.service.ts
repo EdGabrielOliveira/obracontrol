@@ -1,6 +1,7 @@
 import { ConstructionError } from "../../../lib/errors";
 import { periodKeyOf, type SchedulePeriod } from "../../../lib/period-utils";
 import { prisma } from "../../../lib/prisma";
+import { OPERATIONAL_CONTRACT_STATUSES } from "../contract-status";
 
 type EventTotals = { costs: number; measurements: number; contracts: number };
 
@@ -33,11 +34,15 @@ export async function getWorkStatistics(
 			select: { amount: true, costDate: true, supplierName: true },
 		}),
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId },
+			where: { ownerId, workId, status: "ACEITO" },
 			select: { date: true, items: { select: { measuredValue: true } } },
 		}),
 		prisma.contract.findMany({
-			where: { ownerId, workId },
+			where: {
+				ownerId,
+				workId,
+				status: { in: [...OPERATIONAL_CONTRACT_STATUSES] },
+			},
 			select: { createdAt: true, contractValue: true, supplierName: true },
 		}),
 	]);

@@ -1,6 +1,7 @@
 export type AuditAction =
 	| "CREATE"
 	| "UPDATE"
+	| "STATUS_CHANGED"
 	| "DELETE"
 	| "APPROVE"
 	| "REJECT"

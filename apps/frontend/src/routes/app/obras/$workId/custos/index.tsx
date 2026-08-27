@@ -8,7 +8,6 @@ import {
 import { createColumnHelper } from "@tanstack/react-table";
 import {
 	CheckCircle2,
-	Clock3,
 	DollarSign,
 	Download,
 	FileSpreadsheet,
@@ -41,13 +40,13 @@ import { EmptyStateCard } from "@/components/atoms/empty-state-card";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import {
+	APPROVAL_STATUS_MAP,
 	PAYMENT_STATUS_MAP,
 	StatusBadge,
 } from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { ImportBatchAction } from "@/components/organisms/imports/import-batch-action";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -292,16 +291,10 @@ function RouteComponent() {
 			cell: (info) => {
 				const approval = info.row.original.approval;
 				if (!approval) {
-					return <Badge variant="outline">Status indisponível</Badge>;
-				}
-				if (approval.status !== "PENDING") {
-					return <Badge variant="outline">{approval.status}</Badge>;
+					return <StatusBadge status="UNAVAILABLE" map={APPROVAL_STATUS_MAP} />;
 				}
 				return (
-					<Badge variant="secondary" className="gap-1.5 text-amber-700">
-						<Clock3 className="h-3.5 w-3.5" />
-						Aguardando aprovação
-					</Badge>
+					<StatusBadge status={approval.status} map={APPROVAL_STATUS_MAP} />
 				);
 			},
 			meta: { mobileLabel: "Aprovação" },

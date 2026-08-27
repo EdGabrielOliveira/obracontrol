@@ -7,6 +7,7 @@ export const contractStatusSchema = z.enum([
 	"EM_ANDAMENTO",
 	"PARALISADO",
 	"FINALIZADO",
+	"ARQUIVADO",
 ]);
 
 export const paymentStatusSchema = z.enum(["EM_ABERTO", "PAGO"]);
@@ -38,6 +39,17 @@ export const contractFormSchema = z
 		endDate: z.string().optional(),
 		status: contractStatusSchema.optional(),
 		notes: z.string().optional(),
+		services: z
+			.array(
+				z.object({
+					budgetItemId: z.string().min(1),
+					quantity: z.number().positive("Quantidade deve ser maior que zero"),
+					unitCost: z
+						.number()
+						.positive("Valor unitário deve ser maior que zero"),
+				}),
+			)
+			.optional(),
 	})
 	.superRefine((data, ctx) => {
 		if (data.supplierName === undefined && data.supplierId == null) {
@@ -61,19 +73,38 @@ export type ContractFormValues = {
 	endDate?: string;
 	status?: z.infer<typeof contractStatusSchema>;
 	notes?: string;
+	services?: Array<{
+		budgetItemId: string;
+		quantity: number;
+		unitCost: number;
+	}>;
 };
 
-export const contractEditFormSchema = z.object({
-	serviceType: z.string().optional(),
-	objectDescription: z
-		.string()
-		.trim()
-		.min(1, "Descrição do contrato obrigatória"),
-	title: z.string().optional(),
-	startDate: z.string().optional(),
-	endDate: z.string().optional(),
-	status: contractStatusSchema.optional(),
-});
+export const contractEditFormSchema = z
+	.object({
+		serviceType: z.string().optional(),
+		objectDescription: z
+			.string()
+			.trim()
+			.min(1, "Descrição do contrato obrigatória"),
+		title: z.string().optional(),
+		startDate: z.string().optional(),
+		endDate: z.string().optional(),
+		status: contractStatusSchema.optional(),
+		statusReason: z.string().max(1000).optional(),
+	})
+	.superRefine((data, ctx) => {
+		if (
+			(data.status === "PARALISADO" || data.status === "ARQUIVADO") &&
+			!data.statusReason?.trim()
+		) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["statusReason"],
+				message: "Informe o motivo para paralisar ou arquivar o contrato",
+			});
+		}
+	});
 
 export type ContractEditFormValues = z.infer<typeof contractEditFormSchema>;
 

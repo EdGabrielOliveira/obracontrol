@@ -39,6 +39,8 @@ export function normalizePortugueseText(value: string): string {
 		["Reducao", "Redução"],
 		["codigo", "código"],
 		["Codigo", "Código"],
+		["indice", "índice"],
+		["Indice", "Índice"],
 		["situacao", "situação"],
 		["Situacao", "Situação"],
 		["obrigatorio", "obrigatório"],

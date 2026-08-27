@@ -15,6 +15,9 @@ model Contract {
   startDate                 DateTime?
   endDate                   DateTime?
   status                    String    @default("RASCUNHO")
+  statusReason              String?
+  statusChangedAt           DateTime?
+  statusChangedBy           String?
   createdBy                 String?
   notes                     String?
   // Origem unica do fluxo de solicitacao de contratacao (aceite cria um
@@ -108,6 +111,11 @@ model ContractMeasurement {
   evidenceNote    String?
   createdBy       String?
   notes           String?
+  status          String    @default("RASCUNHO")
+  archivedAt      DateTime?
+  archivedBy      String?
+  statusReason    String?
+  statusChangedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

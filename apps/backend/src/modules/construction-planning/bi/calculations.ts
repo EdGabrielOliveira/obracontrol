@@ -97,6 +97,7 @@ export type WorkForBIInput = {
 	name: string;
 	costCenterId?: string | null;
 	clientName: string | null;
+	operationalStatus?: string | null;
 	plannedStart: Date | null;
 	plannedEnd: Date | null;
 	baseDate: Date | null;
@@ -123,6 +124,7 @@ export function toWorkWithMetricsInput(
 		name: identity.name,
 		costCenterId: work.costCenterId ?? null,
 		clientName: work.clientName ?? null,
+		operationalStatus: work.operationalStatus ?? null,
 		plannedStart: work.plannedStart ?? null,
 		plannedEnd: work.plannedEnd ?? null,
 		baseDate: identity.baseDate,

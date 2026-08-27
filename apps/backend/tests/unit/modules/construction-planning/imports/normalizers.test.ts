@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	normalizeDate,
 	normalizeNumberField,
+	normalizePercentage,
 } from "../../../../../src/modules/construction-planning/imports/normalizers";
 import type { ImportValidationError } from "../../../../../src/modules/construction-planning/types";
 
@@ -65,5 +66,13 @@ describe("normalizeNumberField", () => {
 		expect(normalizeNumberField(errors, "Teste", 1, "Valor", 0)).toBe(0);
 		expect(normalizeNumberField(errors, "Teste", 2, "Valor", -15)).toBe(-15);
 		expect(errors).toEqual([]);
+	});
+});
+
+describe("normalizePercentage", () => {
+	it("preserves Excel percentage fractions and converts percentage points", () => {
+		expect(normalizePercentage(0.3)).toBe(0.3);
+		expect(normalizePercentage(30)).toBe(0.3);
+		expect(normalizePercentage("30%")).toBe(0.3);
 	});
 });

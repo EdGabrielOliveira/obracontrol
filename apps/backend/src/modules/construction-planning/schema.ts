@@ -48,6 +48,7 @@ export const actualCostTypeSchema = z.preprocess(
 export type ActualCostType = z.infer<typeof actualCostTypeSchema>;
 
 export const constructionItemStatusEnum = z.enum([
+	"DRAFT",
 	"NOT_STARTED",
 	"IN_PROGRESS",
 	"DONE",
@@ -107,6 +108,9 @@ export type ConstructionBIWorksFilter = z.infer<
 export type ConstructionItemStatus = z.infer<typeof constructionItemStatusEnum>;
 export type ScheduleRisk = z.infer<typeof scheduleRiskEnum>;
 export type CostRisk = z.infer<typeof costRiskEnum>;
+
+/** Statuses which are allowed to participate in the operational portfolio. */
+export const operationalWorkStatusEnum = z.enum(["IN_PROGRESS"]);
 
 export const createMeasurementSchema = z
 	.object({

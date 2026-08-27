@@ -23,6 +23,10 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
+import {
+	PAYMENT_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -152,6 +156,7 @@ function RouteComponent() {
 		canApprovePendingItems &&
 		cost.approval?.status === "PENDING" &&
 		Boolean(cost.approval.requestId);
+	const hasPendingApproval = cost.approval?.status === "PENDING";
 	const title =
 		cost.description || CATEGORY_LABEL[cost.category] || "Custo realizado";
 	const items = cost.budgetVersionItem
@@ -182,6 +187,7 @@ function RouteComponent() {
 				description={`${formatDate(cost.costDate)} · ${formatCurrency(cost.amount)}`}
 				actions={
 					<>
+						{hasPendingApproval && <StatusBadge status="PENDING_APPROVAL" />}
 						<Link to="/app/obras/$workId/custos" params={{ workId }}>
 							<Button variant="outline">
 								<ArrowLeft className="mr-2 h-4 w-4" />
@@ -241,7 +247,6 @@ function RouteComponent() {
 					</>
 				}
 			/>
-
 			{isUnappropriated && (
 				<div className="status-warning mb-6 flex items-start gap-2 rounded-lg p-4 text-sm">
 					<TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -286,9 +291,10 @@ function RouteComponent() {
 							<Badge variant="outline">
 								{COST_TYPE_LABEL[cost.costType] ?? cost.costType}
 							</Badge>
-							<Badge variant="outline">
-								{PAYMENT_STATUS_LABEL[cost.paymentStatus] ?? cost.paymentStatus}
-							</Badge>
+							<StatusBadge
+								status={cost.paymentStatus}
+								map={PAYMENT_STATUS_MAP}
+							/>
 						</div>
 					</CardContent>
 				</Card>

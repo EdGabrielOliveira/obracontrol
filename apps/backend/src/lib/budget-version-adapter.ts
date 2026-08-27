@@ -30,7 +30,8 @@ export type BudgetVersionStatus =
 	| "PENDING_APPROVAL"
 	| "ACTIVE"
 	| "REJECTED"
-	| "SUPERSEDED";
+	| "SUPERSEDED"
+	| "ARCHIVED";
 
 export type BudgetVersionSummary = {
 	id: string;
@@ -845,6 +846,7 @@ function mapVersionStatus(
 	if (status === "SUBSTITUIDO" || (status === "VIGENTE" && !isActive)) {
 		return "SUPERSEDED";
 	}
+	if (status === "ARQUIVADO") return "ARCHIVED";
 	if (status === "RECUSADO") return "REJECTED";
 	if (approvalRequestId) return "PENDING_APPROVAL";
 	return "DRAFT";
@@ -1012,6 +1014,13 @@ export async function submitBudgetVersion(
 			422,
 		);
 	}
+	if (version.status === "ARQUIVADO") {
+		throw new ConstructionError(
+			"BUDGET_VERSION_ARCHIVED",
+			"Versao de orcamento arquivada nao pode ser submetida",
+			422,
+		);
+	}
 	if (version.approvalRequestId) {
 		throw new ConstructionError(
 			"BUDGET_VERSION_ALREADY_SUBMITTED",
@@ -1070,4 +1079,47 @@ export async function submitBudgetVersion(
 		status: submitted.status,
 		approvalRequestId: submitted.approvalRequestId,
 	};
+}
+
+export async function archiveBudgetVersion(
+	actorId: string,
+	workId: string,
+	versionId: string,
+	reason?: string,
+): Promise<BudgetVersionSummary> {
+	const scope = await assertWorkScope(actorId, workId);
+	const version = await prisma.budgetVersion.findFirst({
+		where: { id: versionId, workId, ownerId: scope.resourceOwnerId },
+	});
+	if (!version) {
+		throw new ConstructionError(
+			"NOT_FOUND",
+			"Versao de orcamento nao encontrada",
+			404,
+		);
+	}
+	if (version.isActive || version.status === "VIGENTE") {
+		throw new ConstructionError(
+			"BUDGET_VERSION_ACTIVE",
+			"A versao vigente nao pode ser arquivada",
+			422,
+		);
+	}
+	if (version.approvalRequestId) {
+		throw new ConstructionError(
+			"BUDGET_VERSION_PENDING_APPROVAL",
+			"Cancele ou conclua a aprovacao antes de arquivar a versao",
+			422,
+		);
+	}
+	if (version.status === "ARQUIVADO") return serializeVersion(version);
+	const archived = await prisma.budgetVersion.update({
+		where: { id: version.id },
+		data: {
+			status: "ARQUIVADO",
+			isActive: false,
+			reason: reason?.trim() || version.reason || "Arquivado",
+		},
+	});
+	return serializeVersion(archived);
 }

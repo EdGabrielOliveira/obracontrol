@@ -19,8 +19,11 @@ import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { DataTable } from "@/components/atoms/data-table";
 import { PageHeader } from "@/components/atoms/page-header";
+import {
+	AUDIT_ACTION_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
-import { Badge } from "@/components/ui/badge";
 import {
 	Select,
 	SelectContent,
@@ -28,7 +31,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { auditActionLabel, auditEntityLabel } from "@/lib/audit-labels";
+import { auditEntityLabel } from "@/lib/audit-labels";
 import { queryClient } from "@/lib/query-client";
 import { paginationSchema } from "@/schemas/pagination";
 import type { AuditLogEntry } from "@/types/audit";
@@ -49,27 +52,6 @@ const auditFilterSchema = z
 	.merge(paginationSchema);
 
 type AuditFilter = z.infer<typeof auditFilterSchema>;
-
-const ACTION_COLORS: Record<
-	string,
-	"default" | "secondary" | "destructive" | "outline"
-> = {
-	CREATE: "default",
-	UPDATE: "secondary",
-	DELETE: "destructive",
-	APPROVE: "default",
-	REJECT: "destructive",
-	SUBMIT: "outline",
-};
-
-const _ACTION_LABELS: Record<string, string> = {
-	CREATE: "Criação",
-	UPDATE: "Atualização",
-	DELETE: "Exclusão",
-	APPROVE: "Aprovação",
-	REJECT: "Rejeição",
-	SUBMIT: "Submissão",
-};
 
 const _ENTITY_LABELS: Record<string, string> = {
 	WORK_MEASUREMENT: "Medição de Obra",
@@ -271,9 +253,10 @@ function RouteComponent() {
 							auditColumnHelper.accessor("action", {
 								header: "Ação",
 								cell: ({ getValue }) => (
-									<Badge variant={ACTION_COLORS[getValue()] || "outline"}>
-										{auditActionLabel(getValue())}
-									</Badge>
+									<StatusBadge
+										status={getValue()}
+										map={AUDIT_ACTION_STATUS_MAP}
+									/>
 								),
 							}),
 							auditColumnHelper.accessor("entityType", {

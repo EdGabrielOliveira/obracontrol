@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../../../lib/prisma";
+import { OPERATIONAL_CONTRACT_STATUSES } from "../contract-status";
 
 export type AnalyticsContractRow = {
 	supplierId: string | null;
@@ -24,7 +25,10 @@ export async function listContractsForAnalytics(
 	ownerId: string,
 	filters?: { workId?: string },
 ): Promise<AnalyticsContractRow[]> {
-	const where: Prisma.ContractWhereInput = { ownerId };
+	const where: Prisma.ContractWhereInput = {
+		ownerId,
+		status: { in: [...OPERATIONAL_CONTRACT_STATUSES] },
+	};
 	if (filters?.workId) where.workId = filters.workId;
 	return prisma.contract.findMany({
 		where,
@@ -33,6 +37,7 @@ export async function listContractsForAnalytics(
 			supplierName: true,
 			contractValue: true,
 			measurements: {
+				where: { status: "ACEITO" },
 				select: { items: { select: { measuredValue: true } } },
 			},
 			payments: { select: { value: true, paidValue: true } },

@@ -187,6 +187,7 @@ export async function getLatestWorkMeasurementQuantities(
 			measurement: {
 				ownerId,
 				workId,
+				status: "ACEITO",
 				...(excludeMeasurementId ? { id: { not: excludeMeasurementId } } : {}),
 			},
 		},
@@ -254,6 +255,7 @@ async function validateBudgetItemIds(
 
 type CreateWorkMeasurementInputWithAuthor = CreateWorkMeasurementInput & {
 	createdBy?: string | null;
+	status?: string;
 };
 
 type PersistedWorkMeasurementItem = {
@@ -297,6 +299,9 @@ async function createWorkMeasurementInTx(
 			evidenceNote: input.evidenceNote ?? null,
 			createdBy: input.createdBy ?? null,
 			notes: null,
+			// Toda medição criada começa como rascunho. A aceitação é uma
+			// transição explícita e atômica que materializa seus efeitos.
+			status: "RASCUNHO",
 		},
 	});
 
@@ -454,6 +459,35 @@ export async function deleteWorkMeasurement(
 		where: { id: measurementId, ownerId },
 	});
 	return item;
+}
+
+export async function updateWorkMeasurementStatus(
+	ownerId: string,
+	workId: string,
+	measurementId: string,
+	status: string,
+	statusReason?: string | null,
+	statusChangedBy?: string | null,
+	tx?: Prisma.TransactionClient,
+	expectedStatus?: string,
+) {
+	const db = tx ?? prisma;
+	const result = await db.workMeasurement.updateMany({
+		where: {
+			id: measurementId,
+			ownerId,
+			workId,
+			...(expectedStatus ? { status: expectedStatus } : {}),
+		},
+		data: {
+			status,
+			statusReason: statusReason ?? null,
+			statusChangedAt: new Date(),
+			archivedAt: status === "ARQUIVADO" ? new Date() : null,
+			archivedBy: status === "ARQUIVADO" ? (statusChangedBy ?? null) : null,
+		},
+	});
+	return result.count > 0;
 }
 
 /**
@@ -786,7 +820,7 @@ export async function getWorkMeasurementDetail(
 				orderBy: { sortOrder: "asc" },
 			}),
 			prisma.workMeasurementItem.findMany({
-				where: { measurement: { ownerId, workId } },
+				where: { measurement: { ownerId, workId, status: "ACEITO" } },
 				include: {
 					measurement: { select: { id: true, number: true, date: true } },
 				},
@@ -1016,7 +1050,7 @@ export async function getWorkMeasurementMapDetail(
 			orderBy: { sortOrder: "asc" },
 		}),
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId },
+			where: { ownerId, workId, status: "ACEITO" },
 			include: {
 				items: {
 					include: {
@@ -1158,7 +1192,7 @@ export async function getWorkMeasurementReports(
 	const activeImportId = await getActiveBudgetImportId(ownerId, workId);
 	const [measurements, allBudgetItems, baselines] = await Promise.all([
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId },
+			where: { ownerId, workId, status: "ACEITO" },
 			include: {
 				items: {
 					include: {
@@ -1335,7 +1369,7 @@ export async function getWorkMeasurementSummary(
 	const activeImportId = await getActiveBudgetImportId(ownerId, workId);
 	const [measurements, budgetItems] = await Promise.all([
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId },
+			where: { ownerId, workId, status: "ACEITO" },
 			include: {
 				items: {
 					select: {
@@ -1381,7 +1415,7 @@ export async function getWorkMeasurementsForBI(
 	workId: string,
 ) {
 	return prisma.workMeasurement.findMany({
-		where: { ownerId, workId },
+		where: { ownerId, workId, status: "ACEITO" },
 		include: {
 			items: {
 				select: {
@@ -1403,7 +1437,7 @@ export async function getWorkMeasurementsForManyWorks(
 ): Promise<Map<string, Awaited<ReturnType<typeof getWorkMeasurementsForBI>>>> {
 	if (workIds.length === 0) return new Map();
 	const rows = await prisma.workMeasurement.findMany({
-		where: { ownerId, workId: { in: workIds } },
+		where: { ownerId, workId: { in: workIds }, status: "ACEITO" },
 		include: {
 			items: {
 				select: {

@@ -64,4 +64,13 @@ templateRoutes
 				summary: "Baixar modelo de cronograma vinculado ao orçamento",
 			},
 		},
+	)
+	.get(
+		"/templates/medicao-obra/:workId",
+		({ params, scope }) =>
+			exportService.exportMedicaoObraTemplate(
+				scope.resourceOwnerId,
+				params.workId,
+			),
+		{ detail: { tags: ["Templates"] } },
 	);

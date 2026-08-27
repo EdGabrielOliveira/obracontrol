@@ -4,14 +4,18 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
+import { useMemo } from "react";
+import { toast } from "sonner";
 import { getBudgetItems } from "@/api/budget";
-import { workKeys } from "@/api/query-keys";
+import { listMeasurementCoverages } from "@/api/measurement-coverage";
+import { measurementCoverageKeys, workKeys } from "@/api/query-keys";
 import { getWorkMeasurement } from "@/api/work-measurements";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { WorkMeasurementEditModal } from "@/components/organisms/modals/work-measurement-edit-modal";
+import { Card, CardContent } from "@/components/ui/card";
 import { queryClient } from "@/lib/query-client";
 
 export const Route = createFileRoute(
@@ -55,6 +59,19 @@ function RouteComponent() {
 		queryKey: workKeys.budget(workId),
 		queryFn: () => getBudgetItems(workId),
 	});
+	const coveragesQuery = useQuery({
+		queryKey: measurementCoverageKeys.list(workId),
+		queryFn: () => listMeasurementCoverages(workId),
+	});
+	const coveredItemIds = useMemo(
+		() =>
+			new Set(
+				(coveragesQuery.data ?? []).map(
+					(coverage) => coverage.workMeasurementItemId,
+				),
+			),
+		[coveragesQuery.data],
+	);
 
 	if (measurementQuery.isLoading || budgetQuery.isLoading)
 		return <LoadingSpinner title="Carregando edição da medição..." />;
@@ -62,11 +79,7 @@ function RouteComponent() {
 	if (!measurementQuery.data) return <LoadingSpinner />;
 
 	const measurement = measurementQuery.data.measurement;
-	const budgetOptions = (budgetQuery.data?.items ?? []).map((item) => ({
-		id: item.id,
-		value: item.id,
-		label: `${item.index} - ${item.description}`,
-	}));
+	const budgetItems = budgetQuery.data?.items ?? [];
 	const goBack = () =>
 		navigate({
 			to: "/app/obras/$workId/medicoes/$measurementId",
@@ -80,17 +93,29 @@ function RouteComponent() {
 				title={`Editar medição #${measurement.number}`}
 				description="Atualize os dados e os itens medidos."
 			/>
-			<WorkMeasurementEditModal
-				open
-				embedded
-				onOpenChange={(open) => {
-					if (!open) goBack();
-				}}
-				workId={workId}
-				measurement={measurement}
-				budgetOptions={budgetOptions}
-				onResult={() => undefined}
-			/>
+			<Card>
+				<CardContent className="pt-6">
+					<WorkMeasurementEditModal
+						open
+						embedded
+						onOpenChange={(open) => {
+							if (!open) goBack();
+						}}
+						workId={workId}
+						measurement={measurement}
+						budgetItems={budgetItems}
+						coveredItemIds={coveredItemIds}
+						onResult={(result) => {
+							if (!result.warnings?.length) return;
+							toast.warning(
+								result.approvalStatus === "PENDING_APPROVAL"
+									? "Medição enviada para aprovação."
+									: result.warnings[0].message,
+							);
+						}}
+					/>
+				</CardContent>
+			</Card>
 		</PageContainer>
 	);
 }

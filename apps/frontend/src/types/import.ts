@@ -140,6 +140,8 @@ export type ImportPreviewPage = {
 	page: number;
 	pageSize: number;
 	rows: ImportPreviewRow[];
+	errors?: ImportValidationError[];
+	warnings?: ImportValidationError[];
 	summary: {
 		total: number;
 		valid: number;

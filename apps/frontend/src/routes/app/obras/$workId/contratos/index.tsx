@@ -5,7 +5,13 @@ import {
 	useParams,
 	useSearch,
 } from "@tanstack/react-router";
-import { FileSpreadsheet, FolderOpen, Plus } from "lucide-react";
+import {
+	FileSpreadsheet,
+	FileText,
+	FolderOpen,
+	MapPinned,
+	Plus,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -13,7 +19,9 @@ import { listContractRequests } from "@/api/contract-requests";
 import {
 	type ContractFilter,
 	deleteContract,
+	getContractSummary,
 	listContracts,
+	updateContract,
 } from "@/api/contracts";
 import { exportContratos } from "@/api/export";
 import { governanceKeys, workKeys } from "@/api/query-keys";
@@ -22,20 +30,35 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { KpiCard } from "@/components/atoms/kpi-card";
+import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
+import { ContractStatusModal } from "@/components/organisms/contracts/contract-status-modal";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { downloadBlob } from "@/lib/download";
+import { invalidateContractRelated } from "@/lib/invalidate-contract";
 import { queryClient } from "@/lib/query-client";
+import { useAuth } from "@/lib/auth-context";
 import {
 	ContractTable,
 	type ContractTableRow,
 } from "@/organisms/contracts/contract-table";
 import { contractStatusSchema } from "@/schemas/contracts";
 import { paginationSchema } from "@/schemas/pagination";
+import type { Contract, ContractStatus } from "@/types/contracts";
 import type { PaginationMeta } from "@/types/shared";
+import { getErrorMessage } from "@/utils/api-error";
+import { formatCurrency } from "@/utils/format";
 import { getPaginationMeta } from "@/utils/pagination";
 
 const contractFilterSchema = z
@@ -77,8 +100,11 @@ function RouteComponent() {
 	const searchParams = useSearch({ from: Route.id }) as ContractFilterSchema;
 	const navigate = useNavigate({ from: Route.id });
 	const queryClient = useQueryClient();
+	const { role } = useAuth();
 
 	const [deleteId, setDeleteId] = useState<string | null>(null);
+	const [statusTarget, setStatusTarget] = useState<Contract | null>(null);
+	const [creationModeOpen, setCreationModeOpen] = useState(false);
 
 	const { data, isLoading, error, refetch } = useQuery({
 		queryKey: workKeys.contractsList(
@@ -86,12 +112,14 @@ function RouteComponent() {
 			searchParams as Record<string, unknown>,
 		),
 		queryFn: () => listContracts(workId, searchParams as ContractFilter),
-		staleTime: 2 * 60 * 1000,
 	});
 	const { data: pendingRequests = [] } = useQuery({
 		queryKey: ["contract-requests", workId],
 		queryFn: () => listContractRequests(workId),
-		staleTime: 30_000,
+	});
+	const { data: summaryData } = useQuery({
+		queryKey: workKeys.contractsSummary(workId),
+		queryFn: () => getContractSummary(workId),
 	});
 
 	const handlePageChange = (page: number) => {
@@ -123,6 +151,43 @@ function RouteComponent() {
 		onError: () => toast.error("Erro ao excluir contrato."),
 	});
 
+	const statusMutation = useMutation({
+		mutationFn: ({
+			contractId,
+			status,
+			reason,
+		}: {
+			contractId: string;
+			status: ContractStatus;
+			reason?: string;
+		}) => updateContract(workId, contractId, { status, statusReason: reason }),
+		onSuccess: (result, variables) => {
+			setStatusTarget(null);
+			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(
+					`Alteração de status enviada para aprovação do ${approver}.`,
+				);
+				queryClient.invalidateQueries({
+					queryKey: governanceKeys.pendingApprovals(workId),
+				});
+				return;
+			}
+			toast.success("Status do contrato atualizado.");
+			invalidateContractRelated(queryClient, workId, variables.contractId);
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(
+					error,
+					"Não foi possível alterar o status do contrato.",
+				),
+			),
+	});
+
 	const handleExport = async () => {
 		try {
 			const blob = await exportContratos(workId);
@@ -147,11 +212,16 @@ function RouteComponent() {
 		});
 	};
 
-	const handleNewContract = () =>
+	const handleNewContract = () => setCreationModeOpen(true);
+
+	const handleCreationMode = (mode: "new" | "in-progress") => {
+		setCreationModeOpen(false);
 		navigate({
 			to: "/app/obras/$workId/contratos/new",
 			params: { workId },
+			search: { mode },
 		});
+	};
 
 	if (isLoading) return <LoadingSpinner title="Carregando contratos..." />;
 	if (error || !data) return <ErrorFeedback onRetry={() => refetch()} />;
@@ -175,7 +245,28 @@ function RouteComponent() {
 	}));
 	const tableRows: ContractTableRow[] = [...contractList, ...pendingRows];
 	const totalContractCount = data.total + pendingRows.length;
+	const pendingContractCount =
+		(summaryData?.pendingContracts ?? 0) + pendingRows.length;
 	const paginationMeta: PaginationMeta = getPaginationMeta(data);
+	const contractKpis = (
+		<KpiGrid>
+			<KpiCard
+				title="Valor dos contratos"
+				value={formatCurrency(summaryData?.totalContractValue ?? 0)}
+				tone="default"
+			/>
+			<KpiCard
+				title="Total de contratos"
+				value={`${totalContractCount}`}
+				tone="default"
+			/>
+			<KpiCard
+				title="Contratos pendentes"
+				value={`${pendingContractCount}`}
+				tone={pendingContractCount > 0 ? "warning" : "default"}
+			/>
+		</KpiGrid>
+	);
 
 	if (contractList.length === 0 && pendingRequests.length === 0) {
 		return (
@@ -185,16 +276,22 @@ function RouteComponent() {
 					title="Contratos"
 					description="Contratos da obra"
 				/>
+				{contractKpis}
 				<EmptyStateCard
 					icon={FolderOpen}
 					title="Nenhum contrato"
-					description="Crie um contrato, envie o mapa de propostas e escolha o fornecedor vencedor."
+					description="Crie um contrato a partir de uma cotação ou cadastre diretamente um contrato já existente."
 					actions={
 						<Button variant="default" size="sm" onClick={handleNewContract}>
 							<Plus className="mr-2 h-4 w-4" />
 							Novo contrato
 						</Button>
 					}
+				/>
+				<ContractCreationModeDialog
+					open={creationModeOpen}
+					onOpenChange={setCreationModeOpen}
+					onSelect={handleCreationMode}
 				/>
 			</PageContainer>
 		);
@@ -219,8 +316,9 @@ function RouteComponent() {
 					</>
 				}
 			/>
+			{contractKpis}
 			{tableRows.length > 0 ? (
-				<Card>
+				<Card className="mt-4">
 					<CardHeaderWithIcon
 						icon={FolderOpen}
 						title="Lista de Contratos"
@@ -231,6 +329,15 @@ function RouteComponent() {
 							contracts={tableRows}
 							workId={workId}
 							onDelete={(id) => setDeleteId(id)}
+							onEdit={(contract) =>
+								navigate({
+									to: "/app/obras/$workId/contratos/$contractId/edit",
+									params: { workId, contractId: contract.id },
+								})
+							}
+							canChangeStatus={role !== null && role !== "SUPERVISOR"}
+							onOpenStatus={setStatusTarget}
+							isUpdatingStatus={statusMutation.isPending}
 							onRowClick={handleRowClick}
 							onPendingClick={(requestId) =>
 								navigate({
@@ -255,6 +362,76 @@ function RouteComponent() {
 				onCancel={() => setDeleteId(null)}
 				loading={deleteMutation.isPending}
 			/>
+			<ContractStatusModal
+				open={statusTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setStatusTarget(null);
+				}}
+				currentStatus={statusTarget?.status ?? "RASCUNHO"}
+				onSave={(status, reason) => {
+					if (!statusTarget) return;
+					statusMutation.mutate({
+						contractId: statusTarget.id,
+						status,
+						reason,
+					});
+				}}
+				loading={statusMutation.isPending}
+			/>
+			<ContractCreationModeDialog
+				open={creationModeOpen}
+				onOpenChange={setCreationModeOpen}
+				onSelect={handleCreationMode}
+			/>
 		</PageContainer>
+	);
+}
+
+function ContractCreationModeDialog({
+	open,
+	onOpenChange,
+	onSelect,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onSelect: (mode: "new" | "in-progress") => void;
+}) {
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>Como deseja criar o contrato?</DialogTitle>
+					<DialogDescription>
+						Escolha a modalidade antes de preencher os dados do contrato.
+					</DialogDescription>
+				</DialogHeader>
+				<div className="grid gap-3 sm:grid-cols-2">
+					<button
+						type="button"
+						className="rounded-lg border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+						onClick={() => onSelect("new")}
+					>
+						<FileText className="mb-3 h-5 w-5 text-primary" />
+						<p className="font-semibold">Contrato novo</p>
+						<p className="mt-1 text-sm text-muted-foreground">
+							Crie uma solicitação, envie o mapa de cotação e compare os
+							fornecedores.
+						</p>
+					</button>
+					<button
+						type="button"
+						className="rounded-lg border p-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+						onClick={() => onSelect("in-progress")}
+					>
+						<MapPinned className="mb-3 h-5 w-5 text-primary" />
+						<p className="font-semibold">Contrato em andamento</p>
+						<p className="mt-1 text-sm text-muted-foreground">
+							Cadastre fornecedor, valor, itens e os demais dados de um contrato
+							já existente.
+						</p>
+					</button>
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }

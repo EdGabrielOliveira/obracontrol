@@ -16,6 +16,7 @@ const contractItem = {
 	measurement: {
 		id: "cm-1",
 		contractId: "contract-1",
+		status: "ACEITO",
 		contract: { workId: "work-1" },
 	},
 };
@@ -48,6 +49,23 @@ const getWorkMeasurementItems = mock(
 );
 const countCoveragesByWorkMeasurement = mock(async (): Promise<number> => 0);
 const findActiveImpactsBySource = mock(async (): Promise<unknown[]> => []);
+const getWorkMeasurementItemsByIds = mock(
+	async (): Promise<unknown[]> => [workItem],
+);
+const getContractMeasurementItemsByIds = mock(
+	async (): Promise<unknown[]> => [contractItem],
+);
+const getContractServiceBudgetItems = mock(
+	async () => new Map([["service-1", "budget-1"]]),
+);
+const findCoveragesByPairs = mock(async (): Promise<unknown[]> => []);
+const sumCoveragesByWorkItems = mock(async () => new Map());
+const sumCoveragesByContractItems = mock(async () => new Map());
+const createCoverages = mock(
+	async (): Promise<unknown[]> => [{ id: "coverage-1" }],
+);
+const findWorkMeasurementIdsWithContractCoverage = mock(async () => ["wm-1"]);
+const deleteCoveragesForContractMeasurement = mock(async () => ({ count: 0 }));
 
 mock.module(
 	"../../../../src/modules/construction-planning/measurement-coverage.repository",
@@ -63,6 +81,15 @@ mock.module(
 		deleteCoverage,
 		getWorkMeasurementItems,
 		countCoveragesByWorkMeasurement,
+		getWorkMeasurementItemsByIds,
+		getContractMeasurementItemsByIds,
+		getContractServiceBudgetItems,
+		findCoveragesByPairs,
+		sumCoveragesByWorkItems,
+		sumCoveragesByContractItems,
+		createCoverages,
+		findWorkMeasurementIdsWithContractCoverage,
+		deleteCoveragesForContractMeasurement,
 	}),
 );
 
@@ -131,6 +158,15 @@ beforeEach(() => {
 		deleteCoverage,
 		getWorkMeasurementItems,
 		countCoveragesByWorkMeasurement,
+		getWorkMeasurementItemsByIds,
+		getContractMeasurementItemsByIds,
+		getContractServiceBudgetItems,
+		findCoveragesByPairs,
+		sumCoveragesByWorkItems,
+		sumCoveragesByContractItems,
+		createCoverages,
+		findWorkMeasurementIdsWithContractCoverage,
+		deleteCoveragesForContractMeasurement,
 		replaceSourceImpact,
 		reverse,
 	].forEach((m) => {
@@ -147,6 +183,23 @@ beforeEach(() => {
 	]);
 	countCoveragesByWorkMeasurement.mockImplementation(async () => 0);
 	findActiveImpactsBySource.mockImplementation(async () => []);
+	getWorkMeasurementItemsByIds.mockImplementation(async () => [workItem]);
+	getContractMeasurementItemsByIds.mockImplementation(async () => [
+		contractItem,
+	]);
+	getContractServiceBudgetItems.mockImplementation(
+		async () => new Map([["service-1", "budget-1"]]),
+	);
+	findCoveragesByPairs.mockImplementation(async () => []);
+	sumCoveragesByWorkItems.mockImplementation(async () => new Map());
+	sumCoveragesByContractItems.mockImplementation(async () => new Map());
+	createCoverages.mockImplementation(async () => [{ id: "coverage-1" }]);
+	findWorkMeasurementIdsWithContractCoverage.mockImplementation(async () => [
+		"wm-1",
+	]);
+	deleteCoveragesForContractMeasurement.mockImplementation(async () => ({
+		count: 0,
+	}));
 });
 
 const ctx = { userId: "user-1" };
@@ -403,6 +456,59 @@ describe("MeasurementCoverageService.link", () => {
 
 		expect(replaceSourceImpact).not.toHaveBeenCalled();
 		expect(reverse).toHaveBeenCalled();
+	});
+});
+
+describe("MeasurementCoverageService draft lifecycle", () => {
+	it("stores draft coverage without reclassifying the work measurement", async () => {
+		replaceSourceImpact.mockClear();
+		getContractMeasurementItemsByIds.mockResolvedValueOnce([
+			{
+				...contractItem,
+				measurement: { ...contractItem.measurement, status: "RASCUNHO" },
+			},
+		]);
+
+		await service.linkBatch(
+			"owner-1",
+			"work-1",
+			[
+				{
+					workMeasurementItemId: "work-item-1",
+					contractMeasurementItemId: "contract-item-1",
+					quantity: 3,
+				},
+			],
+			ctx,
+			{} as never,
+		);
+
+		expect(createCoverages).toHaveBeenCalled();
+		expect(replaceSourceImpact).not.toHaveBeenCalled();
+	});
+
+	it("reclassifies reserved coverage when the contract measurement is accepted", async () => {
+		replaceSourceImpact.mockClear();
+
+		await service.activateContractMeasurement(
+			"owner-1",
+			"work-1",
+			"cm-1",
+			ctx,
+			{} as never,
+		);
+
+		expect(findWorkMeasurementIdsWithContractCoverage).toHaveBeenCalledWith(
+			expect.anything(),
+			"cm-1",
+		);
+		expect(replaceSourceImpact).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			expect.objectContaining({ sourceId: "wm-1" }),
+			ctx,
+			expect.anything(),
+		);
 	});
 });
 

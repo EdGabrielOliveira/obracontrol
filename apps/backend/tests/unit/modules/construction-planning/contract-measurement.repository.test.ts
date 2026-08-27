@@ -168,10 +168,10 @@ describe("contract measurement repository", () => {
 			serviceId: "service-1",
 			measuredQuantity: 1,
 			measuredValue: 50,
-			measuredPercentage: 100,
+			measuredPercentage: 10,
 			accumulatedQuantity: 1,
 			accumulatedValue: 50,
-			accumulatedPercentage: 100,
+			accumulatedPercentage: 10,
 		});
 	});
 
@@ -203,8 +203,8 @@ describe("contract measurement repository", () => {
 		expect(result?.totals.measuredCurrent).toBe(50);
 		expect(result?.totals.measuredAccumulated).toBe(50);
 		expect(result?.serviceTree[0]).toMatchObject({
-			measuredCurrent: { quantity: 1, value: 50, percentage: 100 },
-			measuredAccumulated: { quantity: 1, value: 50, percentage: 100 },
+			measuredCurrent: { quantity: 1, value: 50, percentage: 10 },
+			measuredAccumulated: { quantity: 1, value: 50, percentage: 10 },
 			balance: { quantity: 9, value: 450, percentage: 90 },
 		});
 	});

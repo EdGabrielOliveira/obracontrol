@@ -21,7 +21,8 @@ import {
 	defaultMemoryChecker,
 	importParseSemaphore,
 } from "./import-parser";
-import { getImportById } from "./import-repository";
+import * as importRepository from "./import-repository";
+import { importIssueKey } from "./import-row-key";
 import { buildRejectedSheet } from "./import-service";
 import { parseWorkbookByKind } from "./parser";
 import { assertSelectedRowIds } from "./selected-workbook";
@@ -37,15 +38,11 @@ export const IMPORT_LIMITS = {
 	batchTtlDays: 7,
 };
 
-export const IMPORT_MODEL_VERSION = "1";
+export const IMPORT_MODEL_VERSION = "2";
 
 type SheetRow = {
 	rowNumber: number;
 } & Record<string, unknown>;
-
-function issueKey(error: ImportValidationError): string {
-	return `${error.sheet ?? ""}:${error.row ?? ""}`;
-}
 
 function issuesOf(error: ImportValidationError): ImportPreviewRow["issues"] {
 	return [
@@ -56,6 +53,29 @@ function issuesOf(error: ImportValidationError): ImportPreviewRow["issues"] {
 			value: error.dependency ?? null,
 		},
 	];
+}
+
+function issuesByRow(
+	issues: ImportValidationError[],
+): Map<string, ImportPreviewRow["issues"]> {
+	const result = new Map<string, ImportPreviewRow["issues"]>();
+	for (const issue of issues) {
+		if (issue.row === undefined || issue.sheet === undefined) continue;
+		const key = importIssueKey(issue);
+		result.set(key, [...(result.get(key) ?? []), ...issuesOf(issue)]);
+	}
+	return result;
+}
+
+function validationIssues(value: unknown): ImportValidationError[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter(
+		(issue): issue is ImportValidationError =>
+			typeof issue === "object" &&
+			issue !== null &&
+			typeof (issue as { code?: unknown }).code === "string" &&
+			typeof (issue as { message?: unknown }).message === "string",
+	);
 }
 
 export class ConstructionImportBatchService {
@@ -112,7 +132,10 @@ export class ConstructionImportBatchService {
 					422,
 				);
 			}
-			const origin = await getImportById(ownerId, input.reprocessOfId);
+			const origin = await importRepository.getImportById(
+				ownerId,
+				input.reprocessOfId,
+			);
 			if (!origin || origin.workId !== workId) {
 				throw new ConstructionError(
 					"INVALID_REPROCESS_ORIGIN",
@@ -161,7 +184,22 @@ export class ConstructionImportBatchService {
 			const validation = validateWorkbookByKind(
 				workbook,
 				input.model as WorkbookKind,
+				input.model === "medicao-obra"
+					? {
+							measurementBudgetIndexes:
+								await importRepository.activeBudgetIndexes(ownerId, workId),
+						}
+					: undefined,
 			);
+			if (input.model === "medicao-obra") {
+				validation.errors.push(
+					...(await importRepository.validateWorkMeasurementsFromImport(
+						ownerId,
+						workId,
+						validation.measurements,
+					)),
+				);
+			}
 
 			await this.persistStagingRows(
 				batchId,
@@ -185,6 +223,11 @@ export class ConstructionImportBatchService {
 				validCount,
 				invalidCount,
 				warningCount,
+				errorSummary: {
+					...(input.reason ? { reason: input.reason } : {}),
+					errors: validation.errors,
+					warnings: validation.warnings,
+				},
 				parsedWorkbook: workbook as unknown as Prisma.InputJsonValue,
 			});
 
@@ -408,6 +451,16 @@ export class ConstructionImportBatchService {
 				importBatchRepository.countImportRows(batchId, "INVALID"),
 				importBatchRepository.countImportRows(batchId, "WARNING"),
 			]);
+		const errorSummary =
+			batch.errorSummary && typeof batch.errorSummary === "object"
+				? (batch.errorSummary as { errors?: unknown; warnings?: unknown })
+				: {};
+		const errors = validationIssues(errorSummary.errors).filter(
+			(issue) => issue.row === undefined,
+		);
+		const warnings = validationIssues(errorSummary.warnings).filter(
+			(issue) => issue.row === undefined,
+		);
 
 		return {
 			batchId: batch.id,
@@ -419,6 +472,8 @@ export class ConstructionImportBatchService {
 			page: safePage,
 			pageSize: safePageSize,
 			rows: rows.map(toPreviewRow),
+			errors,
+			warnings,
 			summary: {
 				total,
 				valid: validCount,
@@ -512,10 +567,8 @@ export class ConstructionImportBatchService {
 			limits: typeof DEFAULT_IMPORT_MEMORY_BUDGET,
 		) => Promise<void>,
 	) {
-		const errorByKey = new Map(errors.map((error) => [issueKey(error), error]));
-		const warningByKey = new Map(
-			warnings.map((warning) => [issueKey(warning), warning]),
-		);
+		const errorsByKey = issuesByRow(errors);
+		const warningsByKey = issuesByRow(warnings);
 
 		const sheets: Array<{ sheet: string; rows: SheetRow[] }> = [
 			{ sheet: "Orcamento", rows: workbook.budgetRows as SheetRow[] },
@@ -555,19 +608,28 @@ export class ConstructionImportBatchService {
 			for (const row of entry.rows) {
 				seq += 1;
 				const key = `${entry.sheet}:${row.rowNumber}`;
-				const error = errorByKey.get(key);
-				const warning = warningByKey.get(key);
-				const status: ImportRowStatus = error
-					? "INVALID"
-					: warning
-						? "WARNING"
-						: "VALID";
+				const rowErrors = errorsByKey.get(key) ?? [];
+				const rowWarnings = warningsByKey.get(key) ?? [];
+				const status: ImportRowStatus =
+					rowErrors.length > 0
+						? "INVALID"
+						: rowWarnings.length > 0
+							? "WARNING"
+							: "VALID";
 				rows.push({
 					sheet: entry.sheet,
 					rowNumber: row.rowNumber,
-					values: row as unknown as Prisma.InputJsonValue,
+					// rowNumber is staging metadata, not a workbook column.
+					values: Object.fromEntries(
+						Object.entries(row).filter(([key]) => key !== "rowNumber"),
+					) as Prisma.InputJsonValue,
 					status,
-					issues: error ? issuesOf(error) : warning ? issuesOf(warning) : null,
+					issues:
+						rowErrors.length > 0
+							? rowErrors
+							: rowWarnings.length > 0
+								? rowWarnings
+								: null,
 					seq,
 				});
 			}

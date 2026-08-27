@@ -143,7 +143,10 @@ function RouteComponent() {
 					</div>
 					<div>
 						<p className="text-xs text-muted-foreground">Status do e-mail</p>
-						<Badge variant={user.emailVerified ? "default" : "secondary"}>
+						<Badge
+							variant="tag"
+							tone={user.emailVerified ? "success" : "danger"}
+						>
 							{user.emailVerified ? (
 								<>
 									<ShieldCheck className="mr-1 h-3.5 w-3.5" /> Verificado

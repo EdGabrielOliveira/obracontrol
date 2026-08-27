@@ -184,7 +184,7 @@ function RouteComponent() {
 				<Badge variant="secondary">
 					{ROLE_LABELS[user.role as keyof typeof ROLE_LABELS] ?? user.role}
 				</Badge>
-				<Badge variant={user.emailVerified ? "default" : "secondary"}>
+				<Badge variant="tag" tone={user.emailVerified ? "success" : "danger"}>
 					{user.emailVerified ? "E-mail verificado" : "E-mail não verificado"}
 				</Badge>
 			</div>

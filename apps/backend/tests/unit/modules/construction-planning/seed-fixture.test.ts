@@ -180,7 +180,10 @@ describe("canonical workbook bytes per kind", () => {
 			expect(workbook.SheetNames.length).toBe(def.sheets.length);
 
 			for (let i = 0; i < def.sheets.length; i++) {
-				const expectedName = def.sheets[i].name;
+				const expectedName =
+					kind === "medicao-obra" && def.sheets[i].name === "Medicoes Obra"
+						? "Medições de Obra"
+						: def.sheets[i].name;
 				const actualName = workbook.SheetNames[i];
 
 				expect(actualName).toBe(expectedName);

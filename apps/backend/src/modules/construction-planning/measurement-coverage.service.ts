@@ -220,6 +220,7 @@ export class MeasurementCoverageService {
 					workId,
 					contractIds,
 					t,
+					true,
 				),
 			]);
 			const workById = new Map(workItems.map((item) => [item.id, item]));
@@ -376,19 +377,21 @@ export class MeasurementCoverageService {
 			});
 
 			const created = await this.repository.createCoverages(t, data);
-			const measurementIds = [
-				...new Set(workItems.map((item) => item.measurementId)),
-			];
-			for (const measurementId of measurementIds) {
-				await this.reclassifyWorkMeasurement(
-					ownerId,
-					workId,
-					measurementId,
-					undefined,
-					new Decimal(0),
-					t,
-					ctx,
-				);
+			if (contractItems.every((item) => item.measurement.status === "ACEITO")) {
+				const measurementIds = [
+					...new Set(workItems.map((item) => item.measurementId)),
+				];
+				for (const measurementId of measurementIds) {
+					await this.reclassifyWorkMeasurement(
+						ownerId,
+						workId,
+						measurementId,
+						undefined,
+						new Decimal(0),
+						t,
+						ctx,
+					);
+				}
 			}
 			return created;
 		};
@@ -453,11 +456,21 @@ export class MeasurementCoverageService {
 		return withSerializableRetry(execute);
 	}
 
-	async hasCoveragesForWorkMeasurement(ownerId: string, measurementId: string) {
-		const count = await this.repository.countCoveragesByWorkMeasurement(
-			ownerId,
-			measurementId,
-		);
+	async hasCoveragesForWorkMeasurement(
+		ownerId: string,
+		measurementId: string,
+		tx?: Prisma.TransactionClient,
+	) {
+		const count = tx
+			? await this.repository.countCoveragesByWorkMeasurement(
+					ownerId,
+					measurementId,
+					tx,
+				)
+			: await this.repository.countCoveragesByWorkMeasurement(
+					ownerId,
+					measurementId,
+				);
 		return count > 0;
 	}
 
@@ -486,6 +499,98 @@ export class MeasurementCoverageService {
 		}
 	}
 
+	async activateContractMeasurement(
+		ownerId: string,
+		workId: string,
+		contractMeasurementId: string,
+		ctx: { userId: string },
+		tx: Prisma.TransactionClient,
+	) {
+		const measurementIds =
+			await this.repository.findWorkMeasurementIdsWithContractCoverage(
+				tx,
+				contractMeasurementId,
+			);
+		for (const measurementId of measurementIds) {
+			await this.reclassifyWorkMeasurement(
+				ownerId,
+				workId,
+				measurementId,
+				undefined,
+				new Decimal(0),
+				tx,
+				ctx,
+			);
+		}
+	}
+
+	async discardPendingContractMeasurement(
+		contractMeasurementId: string,
+		tx: Prisma.TransactionClient,
+	) {
+		await this.repository.deleteCoveragesForContractMeasurement(
+			tx,
+			contractMeasurementId,
+		);
+	}
+
+	/**
+	 * Removes the coverage links of a previously accepted contract measurement
+	 * and restores the uncovered work-measurement consumption in the same
+	 * transaction as the status change.
+	 */
+	async deactivateContractMeasurement(
+		ownerId: string,
+		workId: string,
+		contractMeasurementId: string,
+		ctx: { userId: string },
+		tx: Prisma.TransactionClient,
+	) {
+		const measurementIds =
+			await this.repository.findWorkMeasurementIdsWithContractCoverage(
+				tx,
+				contractMeasurementId,
+			);
+		await this.repository.deleteCoveragesForContractMeasurement(
+			tx,
+			contractMeasurementId,
+		);
+		for (const measurementId of measurementIds) {
+			await this.reclassifyWorkMeasurement(
+				ownerId,
+				workId,
+				measurementId,
+				undefined,
+				new Decimal(0),
+				tx,
+				ctx,
+			);
+		}
+	}
+
+	/**
+	 * Reconciles an accepted work measurement with optional contract coverage.
+	 * Coverage is an accounting relationship, not a prerequisite for the work
+	 * measurement lifecycle, so callers must never use it as a status guard.
+	 */
+	async syncAcceptedWorkMeasurement(
+		ownerId: string,
+		workId: string,
+		measurementId: string,
+		ctx: { userId: string },
+		tx: Prisma.TransactionClient,
+	) {
+		await this.reclassifyWorkMeasurement(
+			ownerId,
+			workId,
+			measurementId,
+			undefined,
+			new Decimal(0),
+			tx,
+			ctx,
+		);
+	}
+
 	private async reclassifyWorkMeasurement(
 		ownerId: string,
 		workId: string,
@@ -509,7 +614,11 @@ export class MeasurementCoverageService {
 							item.id,
 							coveredTotals.has(item.id)
 								? (coveredTotals.get(item.id) ?? new Decimal(0))
-								: await this.repository.sumCoveragesByWorkItem(t, item.id),
+								: await this.repository.sumCoveragesByWorkItem(
+										t,
+										item.id,
+										true,
+									),
 						] as const,
 				),
 			),

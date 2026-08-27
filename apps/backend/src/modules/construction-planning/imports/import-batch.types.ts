@@ -26,6 +26,22 @@ export type ImportPreviewPage = {
 	page: number;
 	pageSize: number;
 	rows: ImportPreviewRow[];
+	errors: Array<{
+		row?: number;
+		field?: string;
+		sheet?: string;
+		code: string;
+		message: string;
+		dependency?: string;
+	}>;
+	warnings: Array<{
+		row?: number;
+		field?: string;
+		sheet?: string;
+		code: string;
+		message: string;
+		dependency?: string;
+	}>;
 	summary: {
 		total: number;
 		valid: number;

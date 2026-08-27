@@ -1,11 +1,76 @@
 import { ConstructionError } from "./errors";
 
 export const CONTRACT_TRANSITIONS: Record<string, string[]> = {
-	RASCUNHO: ["A_INICIAR"],
-	A_INICIAR: ["EM_ANDAMENTO", "PARALISADO"],
-	EM_ANDAMENTO: ["PARALISADO", "FINALIZADO"],
-	PARALISADO: ["EM_ANDAMENTO"],
-	FINALIZADO: [],
+	// Status de contrato pode ser corrigido manualmente por perfis autorizados.
+	// A permissão de escrita continua sendo aplicada na rota; esta máquina não
+	// deve impedir uma correção de status (inclusive após FINALIZADO).
+	RASCUNHO: [
+		"A_INICIAR",
+		"EM_ANDAMENTO",
+		"PARALISADO",
+		"FINALIZADO",
+		"ARQUIVADO",
+	],
+	A_INICIAR: [
+		"RASCUNHO",
+		"EM_ANDAMENTO",
+		"PARALISADO",
+		"FINALIZADO",
+		"ARQUIVADO",
+	],
+	EM_ANDAMENTO: [
+		"RASCUNHO",
+		"A_INICIAR",
+		"PARALISADO",
+		"FINALIZADO",
+		"ARQUIVADO",
+	],
+	PARALISADO: [
+		"RASCUNHO",
+		"A_INICIAR",
+		"EM_ANDAMENTO",
+		"FINALIZADO",
+		"ARQUIVADO",
+	],
+	FINALIZADO: [
+		"RASCUNHO",
+		"A_INICIAR",
+		"EM_ANDAMENTO",
+		"PARALISADO",
+		"ARQUIVADO",
+	],
+	ARQUIVADO: [
+		"RASCUNHO",
+		"A_INICIAR",
+		"EM_ANDAMENTO",
+		"PARALISADO",
+		"FINALIZADO",
+	],
+};
+
+export const WORK_OPERATIONAL_TRANSITIONS: Record<string, string[]> = {
+	DRAFT: ["NOT_STARTED", "IGNORED"],
+	NOT_STARTED: ["IN_PROGRESS", "SUSPENDED", "IGNORED"],
+	IN_PROGRESS: ["SUSPENDED", "DONE", "IGNORED"],
+	SUSPENDED: ["IN_PROGRESS", "DONE", "IGNORED"],
+	DONE: ["IGNORED"],
+	IGNORED: ["NOT_STARTED", "IN_PROGRESS"],
+};
+
+export const MEASUREMENT_TRANSITIONS: Record<string, string[]> = {
+	RASCUNHO: ["ACEITO", "RECUSADO", "ARQUIVADO"],
+	ACEITO: ["RASCUNHO", "RECUSADO", "ARQUIVADO"],
+	RECUSADO: ["RASCUNHO", "ACEITO", "ARQUIVADO"],
+	ARQUIVADO: ["RASCUNHO"],
+};
+
+export const BUDGET_VERSION_TRANSITIONS: Record<string, string[]> = {
+	DRAFT: ["PENDING_APPROVAL", "REJECTED", "ARCHIVED"],
+	PENDING_APPROVAL: ["ACTIVE", "REJECTED"],
+	ACTIVE: ["SUPERSEDED"],
+	REJECTED: ["DRAFT", "ARCHIVED"],
+	SUPERSEDED: [],
+	ARCHIVED: ["DRAFT"],
 };
 
 export const PAYMENT_TRANSITIONS: Record<string, string[]> = {
@@ -27,6 +92,19 @@ export const GOVERNANCE_TRANSITIONS: Record<
 	TRAVADO: ["EM_REVISAO"],
 };
 
+const DIRECT_GOVERNANCE_ROLES: readonly GovernanceRole[] = [
+	"ADMIN",
+	"GERENTE",
+	"GESTOR",
+];
+
+export function isCanonicalGovernanceTransition(
+	currentStatus: GovernanceStatus,
+	newStatus: GovernanceStatus,
+): boolean {
+	return GOVERNANCE_TRANSITIONS[currentStatus]?.includes(newStatus) ?? false;
+}
+
 export function validateGovernanceTransition(
 	currentStatus: GovernanceStatus,
 	newStatus: GovernanceStatus,
@@ -37,9 +115,17 @@ export function validateGovernanceTransition(
 	},
 ) {
 	if (currentStatus === newStatus) return;
+	if (context.role === "SUPERVISOR") {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Supervisor nao tem permissao para alterar o estado de governanca",
+			403,
+		);
+	}
 
-	const allowed = GOVERNANCE_TRANSITIONS[currentStatus];
-	if (!allowed.includes(newStatus)) {
+	const isCanonical = isCanonicalGovernanceTransition(currentStatus, newStatus);
+	const canTransitionDirectly = DIRECT_GOVERNANCE_ROLES.includes(context.role);
+	if (!isCanonical && !canTransitionDirectly) {
 		throw new ConstructionError(
 			"INVALID_STATUS_TRANSITION",
 			"Transicao de governanca invalida",
@@ -50,33 +136,11 @@ export function validateGovernanceTransition(
 	const isReopening =
 		(currentStatus === "ACEITO" || currentStatus === "TRAVADO") &&
 		newStatus === "EM_REVISAO";
-	if (isReopening && !context.reason?.trim()) {
+	if ((!isCanonical || isReopening) && !context.reason?.trim()) {
 		throw new ConstructionError(
 			"GOVERNANCE_REASON_REQUIRED",
-			"Motivo obrigatorio para reabrir um registro governado",
+			"Motivo obrigatorio para transicao direta ou reabertura de um registro governado",
 			422,
-		);
-	}
-	if (
-		currentStatus === "TRAVADO" &&
-		context.role !== "ADMIN" &&
-		context.role !== "GERENTE"
-	) {
-		throw new ConstructionError(
-			"GOVERNANCE_OVERRIDE_REQUIRED",
-			"A reabertura de um registro travado exige override administrativo",
-			403,
-		);
-	}
-	if (
-		context.override &&
-		context.role !== "ADMIN" &&
-		context.role !== "GERENTE"
-	) {
-		throw new ConstructionError(
-			"GOVERNANCE_OVERRIDE_REQUIRED",
-			"Somente ADMIN ou GERENTE podem executar override administrativo",
-			403,
 		);
 	}
 }
@@ -92,7 +156,7 @@ export function validateStatusTransition(
 	if (!allowed || !allowed.includes(newStatus)) {
 		throw new ConstructionError(
 			"INVALID_STATUS_TRANSITION",
-			"Transicao de status invalida",
+			`Transicao de status invalida: ${currentStatus} -> ${newStatus}`,
 			422,
 		);
 	}

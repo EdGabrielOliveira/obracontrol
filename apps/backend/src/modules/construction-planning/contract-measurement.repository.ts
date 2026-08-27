@@ -125,12 +125,12 @@ export function buildMeasurementItemData(
 				? roundCurrency(serviceTotalCost * (explicitMeasuredPercentage / 100))
 				: undefined);
 	const measuredPercentage =
-		explicitMeasuredPercentage ??
-		(measuredQuantity !== undefined && serviceQuantity > 0
+		measuredQuantity !== undefined && serviceQuantity > 0
 			? roundCurrency((measuredQuantity / serviceQuantity) * 100)
-			: measuredValue !== undefined && serviceTotalCost > 0
-				? roundCurrency((measuredValue / serviceTotalCost) * 100)
-				: undefined);
+			: (explicitMeasuredPercentage ??
+				(measuredValue !== undefined && serviceTotalCost > 0
+					? roundCurrency((measuredValue / serviceTotalCost) * 100)
+					: undefined));
 	const resolvedQuantity =
 		measuredQuantity ??
 		(explicitMeasuredPercentage !== undefined && serviceQuantity > 0
@@ -247,10 +247,11 @@ export async function getServiceTotals(
 	ownerId: string,
 	contractId: string,
 	serviceIds: string[],
+	db: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<Record<string, number>> {
 	const ids = [...new Set(serviceIds)];
 	if (ids.length === 0) return {};
-	const services = await prisma.contractService.findMany({
+	const services = await db.contractService.findMany({
 		where: { id: { in: ids }, contractId, contract: { ownerId } },
 		select: { id: true, quantity: true, unitCost: true, totalCost: true },
 	});
@@ -278,12 +279,13 @@ export async function getContractPeriod(
 export async function getContractLedgerContext(
 	ownerId: string,
 	contractId: string,
+	db: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<{
 	workId: string;
 	startDate: Date | null;
 	endDate: Date | null;
 } | null> {
-	const contract = await prisma.contract.findFirst({
+	const contract = await db.contract.findFirst({
 		where: { id: contractId, ownerId },
 		select: { workId: true, startDate: true, endDate: true },
 	});
@@ -378,6 +380,9 @@ export async function createMeasurement(
 				evidenceNote: null,
 				createdBy: input.createdBy ?? null,
 				notes: input.notes ?? null,
+				// Medições só entram no ciclo financeiro depois da aceitação;
+				// nenhum chamador de baixo nível pode criar uma medição já aceita.
+				status: "RASCUNHO",
 			},
 		});
 
@@ -513,6 +518,35 @@ export async function deleteMeasurement(
 	return item;
 }
 
+export async function updateMeasurementStatus(
+	ownerId: string,
+	contractId: string,
+	measurementId: string,
+	status: string,
+	statusReason?: string | null,
+	statusChangedBy?: string | null,
+	tx?: Prisma.TransactionClient,
+	expectedStatus?: string,
+) {
+	const db = tx ?? prisma;
+	const result = await db.contractMeasurement.updateMany({
+		where: {
+			id: measurementId,
+			ownerId,
+			contractId,
+			...(expectedStatus ? { status: expectedStatus } : {}),
+		},
+		data: {
+			status,
+			statusReason: statusReason ?? null,
+			statusChangedAt: new Date(),
+			archivedAt: status === "ARQUIVADO" ? new Date() : null,
+			archivedBy: status === "ARQUIVADO" ? (statusChangedBy ?? null) : null,
+		},
+	});
+	return result.count > 0;
+}
+
 export async function getContractAggregate(
 	ownerId: string,
 	contractId: string,
@@ -522,6 +556,7 @@ export async function getContractAggregate(
 		include: {
 			services: { orderBy: { sortOrder: "asc" } },
 			measurements: {
+				where: { status: "ACEITO" },
 				include: { items: true },
 				orderBy: { date: "desc" },
 			},

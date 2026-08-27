@@ -1351,6 +1351,26 @@ describe("listWorks", () => {
 			computedStatus: "IN_PROGRESS",
 		});
 	});
+
+	it("groups aggregate loading by each work owner", async () => {
+		const { groupWorkIdsByOwner } = await import(
+			"../../../../src/modules/construction-planning/works/works.repository"
+		);
+		const groups = groupWorkIdsByOwner("actor-1", [
+			{ id: "w1", ownerId: "owner-a", activeImportId: "imp-a" },
+			{ id: "w2", ownerId: "owner-b", activeImportId: null },
+			{ id: "w3", activeImportId: null },
+		]);
+		expect(groups.get("owner-a")).toEqual([
+			{ workId: "w1", activeImportId: "imp-a" },
+		]);
+		expect(groups.get("owner-b")).toEqual([
+			{ workId: "w2", activeImportId: null },
+		]);
+		expect(groups.get("actor-1")).toEqual([
+			{ workId: "w3", activeImportId: null },
+		]);
+	});
 });
 
 const costCenterFindMany = mock(async (): Promise<unknown[]> => []);

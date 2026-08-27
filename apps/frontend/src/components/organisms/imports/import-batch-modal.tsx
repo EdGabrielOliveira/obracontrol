@@ -13,6 +13,10 @@ import {
 import { importBatchKeys } from "@/api/query-keys";
 import { downloadTemplate } from "@/api/templates";
 import { FileDropzone } from "@/components/atoms/file-dropzone";
+import {
+	IMPORT_PREVIEW_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,12 +29,17 @@ import {
 } from "@/components/ui/dialog";
 import { downloadBlob } from "@/lib/download";
 import { importConfirmationQueryKeys } from "@/lib/import-invalidation";
-import { toPreviewTableRow } from "@/lib/import-preview";
+import {
+	previewFieldKeys,
+	previewFieldLabel,
+	previewFieldValue,
+	previewIssueLabel,
+} from "@/lib/import-preview";
 import type {
 	ConstructionTemplateKind,
 	ImportPreviewRow,
 } from "@/types/import";
-import { getErrorMessage } from "@/utils/api-error";
+import { getErrorMessage, normalizePortugueseText } from "@/utils/api-error";
 import { createIdempotencyKey } from "@/utils/idempotency-key";
 
 const PREVIEW_PAGE_SIZE = 100;
@@ -52,6 +61,7 @@ export function ImportBatchModal({
 	const [file, setFile] = useState<File | null>(null);
 	const [batchId, setBatchId] = useState<string | null>(null);
 	const [page, setPage] = useState(1);
+	const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 	const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
 	const [idempotencyKey] = useState(() => createIdempotencyKey("import"));
 	const [confirmation, setConfirmation] = useState<{
@@ -131,6 +141,21 @@ export function ImportBatchModal({
 		onOpenChange(nextOpen);
 	};
 
+	const handleDownloadTemplate = async () => {
+		setDownloadingTemplate(true);
+		try {
+			const blob = await downloadTemplate(model, workId);
+			downloadBlob(blob, `modelo-${model}.xlsx`);
+			toast.success("Modelo baixado.");
+		} catch (error) {
+			toast.error(
+				getErrorMessage(error, "Não foi possível baixar o modelo da planilha."),
+			);
+		} finally {
+			setDownloadingTemplate(false);
+		}
+	};
+
 	useEffect(() => {
 		if (!open) {
 			setFile(null);
@@ -147,6 +172,8 @@ export function ImportBatchModal({
 
 	const rows = previewQuery.data?.rows ?? [];
 	const summary = previewQuery.data?.summary;
+	const validationErrors = previewQuery.data?.errors ?? [];
+	const validationWarnings = previewQuery.data?.warnings ?? [];
 
 	const paginationMeta = useMemo(() => {
 		const total = summary?.total ?? 0;
@@ -176,7 +203,7 @@ export function ImportBatchModal({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-3xl">
+			<DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] min-w-0 overflow-hidden sm:max-w-6xl">
 				<DialogHeader>
 					<DialogTitle>Importação de planilha</DialogTitle>
 					<DialogDescription>
@@ -218,16 +245,14 @@ export function ImportBatchModal({
 								</p>
 							</div>
 							<Button
+								type="button"
 								variant="outline"
 								size="sm"
-								onClick={() => {
-									downloadTemplate(model).then((blob) => {
-										downloadBlob(blob, `modelo-${model}.xlsx`);
-									});
-								}}
+								onClick={handleDownloadTemplate}
+								disabled={downloadingTemplate}
 							>
 								<Download className="h-4 w-4" />
-								Baixar modelo
+								{downloadingTemplate ? "Baixando..." : "Baixar modelo"}
 							</Button>
 						</div>
 						<FileDropzone
@@ -243,7 +268,7 @@ export function ImportBatchModal({
 						)}
 					</div>
 				) : (
-					<div className="space-y-4">
+					<div className="min-w-0 space-y-4">
 						<div className="flex flex-wrap items-center justify-between gap-2 text-sm">
 							<p className="text-muted-foreground">
 								{file?.name ?? "Planilha"} —{" "}
@@ -289,6 +314,35 @@ export function ImportBatchModal({
 								selectedRowIds={selectedRowIds}
 								onToggleRow={toggleRow}
 							/>
+						)}
+
+						{(validationErrors.length > 0 || validationWarnings.length > 0) && (
+							<div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+								{validationErrors.map((issue) => (
+									<p
+										key={`error-${issue.sheet ?? ""}-${issue.row ?? ""}-${issue.field ?? ""}-${issue.code}-${issue.message}`}
+										className="text-destructive"
+									>
+										{issue.sheet
+											? `${normalizePortugueseText(issue.sheet)}: `
+											: ""}
+										{issue.field ? `${previewFieldLabel(issue.field)} — ` : ""}
+										{normalizePortugueseText(issue.message)}
+									</p>
+								))}
+								{validationWarnings.map((issue) => (
+									<p
+										key={`warning-${issue.sheet ?? ""}-${issue.row ?? ""}-${issue.field ?? ""}-${issue.code}-${issue.message}`}
+										className="text-warning"
+									>
+										{issue.sheet
+											? `${normalizePortugueseText(issue.sheet)}: `
+											: ""}
+										{issue.field ? `${previewFieldLabel(issue.field)} — ` : ""}
+										{normalizePortugueseText(issue.message)}
+									</p>
+								))}
+							</div>
 						)}
 
 						<PaginationBar meta={paginationMeta} onPageChange={setPage} />
@@ -338,25 +392,28 @@ export function PreviewTable({
 			</p>
 		);
 	}
+	const fields = previewFieldKeys(rows);
 	return (
-		<div className="max-h-80 overflow-auto rounded-lg border">
-			<table className="w-full text-left text-sm">
+		<div className="max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto rounded-lg border">
+			<table className="w-max min-w-full text-left text-sm">
 				<thead className="sticky top-0 bg-muted">
 					<tr>
-						<th className="px-3 py-2 font-medium">Sel.</th>
-						<th className="px-3 py-2 font-medium">Aba</th>
-						<th className="px-3 py-2 font-medium">Linha</th>
-						<th className="px-3 py-2 font-medium">Coluna</th>
-						<th className="px-3 py-2 font-medium">Valor original</th>
-						<th className="px-3 py-2 font-medium">Valor normalizado</th>
-						<th className="px-3 py-2 font-medium">Status</th>
-						<th className="px-3 py-2 font-medium">Código</th>
-						<th className="px-3 py-2 font-medium">Mensagem</th>
+						<th className="whitespace-nowrap px-3 py-2 font-medium">Sel.</th>
+						{fields.map((field) => (
+							<th
+								key={field}
+								className="whitespace-nowrap px-3 py-2 font-medium"
+							>
+								{previewFieldLabel(field)}
+							</th>
+						))}
+						<th className="min-w-[18rem] whitespace-nowrap px-3 py-2 font-medium">
+							Validação
+						</th>
 					</tr>
 				</thead>
 				<tbody className="divide-y">
 					{rows.map((row) => {
-						const preview = toPreviewTableRow(row);
 						const invalid = row.status === "INVALID";
 						return (
 							<tr
@@ -374,35 +431,33 @@ export function PreviewTable({
 										/>
 									)}
 								</td>
-								<td className="px-3 py-2">{preview.sheet}</td>
-								<td className="px-3 py-2">{preview.rowNumber}</td>
-								<td className="px-3 py-2 text-muted-foreground">
-									{preview.column || "—"}
-								</td>
-								<td className="max-w-[12rem] truncate px-3 py-2">
-									{preview.originalValue}
-								</td>
-								<td className="max-w-[12rem] truncate px-3 py-2 text-muted-foreground">
-									{preview.normalizedValue || "—"}
-								</td>
-								<td className="px-3 py-2">
-									<span
-										className={
-											invalid
-												? "text-destructive"
-												: row.status === "WARNING"
-													? "text-warning"
-													: "text-success"
-										}
-									>
-										{preview.status}
-									</span>
-								</td>
-								<td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-									{preview.code}
-								</td>
-								<td className="max-w-[14rem] truncate px-3 py-2 text-muted-foreground">
-									{preview.message || "—"}
+								{fields.map((field) => (
+									<td key={field} className="max-w-[14rem] truncate px-3 py-2">
+										{previewFieldValue(field, row.values?.[field])}
+									</td>
+								))}
+								<td className="px-3 py-2 align-top">
+									<div className="space-y-1.5">
+										<StatusBadge
+											status={row.status}
+											map={IMPORT_PREVIEW_STATUS_MAP}
+										/>
+										{row.issues.length > 0 ? (
+											<ul className="space-y-1 text-xs text-muted-foreground">
+												{row.issues.map((issue) => (
+													<li
+														key={`${issue.column ?? ""}-${issue.code}-${issue.message}-${issue.value ?? ""}`}
+													>
+														{previewIssueLabel(issue)}
+													</li>
+												))}
+											</ul>
+										) : (
+											<span className="text-xs text-muted-foreground">
+												Nenhuma inconsistência encontrada.
+											</span>
+										)}
+									</div>
 								</td>
 							</tr>
 						);

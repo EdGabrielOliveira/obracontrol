@@ -19,7 +19,6 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { KpiCard } from "@/atoms/kpi-card";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
-import { AsOfDatePicker } from "@/components/molecules/as-of-date-picker";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import {
 	CHART_COLORS_ARRAY,
@@ -28,7 +27,6 @@ import {
 } from "@/components/organisms/charts/chart-config";
 import { ChartTooltip } from "@/components/organisms/charts/chart-tooltip";
 import { SCurveChart } from "@/components/organisms/charts/s-curve-chart";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -79,8 +77,6 @@ export function SummaryTab({
 	mgmtError,
 	onMgmtRetry,
 	schedule,
-	asOfDate,
-	onAsOfDateChange,
 	hasNoBudget,
 	onGoToBudget,
 }: SummaryTabProps) {

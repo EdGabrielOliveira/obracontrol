@@ -119,11 +119,16 @@ export async function loadActiveWorkChildren(
 			Promise.all([
 				prisma.constructionMeasurement.findMany({
 					where: {
-						OR: [
-							...measurementConditions,
-							...(activeItemIds.length > 0
-								? [{ budgetItemId: { in: batch } }]
-								: []),
+						AND: [
+							{ status: "ACEITO" },
+							{
+								OR: [
+									...measurementConditions,
+									...(activeItemIds.length > 0
+										? [{ budgetItemId: { in: batch } }]
+										: []),
+								],
+							},
 						],
 					},
 					orderBy: { measurementDate: "asc" },

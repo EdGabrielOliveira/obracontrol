@@ -1,4 +1,5 @@
 import {
+	Archive,
 	BadgeCheck,
 	ChevronDown,
 	ChevronRight,
@@ -41,10 +42,13 @@ type Props = {
 	loadingVersionIds: ReadonlySet<string>;
 	openVersionId: string | null;
 	canWrite: boolean;
+	canApprove: boolean;
 	submitPending: boolean;
+	archivePending: boolean;
 	onCreateAditivo: () => void;
 	onOpenChange?: (versionId: string | null) => void;
 	onSubmitVersion: (versionId: string, reason: string) => void;
+	onArchiveVersion: (versionId: string, reason: string) => void;
 };
 
 function versionKind(version: BudgetVersionSummary) {
@@ -223,7 +227,7 @@ function VersionItems({
 	const aggregatesByIndex = getVersionItemAggregates(roots);
 	const sourceRoots = buildVersionItemTree(sourceDetail?.items ?? []);
 	const sourceAggregatesByIndex = getVersionItemAggregates(sourceRoots);
-	const versionIndex = version.index ?? String(version.version);
+	const _versionIndex = version.index ?? String(version.version);
 	const sourceByIndex = new Map(
 		(sourceDetail?.items ?? []).map((item) => [item.index, item]),
 	);
@@ -347,10 +351,13 @@ export function BudgetVersionAccordion({
 	loadingVersionIds,
 	openVersionId,
 	canWrite,
+	canApprove,
 	submitPending,
+	archivePending,
 	onCreateAditivo,
 	onOpenChange,
 	onSubmitVersion,
+	onArchiveVersion,
 }: Props) {
 	const [submittingId, setSubmittingId] = useState<string | null>(null);
 	const [reason, setReason] = useState("");
@@ -363,7 +370,7 @@ export function BudgetVersionAccordion({
 				description="Versões aprovadas e alterações do orçamento."
 				actions={
 					canWrite ? (
-						<Button variant="outline" size="sm" onClick={onCreateAditivo}>
+						<Button size="sm" onClick={onCreateAditivo}>
 							<Plus className="mr-2 h-4 w-4" />
 							Novo aditivo
 						</Button>
@@ -468,6 +475,50 @@ export function BudgetVersionAccordion({
 													>
 														<Send className="mr-2 h-4 w-4" />
 														Submeter para aprovação
+													</Button>
+												)}
+											</div>
+										) : null}
+										{canApprove &&
+										["DRAFT", "REJECTED", "SUPERSEDED"].includes(
+											version.status,
+										) ? (
+											<div className="flex flex-wrap items-center gap-2">
+												{submittingId === `archive:${version.id}` ? (
+													<>
+														<Input
+															value={reason}
+															onChange={(event) =>
+																setReason(event.target.value)
+															}
+															placeholder="Motivo do arquivamento"
+															className="w-56"
+														/>
+														<Button
+															size="sm"
+															variant="outline"
+															loading={archivePending}
+															disabled={!reason.trim()}
+															onClick={() => {
+																onArchiveVersion(version.id, reason.trim());
+																setSubmittingId(null);
+																setReason("");
+															}}
+														>
+															Confirmar arquivamento
+														</Button>
+													</>
+												) : (
+													<Button
+														size="sm"
+														variant="ghost"
+														onClick={() => {
+															setSubmittingId(`archive:${version.id}`);
+															setReason("");
+														}}
+													>
+														<Archive className="mr-2 h-4 w-4" />
+														Arquivar versão
 													</Button>
 												)}
 											</div>

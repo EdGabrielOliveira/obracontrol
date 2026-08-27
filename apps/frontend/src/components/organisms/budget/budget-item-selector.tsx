@@ -15,6 +15,7 @@ export type BudgetItemSelection = {
 	budgetItemId: string;
 	budgetVersionItemId?: string;
 	quantity: number;
+	percentage?: number;
 	unitPrice?: number;
 };
 
@@ -32,10 +33,13 @@ export interface BudgetItemSelectorProps {
 
 	effectiveBudgetItems?: CostBudgetItemSelectorResponse;
 	disabled?: boolean;
+	disabledItemIds?: ReadonlySet<string>;
 	availableQuantities?: Record<string, number>;
 	showUnitPrice?: boolean;
 	editableUnitPrice?: boolean;
 	quantityLabel?: string;
+	showMeasurementPercentage?: boolean;
+	percentageLabel?: string;
 }
 
 export function effectiveItemsToTree(
@@ -175,6 +179,16 @@ export function updateSelectionQuantity(
 	);
 }
 
+export function updateSelectionPercentage(
+	current: BudgetItemSelection[],
+	budgetItemId: string,
+	percentage: number,
+): BudgetItemSelection[] {
+	return current.map((entry) =>
+		entry.budgetItemId === budgetItemId ? { ...entry, percentage } : entry,
+	);
+}
+
 export function updateSelectionUnitPrice(
 	current: BudgetItemSelection[],
 	budgetItemId: string,
@@ -192,10 +206,13 @@ export function BudgetItemSelector({
 	budgetItems: injectedItems,
 	effectiveBudgetItems,
 	disabled,
+	disabledItemIds,
 	availableQuantities,
 	showUnitPrice = true,
 	editableUnitPrice = true,
 	quantityLabel = "Quantidade",
+	showMeasurementPercentage = false,
+	percentageLabel = "% medido",
 }: BudgetItemSelectorProps) {
 	const [search, setSearch] = useState("");
 	const [expandedIds, setExpandedIds] = useState<Set<string> | null>(new Set());
@@ -362,9 +379,12 @@ export function BudgetItemSelector({
 							);
 						}
 						const selected = selectedIds.has(item.id);
+						const itemDisabled =
+							disabled || disabledItemIds?.has(item.id) === true;
 						const selection = selectionById.get(item.id);
 						const available = availableQuantities?.[item.id] ?? null;
 						const toggle = () => {
+							if (itemDisabled) return;
 							const next = toggleBudgetItemSelection(
 								selectedItems,
 								item,
@@ -390,7 +410,7 @@ export function BudgetItemSelector({
 								<div className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[1.5rem_minmax(0,1fr)_6rem_6rem_8rem]">
 									<Checkbox
 										checked={selected}
-										disabled={disabled}
+										disabled={itemDisabled}
 										onCheckedChange={toggle}
 										aria-label={`Selecionar ${item.index} - ${item.description}`}
 									/>
@@ -398,7 +418,7 @@ export function BudgetItemSelector({
 										type="button"
 										className="min-w-0 text-left"
 										onClick={toggle}
-										disabled={disabled}
+										disabled={itemDisabled}
 									>
 										<span className="block truncate text-sm font-medium">
 											<span className="mr-1.5 font-mono text-xs text-muted-foreground">
@@ -436,7 +456,7 @@ export function BudgetItemSelector({
 								</div>
 
 								{selected && (
-									<div className="mt-2 grid min-w-0 items-end gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 sm:ml-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+									<div className="mt-2 grid min-w-0 items-end gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 sm:ml-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
 										<label
 											htmlFor={`quantity-${item.id}`}
 											className="space-y-1 text-xs font-medium text-muted-foreground"
@@ -450,19 +470,72 @@ export function BudgetItemSelector({
 												min="0"
 												step="any"
 												value={selection?.quantity ?? 1}
-												disabled={disabled}
-												onChange={(event) =>
-													onChange(
-														updateSelectionQuantity(
-															selectedItems,
+												disabled={itemDisabled}
+												onChange={(event) => {
+													const quantity = Number(event.target.value);
+													let next = updateSelectionQuantity(
+														selectedItems,
+														item.id,
+														quantity,
+													);
+													if (
+														showMeasurementPercentage &&
+														(item.quantity ?? 0) > 0
+													) {
+														next = updateSelectionPercentage(
+															next,
 															item.id,
-															Number(event.target.value),
-														),
-													)
-												}
+															(quantity / (item.quantity ?? 1)) * 100,
+														);
+													}
+													onChange(next);
+												}}
 												aria-label={`${quantityLabel} de ${item.description}`}
 											/>
 										</label>
+										{showMeasurementPercentage && (
+											<label
+												htmlFor={`measurement-percentage-${item.id}`}
+												className="space-y-1 text-xs font-medium text-muted-foreground"
+											>
+												<span>{percentageLabel}</span>
+												<Input
+													data-slot="budget-measurement-percentage"
+													id={`measurement-percentage-${item.id}`}
+													className="h-9 bg-background text-sm"
+													type="number"
+													min="0"
+													max="100"
+													step="0.01"
+													value={
+														selection?.percentage ??
+														(item.quantity && item.quantity > 0
+															? ((selection?.quantity ?? 0) / item.quantity) *
+																100
+															: "")
+													}
+													disabled={itemDisabled}
+													onChange={(event) => {
+														const percentage = Number(event.target.value);
+														const next = updateSelectionPercentage(
+															selectedItems,
+															item.id,
+															percentage,
+														);
+														onChange(
+															item.quantity && item.quantity > 0
+																? updateSelectionQuantity(
+																		next,
+																		item.id,
+																		(item.quantity * percentage) / 100,
+																	)
+																: next,
+														);
+													}}
+													aria-label={`${percentageLabel} de ${item.description}`}
+												/>
+											</label>
+										)}
 										{showUnitPrice && editableUnitPrice && (
 											<label
 												htmlFor={`unit-price-${item.id}`}
@@ -477,7 +550,7 @@ export function BudgetItemSelector({
 													min="0"
 													step="0.01"
 													value={selection?.unitPrice ?? item.unitCost ?? ""}
-													disabled={disabled}
+													disabled={itemDisabled}
 													onChange={(event) =>
 														onChange(
 															updateSelectionUnitPrice(

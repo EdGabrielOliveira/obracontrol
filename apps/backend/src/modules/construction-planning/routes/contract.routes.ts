@@ -1,8 +1,10 @@
 import { Elysia, t } from "elysia";
+import { normalizeRole } from "../../../lib/authorization";
 import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { ConstructionError } from "../../../lib/errors";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { parseInput, parseQuery } from "../../../lib/zod-validation";
 import { contractService } from "../contract.service";
@@ -193,6 +195,7 @@ export const contractRoutes = new Elysia({
 				startDate: t.Optional(t.String()),
 				endDate: t.Optional(t.String()),
 				status: t.Optional(t.String()),
+				statusReason: t.Optional(t.String({ maxLength: 1000 })),
 				notes: t.Optional(t.String()),
 				services: t.Optional(
 					t.Array(
@@ -211,6 +214,16 @@ export const contractRoutes = new Elysia({
 		"/:contractId",
 		async ({ params, body, scope, user }) => {
 			const parsed = parseInput(updateContractSchema, body);
+			if (
+				parsed.status !== undefined &&
+				normalizeRole(user.role) === "SUPERVISOR"
+			) {
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Supervisor nao pode alterar status de contrato",
+					403,
+				);
+			}
 			return contractService.updateContract(
 				scope.resourceOwnerId,
 				params.workId,
@@ -227,6 +240,7 @@ export const contractRoutes = new Elysia({
 				startDate: t.Optional(t.String()),
 				endDate: t.Optional(t.String()),
 				status: t.Optional(t.String()),
+				statusReason: t.Optional(t.String({ maxLength: 1000 })),
 			}),
 			detail: { tags: ["Contracts"] },
 		},

@@ -25,7 +25,7 @@ import {
 	resolveLedgerItemRef,
 	SERVICE_SOURCE_TYPE,
 } from "../ledger/ledger.integration";
-import { getWorkOrThrow } from "../repository";
+import { normalizeWorkOperationalStatus } from "../works/work-operational-status";
 
 export type ContractGatewayOrigin =
 	| { type: "MANUAL" }
@@ -147,9 +147,15 @@ async function createContractWithEffectsCore(
 	tx: Prisma.TransactionClient,
 	input: ContractGatewayInput,
 ): Promise<ContractGatewayResult> {
-	const work = await getWorkOrThrow(input.resourceOwnerId, input.workId);
-	if (work.ownerId !== input.resourceOwnerId) {
-		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+	// O work precisa ser lido pelo mesmo tx que cria o contrato. Uma leitura
+	// fora da transação permitiria que uma obra fosse suspensa/arquivada entre
+	// a validação e a criação do compromisso financeiro.
+	const work = await tx.constructionWork.findFirst({
+		where: { id: input.workId, ownerId: input.resourceOwnerId },
+		select: { id: true, ownerId: true, operationalStatus: true },
+	});
+	if (!work) {
+		throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 	}
 
 	const origin = await resolveOriginLink(tx, input);
@@ -202,6 +208,19 @@ async function createContractWithEffectsCore(
 		};
 	}
 
+	const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+	if (
+		workStatus === "SUSPENDED" ||
+		workStatus === "DONE" ||
+		workStatus === "IGNORED"
+	) {
+		throw new ConstructionError(
+			"WORK_NOT_ACCEPTING_ENTRIES",
+			"A obra suspensa, concluida ou arquivada nao aceita novos contratos",
+			422,
+		);
+	}
+
 	const created = await tx.contract.create({
 		data: {
 			ownerId: input.resourceOwnerId,
@@ -221,7 +240,9 @@ async function createContractWithEffectsCore(
 				? new Date(input.contract.startDate)
 				: null,
 			endDate: input.contract.endDate ? new Date(input.contract.endDate) : null,
-			status: input.contract.status ?? "RASCUNHO",
+			// Toda criação nasce como rascunho; a ativação operacional é uma
+			// transição explícita posterior.
+			status: "RASCUNHO",
 			createdBy: input.actorId,
 			notes: input.contract.notes ?? null,
 			contractRequestId:
@@ -281,6 +302,7 @@ async function createContractWithEffectsCore(
 			input.resourceOwnerId,
 			input.workId,
 			serviceInput.budgetItemId,
+			tx,
 		);
 		if (!ref) {
 			throw new ConstructionError(

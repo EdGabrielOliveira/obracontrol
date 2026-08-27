@@ -322,7 +322,14 @@ export async function findActiveImpactsBySource(
 	sourceId: string,
 ): Promise<BudgetImpactRow[]> {
 	return tx.constructionBudgetImpact.findMany({
-		where: { ownerId, workId, sourceType, sourceId, reversedAt: null },
+		where: {
+			ownerId,
+			workId,
+			sourceType,
+			sourceId,
+			reversedAt: null,
+			status: { not: "REJECTED" },
+		},
 		orderBy: { createdAt: "asc" },
 	});
 }

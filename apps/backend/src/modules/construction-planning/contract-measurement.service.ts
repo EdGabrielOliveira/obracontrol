@@ -10,8 +10,6 @@ import { auditService } from "../audit/audit.service";
 import type { MeasurementActorRole } from "../governance/governance.service";
 import { findActiveImpactsBySource } from "./budget-control/budget-control.repository";
 import { budgetControlService } from "./budget-control/budget-control.service";
-import type { BudgetMutationResult } from "./budget-control/budget-control.types";
-import { withOverflowApproval } from "./budget-control/overflow-approval";
 import {
 	type ContractGovernanceScope,
 	contractGovernanceScope,
@@ -21,54 +19,41 @@ import type {
 	ContractServiceTotalsExport,
 } from "./contract-measurement.repository";
 import * as cmRepository from "./contract-measurement.repository";
+import { setContractMeasurementStatus } from "./contract-measurement-status.service";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
 } from "./governance-guard";
 import {
-	assertDuePartsDoNotExceedIncurred,
-	buildMeasurementEvents,
 	buildPaymentCreateEvent,
-	COMPONENT_SUPPLIER,
 	competenceOf,
 	MEASUREMENT_SOURCE_TYPE,
 	PAYMENT_SOURCE_TYPE,
 	resolveLedgerItemRef,
 	reverseLedgerEvents,
-	splitMeasurementValue,
 } from "./ledger/ledger.integration";
 import {
-	countLedgerEventsBySource,
 	findLedgerEventsBySource,
 	findLedgerEventsBySourcePrefix,
 } from "./ledger/ledger.repository";
-import { appendLedgerEvent, appendLedgerEvents } from "./ledger/ledger.service";
+import { appendLedgerEvent } from "./ledger/ledger.service";
 import {
 	buildMeasurementDateWarning,
 	type MeasurementWarning,
 } from "./measurement-common";
-import { measurementCoverageService } from "./measurement-coverage.service";
 import type {
 	CreateContractMeasurementInput,
 	CreateContractPaymentInput,
 	UpdateContractMeasurementInput,
 	UpdateContractPaymentInput,
 } from "./schemas/contract.schema";
+import { normalizeWorkOperationalStatus } from "./works/work-operational-status";
 
 type ExceedingItem = {
 	serviceId: string;
 	accumulatedValue: number;
 	totalCost: number;
 };
-
-type MeasurementCoverageRef = Map<
-	string,
-	{
-		budgetItemId: string;
-		identityId: string;
-		versionItemId: string;
-	}
->;
 
 export class ContractMeasurementService {
 	constructor(
@@ -80,6 +65,11 @@ export class ContractMeasurementService {
 		const workId = await this.scope.getWorkId(ownerId, contractId);
 		if (workId) {
 			await this.governance.assertWritable(ownerId, "CONTRACT", workId);
+			await this.governance.assertWritable(
+				ownerId,
+				"CONTRACT_STATUS",
+				contractId,
+			);
 		}
 	}
 
@@ -87,17 +77,13 @@ export class ContractMeasurementService {
 		ownerId: string,
 		contractId: string,
 		items: Array<{ serviceId: string; accumulatedValue?: number | null }>,
+		db: Prisma.TransactionClient | typeof prisma = prisma,
 	): Promise<ExceedingItem[]> {
 		if (items.length === 0) return [];
 		const serviceIds = [...new Set(items.map((i) => i.serviceId))];
 		const [totals, servicesById] = await Promise.all([
-			cmRepository.getServiceTotals(ownerId, contractId, serviceIds),
-			cmRepository.getContractServicesById(
-				prisma,
-				ownerId,
-				contractId,
-				serviceIds,
-			),
+			cmRepository.getServiceTotals(ownerId, contractId, serviceIds, db),
+			cmRepository.getContractServicesById(db, ownerId, contractId, serviceIds),
 		]);
 		const exceeding: ExceedingItem[] = [];
 		for (const item of items) {
@@ -121,72 +107,26 @@ export class ContractMeasurementService {
 		return exceeding;
 	}
 
-	private assertItemsHaveMeasuredValue(
+	private assertItemsHaveMeasuredQuantity(
 		items: ContractMeasurementItemPayload[],
 		servicesById: Map<string, ContractServiceTotalsExport>,
 	) {
-		const valueless = items.filter((item) => {
-			const hydrated = cmRepository.buildMeasurementItemData(
-				item,
-				servicesById.get(item.serviceId),
-			);
+		const invalid = items.filter((item) => {
+			const service = servicesById.get(item.serviceId);
 			return (
-				hydrated.accumulatedValue == null && hydrated.measuredValue == null
+				item.measuredQuantity == null ||
+				toFiniteNumber(item.measuredQuantity) <= 0 ||
+				!service ||
+				service.quantity <= 0
 			);
 		});
-		if (valueless.length > 0) {
+		if (invalid.length > 0) {
 			throw new ConstructionError(
 				"INVALID_MEASUREMENT_ITEM",
-				`Item de medicao sem valor (servicos: ${valueless.map((item) => item.serviceId).join(", ")})`,
+				`Item de medicao sem quantidade contratada ou quantidade medida valida (servicos: ${invalid.map((item) => item.serviceId).join(", ")})`,
 				422,
 			);
 		}
-	}
-
-	private async resolveMeasurementCoverage(
-		ownerId: string,
-		workId: string,
-		contractId: string,
-		items: Array<{ serviceId: string }>,
-		db: Prisma.TransactionClient | typeof prisma,
-	): Promise<MeasurementCoverageRef> {
-		const serviceBudget = await cmRepository.getServiceBudgetItems(
-			db,
-			ownerId,
-			contractId,
-			items.map((item) => item.serviceId),
-		);
-		const byService: MeasurementCoverageRef = new Map();
-		const uncovered: string[] = [];
-		for (const item of items) {
-			const budgetItemId = serviceBudget.get(item.serviceId)?.budgetItemId;
-			if (!budgetItemId) {
-				uncovered.push(item.serviceId);
-				continue;
-			}
-			const reference = await resolveLedgerItemRef(
-				ownerId,
-				workId,
-				budgetItemId,
-			);
-			if (!reference) {
-				uncovered.push(item.serviceId);
-				continue;
-			}
-			byService.set(item.serviceId, {
-				budgetItemId,
-				identityId: reference.identityId,
-				versionItemId: reference.versionItemId,
-			});
-		}
-		if (uncovered.length > 0) {
-			throw new ConstructionError(
-				"CONTRACT_BUDGET_COVERAGE_MISSING",
-				`Sem cobertura orcamentaria vigente para a medicao do contrato (servicos: ${uncovered.join(", ")})`,
-				422,
-			);
-		}
-		return byService;
 	}
 
 	private assertPaymentOverrideAllowed(
@@ -230,7 +170,24 @@ export class ContractMeasurementService {
 		if (!measurement) {
 			throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 		}
-		return measurement;
+		const pendingApproval = await prisma.approvalRequest.findFirst({
+			where: {
+				ownerId,
+				resourceId: measurementId,
+				effectAction: "CONTRACT_MEASUREMENT_APPROVE",
+				status: "PENDING",
+			},
+			select: { id: true },
+		});
+		if (!pendingApproval) return measurement;
+		return {
+			...measurement,
+			measurement: {
+				...measurement.measurement,
+				approvalStatus: "PENDING_APPROVAL" as const,
+				approvalRequestId: pendingApproval.id,
+			},
+		};
 	}
 
 	async createMeasurement(
@@ -243,6 +200,24 @@ export class ContractMeasurementService {
 		const contract = await cmRepository.getContractPeriod(ownerId, contractId);
 		if (!contract) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
+		}
+		const linkedWork = await cmRepository.getContractLedgerContext(
+			ownerId,
+			contractId,
+		);
+		if (linkedWork) {
+			const work = await prisma.constructionWork.findFirst({
+				where: { id: linkedWork.workId, ownerId },
+				select: { operationalStatus: true },
+			});
+			const status = normalizeWorkOperationalStatus(work?.operationalStatus);
+			if (status === "SUSPENDED" || status === "DONE" || status === "IGNORED") {
+				throw new ConstructionError(
+					"WORK_NOT_ACCEPTING_ENTRIES",
+					"A obra suspensa, concluida ou arquivada nao aceita novas medicoes",
+					422,
+				);
+			}
 		}
 
 		const warnings: MeasurementWarning[] = [];
@@ -259,223 +234,72 @@ export class ContractMeasurementService {
 		if (!ledgerContext) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
 		}
-		const scope = await resolveResourceScope(ownerId, {
-			workId: ledgerContext.workId,
-		});
-
 		const servicesById = await cmRepository.getContractServicesById(
 			prisma,
 			ownerId,
 			contractId,
 			input.items.map((item) => item.serviceId),
 		);
-		this.assertItemsHaveMeasuredValue(input.items, servicesById);
-		const parts = splitMeasurementValue(
-			input.items.map((item) =>
-				cmRepository.buildMeasurementItemData(
-					item,
-					servicesById.get(item.serviceId),
-				),
-			),
-			input,
-		);
-		assertDuePartsDoNotExceedIncurred(parts);
+		this.assertItemsHaveMeasuredQuantity(input.items, servicesById);
 
-		const occurredAt = new Date(input.date);
-
-		let overflowResult: BudgetMutationResult | null = null;
-		const created = await withOverflowApproval({
-			ownerId,
-			actorId: ctx.userId,
-			workId: ledgerContext.workId,
-			sourceType: MEASUREMENT_SOURCE_TYPE,
-			commit: async (tx) => {
-				const coverage = await this.resolveMeasurementCoverage(
-					ownerId,
-					ledgerContext.workId,
-					contractId,
-					input.items,
-					tx,
+		const created = await withSerializableRetry(async (tx) => {
+			const exceedingItems = await this.findExceedingItems(
+				ownerId,
+				contractId,
+				input.items,
+				tx,
+			);
+			if (exceedingItems.length > 0) {
+				throw new ConstructionError(
+					"MEASUREMENT_EXCEEDS_BALANCE",
+					"Medicao acima do saldo do servico do contrato; ajuste os valores ou crie uma nova medicao",
+					422,
 				);
-				const primary = coverage.get(input.items[0].serviceId);
-				if (!primary) {
-					throw new ConstructionError(
-						"CONTRACT_BUDGET_COVERAGE_MISSING",
-						"Sem cobertura orcamentaria vigente para a medicao do contrato",
-						422,
-					);
-				}
-				const exceedingItems = await this.findExceedingItems(
-					ownerId,
-					contractId,
-					input.items,
-				);
-				if (exceedingItems.length > 0) {
-					throw new ConstructionError(
-						"MEASUREMENT_EXCEEDS_BALANCE",
-						"Medicao acima do saldo do servico do contrato; ajuste os valores ou crie uma nova medicao",
-						422,
-					);
-					/*
-						code: "MEASUREMENT_EXCEEDS_BALANCE",
-						severity: "warning",
-						message:
-							ctx.role === "SUPERVISOR"
-								? "Medição acima do saldo do serviço do contrato — enviada para aprovação"
-								: "Medição acima do saldo do serviço do contrato — concluída com aviso",
-					}); */
-				}
+			}
 
-				const created = await cmRepository.createMeasurement(
-					ownerId,
-					contractId,
-					{ ...input, createdBy: ctx.userId },
-					tx,
-				);
-				if (!created) {
-					throw new ConstructionError(
-						"NOT_FOUND",
-						"Medicao nao encontrada",
-						404,
-					);
-				}
+			const created = await cmRepository.createMeasurement(
+				ownerId,
+				contractId,
+				{
+					...input,
+					createdBy: ctx.userId,
+					status: "RASCUNHO",
+				} as CreateContractMeasurementInput & {
+					createdBy: string;
+					status: string;
+				},
+				tx,
+			);
+			if (!created) {
+				throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
+			}
 
-				const events = buildMeasurementEvents(
-					{
-						scope,
-						workId: ledgerContext.workId,
-						budgetItemIdentityId: primary.identityId,
-						budgetVersionItemId: primary.versionItemId,
-						sourceType: MEASUREMENT_SOURCE_TYPE,
-						sourceId: created.id,
-						competence: competenceOf(occurredAt),
-						occurredAt,
-						approvalDecisionId: null,
-					},
-					parts,
-				);
-				let overflow: BudgetMutationResult | null = null;
-				const incurredEvent = events.find(
-					(e) => e.eventType === "INCURRED_CREATE",
-				);
-				if (incurredEvent) {
-					overflow = await budgetControlService.apply(
-						ownerId,
-						ledgerContext.workId,
-						{
-							workId: ledgerContext.workId,
-							allocations: [
-								{
-									budgetItemId: primary.budgetItemId,
-									value: Number(incurredEvent.amount),
-								},
-							],
-							amount: Number(incurredEvent.amount),
-							impactType: "CONSUMPTION",
-							sourceType: MEASUREMENT_SOURCE_TYPE,
-							sourceId: created.id,
-							componentId: COMPONENT_SUPPLIER,
-							competence: competenceOf(occurredAt),
-							occurredAt,
-						},
-						{ userId: ownerId },
-						tx,
-					);
-				}
-				const nonIncurredEvents = events.filter(
-					(e) => e.eventType !== "INCURRED_CREATE",
-				);
-				if (nonIncurredEvents.length > 0) {
-					await appendLedgerEvents(nonIncurredEvents, tx);
-				}
-
-				if (overflow && (ctx.role === "ADMIN" || ctx.role === "GERENTE")) {
-					for (const allocation of overflow.allocations) {
-						if (
-							allocation.status === "PENDING_APPROVAL" &&
-							allocation.impactId
-						) {
-							await budgetControlService.approve(
-								ownerId,
-								allocation.impactId,
-								{ userId: ctx.userId },
-								tx,
-							);
-						}
-					}
-					overflow = { ...overflow, requiresApproval: false };
-				}
-				overflowResult = overflow;
-
-				const coverageLinks = input.items.flatMap((item) => {
-					const createdItem = created.items.find(
-						(createdItem) => createdItem.serviceId === item.serviceId,
-					);
-					if (!createdItem) return [];
-					return (item.coverages ?? []).map((coverage) => ({
-						workMeasurementItemId: coverage.workMeasurementItemId,
-						contractMeasurementItemId: createdItem.id,
-						quantity: coverage.quantity,
-					}));
-				});
-				if (coverageLinks.length > 0) {
-					await measurementCoverageService.linkBatch(
-						ownerId,
-						ledgerContext.workId,
-						coverageLinks,
-						{ userId: ctx.userId },
-						tx,
-					);
-				}
-
-				if (exceedingItems.length > 0) {
-					await writeAudit(tx, {
-						userId: ctx.userId,
-						ownerId,
-						action: "CREATE",
-						entityType: "CONTRACT_MEASUREMENT",
-						entityId: created.id,
-						entityDescription: `Medicao #${created.number} - ${created.title}`,
-						newState: {
-							warnings,
-							exceedingItems,
-						},
-					});
-				}
-
-				return { value: created, sourceId: created.id, overflow };
-			},
+			return created;
 		});
 
-		const requiresOverflowApproval =
-			(overflowResult as BudgetMutationResult | null)?.requiresApproval ??
-			false;
-		const approvalStatus: "APPROVED" | "PENDING_APPROVAL" =
-			requiresOverflowApproval && ctx.role === "SUPERVISOR"
-				? "PENDING_APPROVAL"
-				: "APPROVED";
-		const approvalRequestId =
-			approvalStatus === "PENDING_APPROVAL"
-				? await this.findOverflowApprovalRequestId(ownerId, created.id)
-				: null;
+		let approvalStatus: "APPROVED" | "PENDING_APPROVAL" | undefined;
+		let approvalRequestId: string | null = null;
+		if (ctx.role === "SUPERVISOR") {
+			const { submitApproval } = await import("../governance/approval.service");
+			const request = await submitApproval({
+				actorId: ctx.userId,
+				resourceType: "CONTRACT_MEASUREMENT",
+				resourceId: created.id,
+				effectAction: "CONTRACT_MEASUREMENT_APPROVE",
+				payload: {
+					workId: ledgerContext.workId,
+					contractId,
+					measurementId: created.id,
+				},
+				expectedVersion: 1,
+				idempotencyKey: `cm-create-${created.id}`,
+			});
+			approvalStatus =
+				request.status === "PENDING" ? "PENDING_APPROVAL" : "APPROVED";
+			approvalRequestId = request.approvalRequestId;
+		}
 
 		return { ...created, approvalStatus, approvalRequestId, warnings };
-	}
-
-	private async findOverflowApprovalRequestId(
-		ownerId: string,
-		sourceId: string,
-	): Promise<string | null> {
-		const request = await prisma.approvalRequest.findFirst({
-			where: {
-				ownerId,
-				effectAction: "BUDGET_IMPACT_APPROVE",
-				idempotencyKey: `budget-impact:${MEASUREMENT_SOURCE_TYPE}:${sourceId}`,
-			},
-			orderBy: { createdAt: "desc" },
-			select: { id: true },
-		});
-		return request?.id ?? null;
 	}
 
 	async updateMeasurement(
@@ -486,25 +310,6 @@ export class ContractMeasurementService {
 		ctx: { userId: string; role: MeasurementActorRole },
 	) {
 		await this.assertWritable(ownerId, contractId);
-
-		const financialFieldsChanged =
-			input.items !== undefined ||
-			input.discountValue !== undefined ||
-			input.retentionValue !== undefined ||
-			input.taxValue !== undefined;
-		if (financialFieldsChanged) {
-			const ledgered = await countLedgerEventsBySource(prisma, {
-				sourceType: MEASUREMENT_SOURCE_TYPE,
-				sourceId: measurementId,
-			});
-			if (ledgered > 0) {
-				throw new ConstructionError(
-					"MEASUREMENT_LEDGERED",
-					"Medicao ja contabilizada no razao financeiro: estorne e recrie para alterar valores",
-					422,
-				);
-			}
-		}
 
 		const contract = await cmRepository.getContractPeriod(ownerId, contractId);
 		if (!contract) {
@@ -535,20 +340,7 @@ export class ContractMeasurementService {
 				contractId,
 				input.items.map((item) => item.serviceId),
 			);
-			this.assertItemsHaveMeasuredValue(input.items, servicesById);
-			const ledgerContext = await cmRepository.getContractLedgerContext(
-				ownerId,
-				contractId,
-			);
-			if (ledgerContext) {
-				await this.resolveMeasurementCoverage(
-					ownerId,
-					ledgerContext.workId,
-					contractId,
-					input.items,
-					prisma,
-				);
-			}
+			this.assertItemsHaveMeasuredQuantity(input.items, servicesById);
 			const exceedingItems = await this.findExceedingItems(
 				ownerId,
 				contractId,
@@ -581,13 +373,6 @@ export class ContractMeasurementService {
 			throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 		}
 
-		if (input.items) {
-			await measurementCoverageService.reconcileContractMeasurement(
-				ownerId,
-				measurementId,
-			);
-		}
-
 		if (input.items && previous) {
 			await auditService.log({
 				userId: ctx.userId,
@@ -613,6 +398,29 @@ export class ContractMeasurementService {
 			approvalRequestId: null,
 			warnings,
 		};
+	}
+
+	async setMeasurementStatus(
+		ownerId: string,
+		contractId: string,
+		measurementId: string,
+		status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO",
+		reason: string | null | undefined,
+		role: MeasurementActorRole,
+		actorId: string,
+	) {
+		return setContractMeasurementStatus({
+			ownerId,
+			contractId,
+			measurementId,
+			status,
+			reason,
+			role,
+			actorId,
+			assertWritable: () => this.assertWritable(ownerId, contractId),
+			getMeasurement: () =>
+				this.getMeasurement(ownerId, contractId, measurementId),
+		});
 	}
 
 	async deleteMeasurement(
@@ -918,6 +726,27 @@ export class ContractMeasurementService {
 		);
 		if (!result) {
 			throw new ConstructionError("NOT_FOUND", "Pagamento nao encontrado", 404);
+		}
+
+		if (existing.status !== result.status) {
+			await auditService.log({
+				userId: ctx.userId,
+				ownerId,
+				action: "STATUS_CHANGED",
+				entityType: "CONTRACT_PAYMENT",
+				entityId: paymentId,
+				entityDescription:
+					existing.description ?? `Pagamento - ${existing.date}`,
+				previousState: { status: existing.status },
+				newState: { status: result.status },
+				metadata: {
+					statusField: "status",
+					fromStatus: existing.status,
+					toStatus: result.status,
+					contractId,
+					reason: input.reason?.trim() || null,
+				},
+			});
 		}
 
 		if (exceeds && input.balanceOverride) {

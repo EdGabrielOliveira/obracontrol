@@ -137,7 +137,8 @@ export type BudgetVersionStatus =
 	| "PENDING_APPROVAL"
 	| "ACTIVE"
 	| "REJECTED"
-	| "SUPERSEDED";
+	| "SUPERSEDED"
+	| "ARCHIVED";
 
 export type BudgetVersionSummary = {
 	id: string;

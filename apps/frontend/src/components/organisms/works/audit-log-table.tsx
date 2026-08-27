@@ -3,8 +3,11 @@ import { RotateCcw, ScrollText } from "lucide-react";
 import { AUDIT_ACTION_OPTIONS } from "@/api/audit";
 import { EmptyState } from "@/atoms/empty-state";
 import { DataTable } from "@/components/atoms/data-table";
+import {
+	AUDIT_ACTION_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,7 +17,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { auditActionLabel, auditEntityLabel } from "@/lib/audit-labels";
+import { auditEntityLabel } from "@/lib/audit-labels";
 import type { AuditLogEntry } from "@/types/audit";
 import { formatDate } from "@/utils/format";
 
@@ -73,6 +76,11 @@ const STATUS_OPTIONS = [
 	{ value: "APPROVE", label: "Aprovado", actions: ["APPROVE"] },
 	{ value: "SUBMIT", label: "Pendente", actions: ["SUBMIT"] },
 	{ value: "REJECT", label: "Rejeitado", actions: ["REJECT"] },
+	{
+		value: "STATUS_CHANGED",
+		label: "Alteração de status",
+		actions: ["STATUS_CHANGED"],
+	},
 ] as const;
 
 const INTERNAL_OPTIONS = [
@@ -124,7 +132,7 @@ export function AuditLogTable({
 		columnHelper.accessor("action", {
 			header: "Ação",
 			cell: (info) => (
-				<Badge variant="outline">{auditActionLabel(info.getValue())}</Badge>
+				<StatusBadge status={info.getValue()} map={AUDIT_ACTION_STATUS_MAP} />
 			),
 		}),
 		columnHelper.accessor("entityType", {

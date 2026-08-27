@@ -39,13 +39,13 @@ const SCHEDULE_RISK_MAP: Record<
 	string,
 	{
 		label: string;
-		variant: "destructive" | "secondary" | "default" | "outline";
+		tone: "neutral" | "info" | "success" | "warning" | "danger";
 	}
 > = {
-	AHEAD: { label: "Adiantado", variant: "default" },
-	ON_TRACK: { label: "No prazo", variant: "secondary" },
-	BEHIND: { label: "Atrasado", variant: "destructive" },
-	UNAVAILABLE: { label: "Indisponível", variant: "outline" },
+	AHEAD: { label: "Adiantado", tone: "success" },
+	ON_TRACK: { label: "No prazo", tone: "success" },
+	BEHIND: { label: "Atrasado", tone: "danger" },
+	UNAVAILABLE: { label: "Indisponível", tone: "neutral" },
 };
 
 const CPI_COLOR_CLASS = "text-success font-medium";
@@ -320,9 +320,13 @@ function comparisonRows(works: CompareWorkItem[]) {
 			render: (w) => {
 				const config = SCHEDULE_RISK_MAP[w.scheduleRisk] ?? {
 					label: w.scheduleRisk,
-					variant: "outline" as const,
+					tone: "neutral" as const,
 				};
-				return <Badge variant={config.variant}>{config.label}</Badge>;
+				return (
+					<Badge variant="tag" tone={config.tone}>
+						{config.label}
+					</Badge>
+				);
 			},
 		},
 	];

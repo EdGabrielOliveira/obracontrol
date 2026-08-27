@@ -26,9 +26,11 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
+import { StatusBadge } from "@/components/atoms/status-badge";
 import { AprovacoesSection } from "@/components/organisms/works/approvals-section";
 import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
 import type { AuditFilters } from "@/components/organisms/works/audit-log-table";
+import { WorkOperationalStatusModal } from "@/components/organisms/works/work-operational-status-modal";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
@@ -97,6 +99,7 @@ function RouteComponent() {
 	const [auditFilters, setAuditFilters] = useState<AuditFilters>({});
 	const [auditPage, setAuditPage] = useState(1);
 	const [auditDetail, setAuditDetail] = useState<AuditLogEntry | null>(null);
+	const [governanceOpen, setGovernanceOpen] = useState(false);
 
 	const handleAuditFiltersChange = (filters: AuditFilters) => {
 		setAuditFilters(filters);
@@ -209,15 +212,39 @@ function RouteComponent() {
 				title={work.name}
 				description={`Código: ${work.code}`}
 				actions={
-					role !== "SUPERVISOR" ? (
-						<Link to="/app/obras/$workId/configuracoes" params={{ workId }}>
-							<Button size="sm">
-								<Settings className="mr-2 h-4 w-4" />
-								Configurações
+					<>
+						<StatusBadge status={work.operationalStatus ?? "NOT_STARTED"} />
+						{role !== "SUPERVISOR" && (
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={() => setGovernanceOpen(true)}
+							>
+								Alterar status
 							</Button>
-						</Link>
-					) : undefined
+						)}
+						{role !== "SUPERVISOR" && (
+							<Link to="/app/obras/$workId/configuracoes" params={{ workId }}>
+								<Button size="sm">
+									<Settings className="mr-2 h-4 w-4" />
+									Configurações
+								</Button>
+							</Link>
+						)}
+					</>
 				}
+			/>
+			<WorkOperationalStatusModal
+				open={governanceOpen}
+				onOpenChange={setGovernanceOpen}
+				workId={workId}
+				currentStatus={work.operationalStatus}
+				onChanged={() => {
+					void queryClient.invalidateQueries({
+						queryKey: workKeys.detail(workId),
+					});
+					void queryClient.invalidateQueries({ queryKey: workKeys.all });
+				}}
 			/>
 			<WorkDetailHeader work={work} />
 			<WorkHub

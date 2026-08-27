@@ -7,18 +7,25 @@ FROM node:22-bookworm-slim AS dependencies
 WORKDIR /app
 
 COPY apps/backend/package.json apps/backend/package-lock.json ./
-RUN apt-get update \
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+	apt-get update \
 	&& apt-get install -y --no-install-recommends openssl \
 	&& rm -rf /var/lib/apt/lists/* \
-	&& npm install --ignore-scripts --include=optional --package-lock=false
+	&& npm install --ignore-scripts --include=optional --package-lock=false --prefer-offline
 
 FROM dependencies AS prisma-build
 
 COPY apps/backend/tsconfig.json apps/backend/prisma.config.ts ./
 COPY apps/backend/prisma ./prisma
 
+# Bundle generated assets so the final image imports them in one layer.
 RUN npx prisma generate \
-	&& DATABASE_URL=file:./prisma/dev.db npx prisma db push --skip-generate
+	&& DATABASE_URL=file:./prisma/dev.db npx prisma db push --skip-generate \
+	&& mkdir -p /runtime/prisma \
+	&& cp -a generated /runtime/generated \
+	&& cp prisma/dev.db /runtime/schema.db \
+	&& cp -a prisma/migrations prisma/scripts /runtime/prisma/ \
+	&& cp prisma/seed.ts /runtime/prisma/seed.ts
 
 FROM prisma-build AS production-dependencies
 
@@ -54,16 +61,10 @@ RUN apt-get update \
 	&& chown -R bun:bun /tmp/obracontrol-imports /data
 
 COPY --chown=bun:bun --from=production-dependencies /app/node_modules /app/node_modules
-COPY --chown=bun:bun --from=prisma-build /app/generated /app/generated
-COPY --chown=bun:bun --from=prisma-build /app/prisma/dev.db /app/schema.db
-COPY --chown=bun:bun --from=prisma-build /app/prisma/migrations /app/prisma/migrations
-COPY --chown=bun:bun --from=prisma-build /app/prisma/scripts /app/prisma/scripts
-COPY --chown=bun:bun apps/backend/prisma/seed.ts /app/prisma/seed.ts
+COPY --chown=bun:bun --from=prisma-build /runtime/ /app/
 COPY --chown=bun:bun apps/backend/src /app/src
-COPY --chown=bun:bun apps/backend/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 COPY --chown=bun:bun apps/backend/scripts/prepare-sqlite-database.ts /app/scripts/prepare-sqlite-database.ts
-
-RUN chmod 755 /app/docker-entrypoint.sh
+COPY --chown=bun:bun --chmod=755 apps/backend/scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
 
 USER bun
 
@@ -72,5 +73,5 @@ EXPOSE 7001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 	CMD curl --fail --silent --show-error http://127.0.0.1:7001/health > /dev/null || exit 1
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
 CMD ["bun", "src/index.ts"]

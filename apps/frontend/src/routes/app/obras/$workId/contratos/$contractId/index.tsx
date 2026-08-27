@@ -1,6 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, useParams, useSearch } from "@tanstack/react-router";
 import {
+	createFileRoute,
+	Link,
+	useParams,
+	useSearch,
+} from "@tanstack/react-router";
+import {
+	ArrowLeft,
 	BarChart3,
 	Building2,
 	ClipboardList,
@@ -8,6 +14,7 @@ import {
 	FilePlus2,
 	FileText,
 	Pencil,
+	RefreshCw,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -28,8 +35,7 @@ import {
 	deleteContractMeasurement,
 	getContractAggregate,
 	listContractMeasurements,
-	updateContractMeasurement,
-	updateContractMeasurementItems,
+	updateContractMeasurementStatus,
 } from "@/api/contract-measurements";
 import {
 	createContractPayment,
@@ -45,6 +51,7 @@ import {
 	getContract,
 	linkContractSupplier,
 	listContractAmendments,
+	updateContract,
 	updateContractAmendment,
 } from "@/api/contracts";
 import {
@@ -59,8 +66,6 @@ import { revertQuotationContract } from "@/api/quotations";
 import { linkSupplierToWork } from "@/api/work-suppliers";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
-import { KpiCard } from "@/atoms/kpi-card";
-import { KpiGrid } from "@/atoms/kpi-grid";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
@@ -71,21 +76,29 @@ import {
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { AmendmentsTab } from "@/components/organisms/contracts/amendments-tab";
 import { ContractReportTab } from "@/components/organisms/contracts/contract-report-tab";
+import { ContractStatusModal } from "@/components/organisms/contracts/contract-status-modal";
 import { InstrumentReadinessCard } from "@/components/organisms/contracts/instrument-readiness-card";
 import { MeasurementsTab } from "@/components/organisms/contracts/measurements-tab";
 import { PaymentsTab } from "@/components/organisms/contracts/payments-tab";
 import { ServicesTab } from "@/components/organisms/contracts/services-tab";
+import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { SupplierSummaryCard } from "@/components/organisms/contracts/supplier-summary-card";
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/lib/auth-context";
 import { buildVersionChangeMap } from "@/lib/budget-version-diff";
 import { invalidateContractRelated } from "@/lib/invalidate-contract";
 import { queryClient } from "@/lib/query-client";
 import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
 import { contractPaymentCreateSchema } from "@/schemas/contracts";
-import type { PaymentStatus } from "@/types/contracts";
+import type {
+	ContractMeasurement,
+	ContractStatus,
+	PaymentStatus,
+} from "@/types/contracts";
+import type { MeasurementLifecycleStatus } from "@/types/measurements";
 import { getErrorMessage } from "@/utils/api-error";
 import { parseCurrencyToNumber } from "@/utils/currency";
 import { formatCurrency } from "@/utils/format";
@@ -181,6 +194,7 @@ async function downloadArtifactFile(
 
 function RouteComponent() {
 	const { requestCreationConfirmation } = useCreationConfirmation();
+	const { role } = useAuth();
 	const { workId, contractId } = useParams({
 		from: "/app/obras/$workId/contratos/$contractId/",
 	});
@@ -188,6 +202,9 @@ function RouteComponent() {
 	const navigate = Route.useNavigate();
 
 	const [revertDialogOpen, setRevertDialogOpen] = useState(false);
+	const [statusModalOpen, setStatusModalOpen] = useState(false);
+	const [measurementStatusTarget, setMeasurementStatusTarget] =
+		useState<ContractMeasurement | null>(null);
 	const [supplierModalOpen, setSupplierModalOpen] = useState(false);
 	const [hasCheckedBeforeDownload, setHasCheckedBeforeDownload] =
 		useState(false);
@@ -212,6 +229,67 @@ function RouteComponent() {
 	const { data: contract, isLoading } = useQuery({
 		queryKey: contractKeys.detail(workId, contractId),
 		queryFn: () => getContract(workId, contractId),
+	});
+	const statusMutation = useMutation({
+		mutationFn: ({
+			status,
+			reason,
+		}: {
+			status: ContractStatus;
+			reason?: string;
+		}) => updateContract(workId, contractId, { status, statusReason: reason }),
+		onSuccess: (result) => {
+			setStatusModalOpen(false);
+			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(
+					`Alteração de status enviada para aprovação do ${approver}.`,
+				);
+				queryClient.invalidateQueries({
+					queryKey: governanceKeys.pendingApprovals(workId),
+				});
+				return;
+			}
+			toast.success("Status do contrato atualizado.");
+			invalidateContractRelated(queryClient, workId, contractId);
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(
+					error,
+					"Não foi possível alterar o status do contrato.",
+				),
+			),
+	});
+	const measurementStatusMutation = useMutation({
+		mutationFn: ({
+			measurementId,
+			status,
+			reason,
+		}: {
+			measurementId: string;
+			status: MeasurementLifecycleStatus;
+			reason?: string;
+		}) =>
+			updateContractMeasurementStatus(
+				workId,
+				contractId,
+				measurementId,
+				status,
+				reason,
+			),
+		onSuccess: () => {
+			setMeasurementStatusTarget(null);
+			toast.success("Status da medição atualizado.");
+			invalidateContractRelated(queryClient, workId, contractId);
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível alterar o status da medição."),
+			),
 	});
 	const readinessQuery = useQuery({
 		queryKey: contractKeys.instrumentReadiness(workId, contractId),
@@ -433,8 +511,6 @@ function RouteComponent() {
 		staleTime: 2 * 60 * 1000,
 	});
 
-	const hasAmendments = (amendments?.length ?? 0) > 0;
-
 	const invalidatePayments = () =>
 		invalidateContractRelated(queryClient, workId, contractId);
 
@@ -534,29 +610,6 @@ function RouteComponent() {
 			toast.error(getErrorMessage(error, "Erro ao criar medição.")),
 	});
 
-	const editMeasMutation = useMutation({
-		mutationFn: ({
-			id,
-			values,
-		}: {
-			id: string;
-			values: {
-				title: string;
-				date: string;
-			};
-		}) =>
-			updateContractMeasurement(workId, contractId, id, {
-				title: values.title,
-				date: values.date,
-			}),
-		onSuccess: () => {
-			toast.success("Medição atualizada!");
-			invalidateContract();
-		},
-		onError: (error) =>
-			toast.error(getErrorMessage(error, "Erro ao atualizar medição.")),
-	});
-
 	const deleteMeasMutation = useMutation({
 		mutationFn: (id: string) =>
 			deleteContractMeasurement(workId, contractId, id),
@@ -566,23 +619,6 @@ function RouteComponent() {
 		},
 		onError: (error) =>
 			toast.error(getErrorMessage(error, "Erro ao excluir medição.")),
-	});
-
-	const updateMeasItemsMutation = useMutation({
-		mutationFn: ({
-			measurementId,
-			items,
-		}: {
-			measurementId: string;
-			items: Parameters<typeof updateContractMeasurementItems>[3];
-		}) =>
-			updateContractMeasurementItems(workId, contractId, measurementId, items),
-		onSuccess: () => {
-			toast.success("Item atualizado!");
-			invalidateContract();
-		},
-		onError: (error) =>
-			toast.error(getErrorMessage(error, "Erro ao atualizar item.")),
 	});
 
 	const invalidateAmendments = () => {
@@ -662,13 +698,34 @@ function RouteComponent() {
 
 	return (
 		<PageContainer>
+			<div className="mb-3">
+				<Link
+					to="/app/obras/$workId/contratos"
+					params={{ workId }}
+					className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+				>
+					<ArrowLeft className="h-4 w-4" />
+					Voltar para contratos
+				</Link>
+			</div>
 			<PageHeader
 				eyebrow="Contrato"
-				title={contract.code}
-				description={`Fornecedor: ${contract.supplierName}`}
+				title={contract.title?.trim() || contract.code}
+				description={`${contract.code} · ${contract.supplierName}`}
 				actions={
-					<>
+					<div className="flex flex-wrap justify-end gap-2">
 						<StatusBadge status={contract.status} map={CONTRACT_STATUS_MAP} />
+						{role !== "SUPERVISOR" && role !== null && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setStatusModalOpen(true)}
+								title="Alterar status do contrato"
+							>
+								<RefreshCw className="h-4 w-4" />
+								<span className="hidden sm:inline">Status</span>
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -684,10 +741,10 @@ function RouteComponent() {
 							}
 							onClick={() => void handleGenerateArtifact()}
 						>
-							<FileText className="mr-1 h-4 w-4" />
-							{artifactMutation.isPending
-								? "Gerando e baixando..."
-								: "Gerar e baixar PDF"}
+							<FileText className="h-4 w-4" />
+							<span className="hidden sm:inline">
+								{artifactMutation.isPending ? "Gerando..." : "PDF"}
+							</span>
 						</Button>
 						<Button
 							variant="outline"
@@ -699,8 +756,8 @@ function RouteComponent() {
 								})
 							}
 						>
-							<Pencil className="h-4 w-4 mr-1" />
-							Editar
+							<Pencil className="h-4 w-4" />
+							<span className="hidden sm:inline">Editar</span>
 						</Button>
 						{(contract.contractRequestId || contract.quotationId) &&
 						contract.status === "RASCUNHO" ? (
@@ -712,8 +769,31 @@ function RouteComponent() {
 								Voltar para cotação
 							</Button>
 						) : null}
-					</>
+					</div>
 				}
+			/>
+			<ContractStatusModal
+				open={statusModalOpen}
+				onOpenChange={setStatusModalOpen}
+				currentStatus={contract.status}
+				onSave={(status, reason) => statusMutation.mutate({ status, reason })}
+				loading={statusMutation.isPending}
+			/>
+			<MeasurementStatusModal
+				open={measurementStatusTarget !== null}
+				onOpenChange={(open) => {
+					if (!open) setMeasurementStatusTarget(null);
+				}}
+				currentStatus={measurementStatusTarget?.status ?? "RASCUNHO"}
+				onSave={(status, reason) => {
+					if (!measurementStatusTarget) return;
+					measurementStatusMutation.mutate({
+						measurementId: measurementStatusTarget.id,
+						status,
+						reason,
+					});
+				}}
+				loading={measurementStatusMutation.isPending}
 			/>
 			<InstrumentReadinessCard
 				readiness={readinessQuery.data}
@@ -728,31 +808,6 @@ function RouteComponent() {
 						: null)
 				}
 			/>
-			{hasAmendments && (
-				<div className="mb-4">
-					<KpiGrid>
-						<KpiCard
-							title="Valor total do contrato"
-							value={formatCurrency(contract.totalValue)}
-							tone="default"
-						/>
-						<KpiCard
-							title="Valor base"
-							value={formatCurrency(contract.contractValue)}
-							tone="default"
-						/>
-						<KpiCard
-							title="Aditivos"
-							value={formatCurrency(contract.amendmentTotal)}
-							tone="default"
-						/>
-					</KpiGrid>
-					<p className="mt-2 text-xs text-muted-foreground">
-						Valor total consolidado pelo backend (base + aditivos registrados).
-					</p>
-				</div>
-			)}
-
 			<Tabs
 				value={searchParams.tab ?? "servicos"}
 				onValueChange={(tab) =>
@@ -813,25 +868,22 @@ function RouteComponent() {
 						contractId={contractId}
 						measurements={measurements?.data ?? []}
 						services={services ?? []}
-						effectiveBudgetVersionId={effectiveBudgetVersion?.budgetVersionId}
 						isLoading={isMeasurementsLoading}
 						isError={!!measurementsError}
 						isCreatingMeasurement={createMeasMutation.isPending}
-						isEditingMeasurement={editMeasMutation.isPending}
-						isUpdatingItems={updateMeasItemsMutation.isPending}
 						onRetry={() => refetchMeasurements()}
-						onOpenServices={() => navigate({ search: { tab: "servicos" } })}
 						onCreateMeasurement={(input) =>
 							requestCreationConfirmation(() =>
 								createMeasMutation.mutate(input),
 							)
 						}
-						onEditMeasurement={(id, values) =>
-							editMeasMutation.mutate({ id, values })
-						}
 						onDeleteMeasurement={(id) => deleteMeasMutation.mutate(id)}
-						onUpdateMeasurementItems={(measurementId, items) =>
-							updateMeasItemsMutation.mutate({ measurementId, items })
+						canChangeMeasurementStatus={
+							role !== null && role !== "SUPERVISOR"
+						}
+						onOpenMeasurementStatus={setMeasurementStatusTarget}
+						isUpdatingMeasurementStatus={
+							measurementStatusMutation.isPending
 						}
 						warnings={measurementWarnings}
 						onDismissWarnings={() => setMeasurementWarnings([])}

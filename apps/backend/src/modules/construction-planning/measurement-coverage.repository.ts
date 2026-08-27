@@ -20,6 +20,7 @@ export type ContractMeasurementItemRow = {
 	measurement: {
 		id: string;
 		contractId: string;
+		status: string;
 		contract: { workId: string };
 	};
 };
@@ -48,7 +49,7 @@ export async function getWorkMeasurementItem(
 	return db.workMeasurementItem.findFirst({
 		where: {
 			id: itemId,
-			measurement: { ownerId, workId },
+			measurement: { ownerId, workId, status: "ACEITO" },
 		},
 		select: {
 			id: true,
@@ -69,7 +70,7 @@ export async function getContractMeasurementItem(
 	return db.contractMeasurementItem.findFirst({
 		where: {
 			id: itemId,
-			measurement: { ownerId, contract: { workId } },
+			measurement: { ownerId, status: "ACEITO", contract: { workId } },
 		},
 		select: {
 			id: true,
@@ -80,6 +81,7 @@ export async function getContractMeasurementItem(
 				select: {
 					id: true,
 					contractId: true,
+					status: true,
 					contract: { select: { workId: true } },
 				},
 			},
@@ -120,7 +122,10 @@ export async function getWorkMeasurementItemsByIds(
 ): Promise<WorkMeasurementItemRow[]> {
 	if (itemIds.length === 0) return [];
 	return db.workMeasurementItem.findMany({
-		where: { id: { in: itemIds }, measurement: { ownerId, workId } },
+		where: {
+			id: { in: itemIds },
+			measurement: { ownerId, workId, status: "ACEITO" },
+		},
 		select: {
 			id: true,
 			budgetItemId: true,
@@ -136,12 +141,17 @@ export async function getContractMeasurementItemsByIds(
 	workId: string,
 	itemIds: string[],
 	db: Db = prisma,
+	includeDrafts = false,
 ): Promise<ContractMeasurementItemRow[]> {
 	if (itemIds.length === 0) return [];
 	return db.contractMeasurementItem.findMany({
 		where: {
 			id: { in: itemIds },
-			measurement: { ownerId, contract: { workId } },
+			measurement: {
+				ownerId,
+				status: includeDrafts ? { in: ["RASCUNHO", "ACEITO"] } : "ACEITO",
+				contract: { workId },
+			},
 		},
 		select: {
 			id: true,
@@ -152,6 +162,7 @@ export async function getContractMeasurementItemsByIds(
 				select: {
 					id: true,
 					contractId: true,
+					status: true,
 					contract: { select: { workId: true } },
 				},
 			},
@@ -180,10 +191,16 @@ export async function findCoveragesByPairs(
 export async function sumCoveragesByWorkItems(
 	db: Db,
 	itemIds: string[],
+	acceptedOnly = false,
 ): Promise<Map<string, Decimal>> {
 	if (itemIds.length === 0) return new Map();
 	const rows = await db.constructionMeasurementCoverage.findMany({
-		where: { workMeasurementItemId: { in: itemIds } },
+		where: {
+			workMeasurementItemId: { in: itemIds },
+			...(acceptedOnly
+				? { contractMeasurementItem: { measurement: { status: "ACEITO" } } }
+				: {}),
+		},
 		select: { workMeasurementItemId: true, quantity: true },
 	});
 	const totals = new Map<string, Decimal>();
@@ -201,10 +218,16 @@ export async function sumCoveragesByWorkItems(
 export async function sumCoveragesByContractItems(
 	db: Db,
 	itemIds: string[],
+	acceptedOnly = false,
 ): Promise<Map<string, Decimal>> {
 	if (itemIds.length === 0) return new Map();
 	const rows = await db.constructionMeasurementCoverage.findMany({
-		where: { contractMeasurementItemId: { in: itemIds } },
+		where: {
+			contractMeasurementItemId: { in: itemIds },
+			...(acceptedOnly
+				? { contractMeasurementItem: { measurement: { status: "ACEITO" } } }
+				: {}),
+		},
 		select: { contractMeasurementItemId: true, quantity: true },
 	});
 	const totals = new Map<string, Decimal>();
@@ -222,9 +245,15 @@ export async function sumCoveragesByContractItems(
 export async function sumCoveragesByWorkItem(
 	db: Db,
 	itemId: string,
+	acceptedOnly = false,
 ): Promise<Decimal> {
 	const rows = await db.constructionMeasurementCoverage.findMany({
-		where: { workMeasurementItemId: itemId },
+		where: {
+			workMeasurementItemId: itemId,
+			...(acceptedOnly
+				? { contractMeasurementItem: { measurement: { status: "ACEITO" } } }
+				: {}),
+		},
 		select: { quantity: true },
 	});
 	return rows.reduce((sum, row) => sum.plus(row.quantity ?? 0), new Decimal(0));
@@ -233,9 +262,15 @@ export async function sumCoveragesByWorkItem(
 export async function sumCoveragesByContractItem(
 	db: Db,
 	itemId: string,
+	acceptedOnly = false,
 ): Promise<Decimal> {
 	const rows = await db.constructionMeasurementCoverage.findMany({
-		where: { contractMeasurementItemId: itemId },
+		where: {
+			contractMeasurementItemId: itemId,
+			...(acceptedOnly
+				? { contractMeasurementItem: { measurement: { status: "ACEITO" } } }
+				: {}),
+		},
 		select: { quantity: true },
 	});
 	return rows.reduce((sum, row) => sum.plus(row.quantity ?? 0), new Decimal(0));
@@ -301,13 +336,41 @@ export async function deleteCoverage(db: Db, coverageId: string) {
 	});
 }
 
+export async function findWorkMeasurementIdsWithContractCoverage(
+	db: Db,
+	contractMeasurementId: string,
+): Promise<string[]> {
+	const coverages = await db.constructionMeasurementCoverage.findMany({
+		where: {
+			contractMeasurementItem: { measurementId: contractMeasurementId },
+		},
+		select: { workMeasurementItem: { select: { measurementId: true } } },
+	});
+	return [
+		...new Set(
+			coverages.map((coverage) => coverage.workMeasurementItem.measurementId),
+		),
+	];
+}
+
+export async function deleteCoveragesForContractMeasurement(
+	db: Db,
+	contractMeasurementId: string,
+) {
+	return db.constructionMeasurementCoverage.deleteMany({
+		where: {
+			contractMeasurementItem: { measurementId: contractMeasurementId },
+		},
+	});
+}
+
 export async function getWorkMeasurementItems(
 	ownerId: string,
 	measurementId: string,
 	db: Db = prisma,
 ): Promise<WorkMeasurementItemForReclassify[]> {
 	return db.workMeasurementItem.findMany({
-		where: { measurementId, measurement: { ownerId } },
+		where: { measurementId, measurement: { ownerId, status: "ACEITO" } },
 		select: {
 			id: true,
 			budgetItemId: true,
@@ -341,7 +404,7 @@ export async function findContractMeasurementItemsWithCoverageSums(
 	}>
 > {
 	const items = await db.contractMeasurementItem.findMany({
-		where: { measurementId, measurement: { ownerId } },
+		where: { measurementId, measurement: { ownerId, status: "ACEITO" } },
 		select: {
 			id: true,
 			measuredQuantity: true,

@@ -206,7 +206,7 @@ function measurementCreateData(
 		measuredPercentageAccumulated: input.measuredPercentageAccumulated ?? 0,
 		measuredQuantityAccumulated: input.measuredQuantityAccumulated ?? null,
 		measuredValue: input.measuredValue ?? null,
-		status: input.status ?? null,
+		status: input.status ?? "RASCUNHO",
 		notes: input.notes ?? null,
 	};
 }
@@ -366,7 +366,7 @@ export async function importMeasurements(
 						workId,
 						work.activeImportId,
 						itemId,
-						input,
+						{ ...input, status: "ACEITO" },
 					),
 				}),
 			);

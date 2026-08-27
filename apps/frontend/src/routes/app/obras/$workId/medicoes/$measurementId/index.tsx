@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
 	createFileRoute,
 	useNavigate,
@@ -6,24 +6,34 @@ import {
 } from "@tanstack/react-router";
 import { FileDown, Info, Layers, Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
+import { toast } from "sonner";
 import { workKeys } from "@/api/query-keys";
 import {
 	downloadWorkMeasurementPdf,
 	getWorkMeasurement,
+	updateWorkMeasurementStatus,
 } from "@/api/work-measurements";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { KpiCard } from "@/atoms/kpi-card";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
+import {
+	MEASUREMENT_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { MeasurementDetailCharts } from "@/components/organisms/measurements/measurement-detail-charts";
 import { MeasurementDetailHeader } from "@/components/organisms/measurements/measurement-detail-header";
 import { MeasurementItemTree } from "@/components/organisms/measurements/measurement-item-tree";
+import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
+import type { MeasurementLifecycleStatus } from "@/types/measurements";
+import { getErrorMessage } from "@/utils/api-error";
 import { formatCurrency, formatDate } from "@/utils/format";
 
 export const Route = createFileRoute(
@@ -51,7 +61,9 @@ function RouteComponent() {
 	});
 
 	const navigate = useNavigate();
+	const { role } = useAuth();
 	const [downloading, setDownloading] = useState(false);
+	const [statusOpen, setStatusOpen] = useState(false);
 
 	const handleDownloadPdf = useCallback(async () => {
 		setDownloading(true);
@@ -66,6 +78,28 @@ function RouteComponent() {
 	const { data, isLoading, error } = useQuery({
 		queryKey: workKeys.measurementDetail(workId, measurementId),
 		queryFn: () => getWorkMeasurement(workId, measurementId),
+	});
+	const statusMutation = useMutation({
+		mutationFn: ({
+			status,
+			reason,
+		}: {
+			status: MeasurementLifecycleStatus;
+			reason?: string;
+		}) => updateWorkMeasurementStatus(workId, measurementId, status, reason),
+		onSuccess: () => {
+			toast.success("Status da medição atualizado.");
+			setStatusOpen(false);
+			queryClient.invalidateQueries({
+				queryKey: workKeys.measurementDetail(workId, measurementId),
+			});
+			queryClient.invalidateQueries({
+				queryKey: workKeys.measurementsBase(workId),
+			});
+			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
+		},
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Não foi possível alterar o status.")),
 	});
 
 	if (isLoading) return <LoadingSpinner title="Carregando medição..." />;
@@ -86,6 +120,22 @@ function RouteComponent() {
 				retentionValue={measurement.retentionValue}
 				actions={
 					<>
+						<StatusBadge
+							status={measurement.status ?? "RASCUNHO"}
+							map={MEASUREMENT_STATUS_MAP}
+						/>
+						{measurement.approvalStatus === "PENDING_APPROVAL" ? (
+							<StatusBadge status="PENDING_APPROVAL" />
+						) : null}
+						{role !== "SUPERVISOR" && role !== null && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setStatusOpen(true)}
+							>
+								Alterar status da medição
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -110,6 +160,13 @@ function RouteComponent() {
 						</Button>
 					</>
 				}
+			/>
+			<MeasurementStatusModal
+				open={statusOpen}
+				onOpenChange={setStatusOpen}
+				currentStatus={measurement.status ?? "RASCUNHO"}
+				onSave={(status, reason) => statusMutation.mutate({ status, reason })}
+				loading={statusMutation.isPending}
 			/>
 
 			<div className="mt-6 space-y-6">

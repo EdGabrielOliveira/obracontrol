@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
-# Build context: the monorepo root.
-FROM node:22-bookworm-slim AS development
+# Build context: the monorepo root. This stage is shared by development and
+# production builds, so both reuse the dependency layer.
+FROM node:22-bookworm-slim AS dependencies
 
 WORKDIR /app
 
 COPY apps/frontend/package.json apps/frontend/package-lock.json ./
-RUN npm install --ignore-scripts --include=optional --package-lock=false
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+	npm install --ignore-scripts --include=optional --package-lock=false --prefer-offline
+
+FROM dependencies AS development
 
 COPY apps/frontend ./
 
@@ -14,12 +18,7 @@ EXPOSE 7000
 
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-FROM node:22-bookworm-slim AS build
-
-WORKDIR /app
-
-COPY apps/frontend/package.json apps/frontend/package-lock.json ./
-RUN npm install --ignore-scripts --include=optional --package-lock=false
+FROM dependencies AS build
 
 COPY apps/frontend ./
 

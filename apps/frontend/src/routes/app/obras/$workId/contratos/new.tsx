@@ -3,10 +3,12 @@ import {
 	createFileRoute,
 	useNavigate,
 	useParams,
+	useSearch,
 } from "@tanstack/react-router";
-import { MapPinned } from "lucide-react";
+import { FileText, MapPinned } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { getCurrentCostBudgetItems } from "@/api/budget";
 import {
 	cancelContractRequest,
@@ -15,10 +17,19 @@ import {
 	downloadContractRequestTemplate,
 	uploadContractRequestQuotationMap,
 } from "@/api/contract-requests";
-import { contractRequestKeys, workKeys } from "@/api/query-keys";
+import { createContract } from "@/api/contracts";
+import {
+	contractRequestKeys,
+	workKeys,
+	workSupplierKeys,
+} from "@/api/query-keys";
+import { listWorkSuppliers } from "@/api/work-suppliers";
+import { ErrorFeedback } from "@/atoms/error-feedback";
+import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
+import { ContractForm } from "@/components/organisms/contracts/contract-form";
 import { ContractRequestForm } from "@/components/organisms/contracts/contract-request-form";
 import { QuotationMapPreview } from "@/components/organisms/contracts/quotation-map-preview";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
@@ -36,13 +47,24 @@ export function buildContractRequestPath(workId: string) {
 	return `/app/obras/${workId}/contratos/new`;
 }
 
+const contractCreationSearchSchema = z.object({
+	mode: z.enum(["new", "in-progress"]).optional(),
+});
+
 export const Route = createFileRoute("/app/obras/$workId/contratos/new")({
+	validateSearch: contractCreationSearchSchema,
 	component: RouteComponent,
 	loader: ({ params }) =>
-		queryClient.prefetchQuery({
-			queryKey: workKeys.costBudgetItems(params.workId),
-			queryFn: () => getCurrentCostBudgetItems(params.workId),
-		}),
+		Promise.all([
+			queryClient.prefetchQuery({
+				queryKey: workKeys.costBudgetItems(params.workId),
+				queryFn: () => getCurrentCostBudgetItems(params.workId),
+			}),
+			queryClient.prefetchQuery({
+				queryKey: workSupplierKeys.list(params.workId),
+				queryFn: () => listWorkSuppliers(params.workId),
+			}),
+		]),
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -56,9 +78,17 @@ function RouteComponent() {
 	const { workId } = useParams({
 		from: "/app/obras/$workId/contratos/new",
 	});
+	const search = useSearch({ from: Route.id });
 	const navigate = useNavigate({ from: Route.id });
 	const routeQueryClient = useQueryClient();
 	const { requestCreationConfirmation } = useCreationConfirmation();
+	const [flow, setFlow] = useState<"choice" | "quotation" | "manual">(() =>
+		search.mode === "in-progress"
+			? "manual"
+			: search.mode === "new"
+				? "quotation"
+				: "choice",
+	);
 	const [request, setRequest] = useState<ContractRequestDetail | null>(null);
 	const [preview, setPreview] = useState<ImportPreviewPage | null>(null);
 	const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
@@ -80,6 +110,12 @@ function RouteComponent() {
 	} = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
 		queryFn: () => getCurrentCostBudgetItems(workId),
+		enabled: flow !== "choice",
+	});
+	const suppliersQuery = useQuery({
+		queryKey: workSupplierKeys.list(workId),
+		queryFn: () => listWorkSuppliers(workId),
+		enabled: flow === "manual",
 	});
 
 	const createMutation = useMutation({
@@ -123,6 +159,43 @@ function RouteComponent() {
 			toast.error(getErrorMessage(error, "Erro ao criar a solicitação.")),
 	});
 
+	const directCreateMutation = useMutation({
+		mutationFn: (values: Parameters<typeof createContract>[1]) =>
+			createContract(workId, values),
+		onSuccess: (result) => {
+			if (result.status === "PENDING") {
+				const approver =
+					result.approvalRequest.requiredApproverRole === "GESTOR"
+						? "Gestor"
+						: "Gerente";
+				toast.success(
+					`Solicitação de criação enviada para aprovação do ${approver}.`,
+				);
+				routeQueryClient.invalidateQueries({
+					queryKey: ["pending-approvals", workId],
+				});
+				navigate({
+					to: "/app/obras/$workId/contratos",
+					params: { workId },
+				});
+				return;
+			}
+			toast.success("Contrato criado com sucesso.");
+			routeQueryClient.invalidateQueries({
+				queryKey: workKeys.contracts(workId),
+			});
+			routeQueryClient.invalidateQueries({
+				queryKey: workKeys.contractsSummary(workId),
+			});
+			navigate({
+				to: "/app/obras/$workId/contratos/$contractId",
+				params: { workId, contractId: result.data.id },
+			});
+		},
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Erro ao criar contrato.")),
+	});
+
 	const confirmMutation = useMutation({
 		mutationFn: () => {
 			if (!request || !preview) throw new Error("Prévia do mapa indisponível.");
@@ -160,7 +233,69 @@ function RouteComponent() {
 		}
 	};
 
-	if (isLoadingCostItems) {
+	if (flow === "choice") {
+		return (
+			<PageContainer>
+				<PageHeader
+					eyebrow="Contratos"
+					title="Novo contrato"
+					description="Escolha como deseja cadastrar este contrato."
+				/>
+				<div className="grid gap-4 md:grid-cols-2">
+					<button
+						type="button"
+						className="text-left transition-transform hover:-translate-y-0.5"
+						onClick={() => setFlow("quotation")}
+					>
+						<Card className="h-full hover:border-primary/50">
+							<CardHeaderWithIcon
+								icon={MapPinned}
+								title="Contrato novo"
+								description="Envie o mapa de cotação, compare propostas e escolha o fornecedor vencedor."
+							/>
+							<CardContent>
+								<span className="text-sm font-medium text-primary">
+									Continuar com cotação →
+								</span>
+							</CardContent>
+						</Card>
+					</button>
+					<button
+						type="button"
+						className="text-left transition-transform hover:-translate-y-0.5"
+						onClick={() => setFlow("manual")}
+					>
+						<Card className="h-full hover:border-primary/50">
+							<CardHeaderWithIcon
+								icon={FileText}
+								title="Contrato em andamento"
+								description="Cadastre um contrato já existente sem passar pelo mapa de cotação ou comparativo."
+							/>
+							<CardContent>
+								<span className="text-sm font-medium text-primary">
+									Continuar com cadastro manual →
+								</span>
+							</CardContent>
+						</Card>
+					</button>
+				</div>
+				<Button
+					variant="outline"
+					className="mt-4"
+					onClick={() =>
+						navigate({
+							to: "/app/obras/$workId/contratos",
+							params: { workId },
+						})
+					}
+				>
+					Cancelar
+				</Button>
+			</PageContainer>
+		);
+	}
+
+	if (flow === "quotation" && isLoadingCostItems) {
 		return (
 			<PageContainer>
 				<PageHeader eyebrow="Contratos" title="Novo contrato" />
@@ -171,7 +306,7 @@ function RouteComponent() {
 		);
 	}
 
-	if (costItemsError || !costItems) {
+	if (flow === "quotation" && (costItemsError || !costItems)) {
 		return (
 			<PageContainer>
 				<PageHeader eyebrow="Contratos" title="Novo contrato" />
@@ -185,6 +320,42 @@ function RouteComponent() {
 				>
 					Tentar novamente
 				</Button>
+			</PageContainer>
+		);
+	}
+
+	if (flow === "manual" && suppliersQuery.isLoading) {
+		return <LoadingSpinner title="Carregando fornecedores..." />;
+	}
+	if (flow === "manual" && suppliersQuery.error) {
+		return <ErrorFeedback onRetry={() => void suppliersQuery.refetch()} />;
+	}
+
+	if (flow === "manual") {
+		return (
+			<PageContainer>
+				<PageHeader
+					eyebrow="Contratos"
+					title="Contrato em andamento"
+					description="Informe fornecedor, valor, itens e os demais dados do contrato já existente."
+				/>
+				<ContractForm
+					mode="create"
+					defaultValues={{ status: "EM_ANDAMENTO" }}
+					workId={workId}
+					effectiveBudgetItems={costItems}
+					showServices
+					submitLabel="Criar contrato"
+					contractValueLabel="Valor do fornecedor"
+					suppliers={suppliersQuery.data?.map((link) => link.supplier)}
+					loading={directCreateMutation.isPending}
+					onCancel={() => setFlow("choice")}
+					onSubmit={(values) =>
+						requestCreationConfirmation(() =>
+							directCreateMutation.mutate(values),
+						)
+					}
+				/>
 			</PageContainer>
 		);
 	}

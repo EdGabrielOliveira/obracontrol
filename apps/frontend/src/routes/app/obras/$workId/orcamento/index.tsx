@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import {
+	archiveBudgetVersion,
 	confirmBudgetVersionImport,
 	getBudgetItems,
 	getBudgetVersion,
@@ -326,6 +327,24 @@ function RouteComponent() {
 			toast.error(getErrorMessage(error, "Erro ao submeter versão.")),
 	});
 
+	const archiveVersionMutation = useMutation({
+		mutationFn: ({
+			versionId,
+			reason,
+		}: {
+			versionId: string;
+			reason: string;
+		}) => archiveBudgetVersion(workId, versionId, reason),
+		onSuccess: () => {
+			toast.success("Versão arquivada com sucesso.");
+			queryClient.invalidateQueries({
+				queryKey: budgetVersionKeys.history(workId),
+			});
+		},
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Erro ao arquivar versão.")),
+	});
+
 	const previewAditivoMutation = useMutation({
 		mutationFn: (input: { title: string; file: File }) =>
 			previewBudgetVersionImport(workId, input),
@@ -549,11 +568,16 @@ function RouteComponent() {
 							loadingVersionIds={loadingVersionIds}
 							openVersionId={expandedVersionId}
 							canWrite={canWrite && !budgetData?.governed}
+							canApprove={role !== null && role !== "SUPERVISOR"}
 							submitPending={submitVersionMutation.isPending}
+							archivePending={archiveVersionMutation.isPending}
 							onCreateAditivo={() => setAditivoOpen(true)}
 							onOpenChange={setExpandedVersionId}
 							onSubmitVersion={(versionId, reason) =>
 								submitVersionMutation.mutate({ versionId, reason })
+							}
+							onArchiveVersion={(versionId, reason) =>
+								archiveVersionMutation.mutate({ versionId, reason })
 							}
 						/>
 					</TabsContent>

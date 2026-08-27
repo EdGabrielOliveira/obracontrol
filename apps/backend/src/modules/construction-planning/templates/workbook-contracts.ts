@@ -392,9 +392,9 @@ export const SHEET_DEFINITIONS = {
 			),
 			percent(
 				"Percentual medido acumulado",
-				false,
+				true,
 				"Percentual acumulado medido até a data (0 a 100%)",
-				"30%",
+				0.3,
 			),
 			number(
 				"Quantidade medida acumulada",
@@ -410,6 +410,24 @@ export const SHEET_DEFINITIONS = {
 			),
 		],
 		{ formats: ["text", "text", "dd/mm/yyyy", "0%", "#,##0.00", "text"] },
+	),
+	ORCAMENTO_REFERENCIA: defineSheet(
+		"Orçamento",
+		[
+			text(
+				"Índice",
+				false,
+				"Índice do item vigente que deve ser usado na aba Medições de Obra",
+				"1.1",
+			),
+			text(
+				"Nome do item",
+				false,
+				"Nome/descrição do item correspondente ao índice",
+				"Fundação direta",
+			),
+		],
+		{ formats: ["text", "text"], isDataSheet: false },
 	),
 	CONTRATO: defineSheet(
 		"Contrato",
@@ -879,7 +897,11 @@ export const WORKBOOK_DEFINITIONS: Record<WorkbookKind, WorkbookDefinition> = {
 	"medicao-obra": {
 		kind: "medicao-obra",
 		filename: "modelo-medicao-obra.xlsx",
-		sheets: [SHEET_DEFINITIONS.GUIA, SHEET_DEFINITIONS.MEDICOES_OBRA],
+		sheets: [
+			SHEET_DEFINITIONS.GUIA,
+			SHEET_DEFINITIONS.MEDICOES_OBRA,
+			SHEET_DEFINITIONS.ORCAMENTO_REFERENCIA,
+		],
 	},
 	"medicao-contrato": {
 		kind: "medicao-contrato",

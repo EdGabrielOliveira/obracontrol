@@ -2,12 +2,23 @@ import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { resolveResourceScope } from "../../lib/resource-scope";
+import {
+	MEASUREMENT_TRANSITIONS,
+	validateStatusTransition,
+} from "../../lib/status-machine";
 import { budgetControlService } from "../construction-planning/budget-control/budget-control.service";
 import { projectApprovedBudgetVersion } from "../construction-planning/budget-version-projection.service";
+import { CONTRACT_TRANSITIONS } from "../construction-planning/contract-status";
 import {
 	assertSelectedRowIds,
 	selectWorkbookRows,
 } from "../construction-planning/imports/selected-workbook";
+import {
+	applyContractMeasurementAcceptance,
+	applyWorkMeasurementAcceptance,
+} from "../construction-planning/measurement-acceptance-effects";
+import { measurementCoverageService } from "../construction-planning/measurement-coverage.service";
 import { deleteWorkCascade } from "../construction-planning/works/works.repository";
 import type {
 	ApprovalDecision,
@@ -114,12 +125,168 @@ const SCHEDULE_VERSION_ACTIVATE: ApprovalEffectHandler = {
 
 const WORK_MEASUREMENT_APPROVE: ApprovalEffectHandler = {
 	action: "WORK_MEASUREMENT_APPROVE",
-	apply: async () => {},
+	apply: async ({ tx, request, decision }) => {
+		const payload = request.payloadJson as {
+			measurementId: string;
+			workId: string;
+		};
+		const measurement = await tx.workMeasurement.findFirst({
+			where: {
+				id: payload.measurementId,
+				ownerId: request.ownerId,
+				workId: payload.workId,
+			},
+			include: { items: true },
+		});
+		if (!measurement) throw new Error("medicao de obra nao encontrada");
+		validateStatusTransition(
+			"WORK_MEASUREMENT",
+			MEASUREMENT_TRANSITIONS,
+			measurement.status,
+			"ACEITO",
+		);
+		await applyWorkMeasurementAcceptance({
+			tx,
+			ownerId: request.ownerId,
+			workId: payload.workId,
+			measurementId: payload.measurementId,
+			actorId: request.actorId,
+			measurement,
+		});
+		const updated = await tx.workMeasurement.updateMany({
+			where: {
+				id: payload.measurementId,
+				ownerId: request.ownerId,
+				status: measurement.status,
+			},
+			data: {
+				status: "ACEITO",
+				statusReason: "Aprovado pela governança",
+				statusChangedAt: new Date(),
+			},
+		});
+		if (updated.count === 0) {
+			throw new ConstructionError(
+				"APPROVAL_CONFLICT",
+				"A medicao mudou enquanto a aprovacao era executada",
+				409,
+			);
+		}
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "STATUS_CHANGED",
+			entityType: "WORK_MEASUREMENT",
+			entityId: payload.measurementId,
+			entityDescription: `Medição ${measurement.number}${measurement.title ? ` - ${measurement.title}` : ""}`,
+			previousState: {
+				status: measurement.status ?? "RASCUNHO",
+				statusReason: measurement.statusReason ?? null,
+			},
+			newState: {
+				status: "ACEITO",
+				statusReason: "Aprovado pela governança",
+			},
+			metadata: {
+				statusField: "status",
+				fromStatus: measurement.status ?? "RASCUNHO",
+				toStatus: "ACEITO",
+				reason: "Aprovado pela governança",
+				workId: payload.workId,
+				source: "GOVERNANCE_APPROVAL",
+			},
+		});
+	},
 };
 
 const CONTRACT_MEASUREMENT_APPROVE: ApprovalEffectHandler = {
 	action: "CONTRACT_MEASUREMENT_APPROVE",
-	apply: async () => {},
+	apply: async ({ tx, request, decision }) => {
+		const payload = request.payloadJson as {
+			measurementId: string;
+			workId: string;
+			contractId: string;
+		};
+		const measurement = await tx.contractMeasurement.findFirst({
+			where: {
+				id: payload.measurementId,
+				ownerId: request.ownerId,
+				contractId: payload.contractId,
+			},
+			include: { items: true },
+		});
+		if (!measurement) throw new Error("medicao de contrato nao encontrada");
+		validateStatusTransition(
+			"CONTRACT_MEASUREMENT",
+			MEASUREMENT_TRANSITIONS,
+			measurement.status,
+			"ACEITO",
+		);
+		await applyContractMeasurementAcceptance({
+			tx,
+			ownerId: request.ownerId,
+			workId: payload.workId,
+			contractId: payload.contractId,
+			measurementId: payload.measurementId,
+			actorId: request.actorId,
+			measurement,
+			scope: await resolveResourceScope(request.ownerId, {
+				workId: payload.workId,
+			}),
+			approvalDecisionId: request.id,
+		});
+		const updated = await tx.contractMeasurement.updateMany({
+			where: {
+				id: payload.measurementId,
+				ownerId: request.ownerId,
+				status: measurement.status,
+			},
+			data: {
+				status: "ACEITO",
+				statusReason: "Aprovado pela governança",
+				statusChangedAt: new Date(),
+			},
+		});
+		if (updated.count === 0) {
+			throw new ConstructionError(
+				"APPROVAL_CONFLICT",
+				"A medicao mudou enquanto a aprovacao era executada",
+				409,
+			);
+		}
+		await writeAudit(tx, {
+			userId: decision.approverId ?? request.actorId,
+			ownerId: request.ownerId,
+			action: "STATUS_CHANGED",
+			entityType: "CONTRACT_MEASUREMENT",
+			entityId: payload.measurementId,
+			entityDescription: `Medição de contrato ${measurement.number}${measurement.title ? ` - ${measurement.title}` : ""}`,
+			previousState: {
+				status: measurement.status ?? "RASCUNHO",
+				statusReason: measurement.statusReason ?? null,
+			},
+			newState: {
+				status: "ACEITO",
+				statusReason: "Aprovado pela governança",
+			},
+			metadata: {
+				statusField: "status",
+				fromStatus: measurement.status ?? "RASCUNHO",
+				toStatus: "ACEITO",
+				reason: "Aprovado pela governança",
+				contractId: payload.contractId,
+				workId: payload.workId,
+				source: "GOVERNANCE_APPROVAL",
+			},
+		});
+		await measurementCoverageService.activateContractMeasurement(
+			request.ownerId,
+			payload.workId,
+			payload.measurementId,
+			{ userId: request.actorId },
+			tx,
+		);
+	},
 };
 
 const PAYMENT_CONFIRM: ApprovalEffectHandler = {
@@ -333,7 +500,7 @@ const IMPORT_CONFIRM: ApprovalEffectHandler = {
 			"../construction-planning/imports/import-service"
 		);
 		const applied = await constructionImportService.applyStagedWorkbook(
-			payload.actorId,
+			request.ownerId,
 			payload.workId,
 			parsed,
 			{
@@ -365,6 +532,7 @@ const CONTRACT_CREATE: ApprovalEffectHandler = {
 				supplierId?: string | null;
 				contractValue: number;
 				serviceType?: string | null;
+				objectDescription?: string | null;
 				title?: string | null;
 				startDate?: string | null;
 				endDate?: string | null;
@@ -398,6 +566,7 @@ const CONTRACT_CREATE: ApprovalEffectHandler = {
 			contract: {
 				code: payload.contract.code,
 				serviceType: payload.contract.serviceType ?? null,
+				objectDescription: payload.contract.objectDescription ?? null,
 				title: payload.contract.title ?? null,
 				contractValue: payload.contract.contractValue,
 				startDate: payload.contract.startDate ?? null,
@@ -455,7 +624,9 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 					| "A_INICIAR"
 					| "EM_ANDAMENTO"
 					| "PARALISADO"
-					| "FINALIZADO";
+					| "FINALIZADO"
+					| "ARQUIVADO";
+				statusReason?: string;
 			};
 		};
 		const existing = await tx.contract.findFirst({
@@ -466,6 +637,25 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 			},
 		});
 		if (!existing) throw new Error("contrato nao encontrado");
+		if (payload.input.status !== undefined) {
+			validateStatusTransition(
+				"CONTRACT",
+				CONTRACT_TRANSITIONS,
+				existing.status,
+				payload.input.status,
+			);
+			if (
+				(payload.input.status === "PARALISADO" ||
+					payload.input.status === "ARQUIVADO") &&
+				!payload.input.statusReason?.trim()
+			) {
+				throw new ConstructionError(
+					"STATUS_REASON_REQUIRED",
+					"Informe o motivo para suspender ou arquivar o contrato",
+					422,
+				);
+			}
+		}
 
 		const data: Prisma.ContractUncheckedUpdateInput = {};
 		if (payload.input.title !== undefined) data.title = payload.input.title;
@@ -477,35 +667,57 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 			data.startDate = new Date(payload.input.startDate);
 		if (payload.input.endDate !== undefined)
 			data.endDate = new Date(payload.input.endDate);
-		if (payload.input.status !== undefined) data.status = payload.input.status;
+		if (payload.input.status !== undefined) {
+			data.status = payload.input.status;
+			data.statusChangedAt = new Date();
+			data.statusChangedBy = decision.approverId ?? request.actorId;
+		}
+		if (payload.input.statusReason !== undefined) {
+			data.statusReason = payload.input.statusReason.trim() || null;
+			data.statusChangedAt = new Date();
+			data.statusChangedBy = decision.approverId ?? request.actorId;
+		}
 
 		const updated = await tx.contract.update({
-			where: { id: existing.id },
+			where: { id: existing.id, status: existing.status },
 			data,
 		});
+		const statusChanged =
+			payload.input.status !== undefined &&
+			existing.status !== payload.input.status;
 		await writeAudit(tx, {
 			userId: decision.approverId ?? request.actorId,
 			ownerId: request.ownerId,
-			action: "UPDATE",
+			action: statusChanged ? "STATUS_CHANGED" : "UPDATE",
 			entityType: "CONTRACT",
 			entityId: existing.id,
 			entityDescription: `Contrato ${existing.code}`,
-			previousState: {
-				title: existing.title,
-				serviceType: existing.serviceType,
-				objectDescription: existing.objectDescription,
-				startDate: existing.startDate,
-				endDate: existing.endDate,
-				status: existing.status,
-			},
-			newState: {
-				title: updated.title,
-				serviceType: updated.serviceType,
-				objectDescription: updated.objectDescription,
-				startDate: updated.startDate,
-				endDate: updated.endDate,
-				status: updated.status,
-			},
+			previousState: statusChanged
+				? {
+						status: existing.status,
+						statusReason: existing.statusReason ?? null,
+					}
+				: {
+						title: existing.title,
+						serviceType: existing.serviceType,
+						objectDescription: existing.objectDescription,
+						startDate: existing.startDate,
+						endDate: existing.endDate,
+						status: existing.status,
+					},
+			newState: statusChanged
+				? {
+						status: updated.status,
+						statusReason: updated.statusReason ?? null,
+					}
+				: {
+						title: updated.title,
+						serviceType: updated.serviceType,
+						objectDescription: updated.objectDescription,
+						startDate: updated.startDate,
+						endDate: updated.endDate,
+						status: updated.status,
+					},
 			metadata: {
 				actorRole: request.actorRole,
 				organizationId: request.organizationId,
@@ -514,6 +726,14 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 					decision.decisionMode === "AUTOMATICO_POR_POLITICA"
 						? "DIRECT"
 						: "APPROVAL_CHAIN",
+				...(statusChanged
+					? {
+							statusField: "status",
+							fromStatus: existing.status,
+							toStatus: updated.status,
+							reason: updated.statusReason ?? null,
+						}
+					: {}),
 			},
 		});
 		return updated;

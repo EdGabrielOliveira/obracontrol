@@ -1,3 +1,7 @@
+import {
+	IMPORT_PREVIEW_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { ImportPreviewPage, ImportPreviewRow } from "@/types/import";
 import { formatCurrency, formatDate } from "@/utils/format";
@@ -193,7 +197,12 @@ export function QuotationMapPreview({
 										) : null}
 									</td>
 								))}
-								<td className="p-3">{row.status}</td>
+								<td className="p-3">
+									<StatusBadge
+										status={row.status}
+										map={IMPORT_PREVIEW_STATUS_MAP}
+									/>
+								</td>
 							</tr>
 						))}
 					</tbody>

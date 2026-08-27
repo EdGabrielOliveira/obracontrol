@@ -49,6 +49,7 @@ function toCreateInput(values: WorkFormValues): WorkCreateInput {
 		plannedStart: values.plannedStart || undefined,
 		plannedEnd: values.plannedEnd || undefined,
 		responsibleName: values.responsibleName || undefined,
+		operationalStatus: values.operationalStatus,
 	};
 }
 

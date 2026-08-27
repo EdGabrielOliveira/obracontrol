@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { resolveAuth } from "../../lib/resolve-auth";
 import { resolveResourceScope } from "../../lib/resource-scope";
@@ -18,8 +19,15 @@ const governanceStatus = t.Union([
 	t.Literal("RASCUNHO"),
 	t.Literal("EM_REVISAO"),
 	t.Literal("ACEITO"),
+	t.Literal("ACCEPT"),
 	t.Literal("TRAVADO"),
 ]);
+
+function normalizeGovernanceStatus(
+	status: "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "ACCEPT" | "TRAVADO",
+) {
+	return status === "ACCEPT" ? "ACEITO" : status;
+}
 
 type ResolvedGovernanceScope = {
 	workId: string;
@@ -119,6 +127,8 @@ function toApprovalRequestView(row: ApprovalRequestViewRow) {
 
 async function resolveGovernanceScope(
 	actorId: string,
+	actorRole: string | null | undefined,
+	actorWorkspaceId: string | null | undefined,
 	entityType: string,
 	entityId: string,
 ): Promise<ResolvedGovernanceScope> {
@@ -131,9 +141,28 @@ async function resolveGovernanceScope(
 		);
 	}
 	const scope = await resolveResourceScope(actorId, { workId: target.workId });
+	// Obras legadas podem ter uma cadeia organizacional incompleta (por
+	// exemplo, centro de custo removido). O Admin ainda deve conseguir
+	// governar o recurso real dentro do próprio workspace. A exceção é
+	// limitada ao workspace da obra e não amplia acesso entre workspaces.
+	if (
+		!scope.canRead &&
+		normalizeRole(actorRole) === "ADMIN" &&
+		target.resourceOwnerId &&
+		target.workspaceId === (actorWorkspaceId ?? null)
+	) {
+		return {
+			workId: target.workId,
+			ownerId: target.resourceOwnerId,
+			role: "ADMIN",
+			canRead: true,
+			canWrite: true,
+			canApprove: true,
+		};
+	}
 	return {
 		workId: target.workId,
-		ownerId: scope.resourceOwnerId,
+		ownerId: target.resourceOwnerId ?? scope.resourceOwnerId,
 		role: scope.role,
 		canRead: scope.canRead,
 		canWrite: scope.canWrite,
@@ -151,6 +180,8 @@ export const governanceRoutes = new Elysia({
 		async ({ params, user }) => {
 			const resolved = await resolveGovernanceScope(
 				user.id,
+				user.role,
+				user.workspaceId,
 				params.entityType,
 				params.entityId,
 			);
@@ -181,10 +212,15 @@ export const governanceRoutes = new Elysia({
 		async ({ params, body, user }) => {
 			const resolved = await resolveGovernanceScope(
 				user.id,
+				user.role,
+				user.workspaceId,
 				params.entityType,
 				params.entityId,
 			);
-			if (!resolved.canWrite && !resolved.canApprove) {
+			if (
+				(!resolved.canWrite && !resolved.canApprove) ||
+				normalizeGovernanceRole(resolved.role) === "SUPERVISOR"
+			) {
 				throw new ConstructionError(
 					"FORBIDDEN",
 					"Voce nao tem permissao para alterar o estado de governanca",
@@ -196,7 +232,7 @@ export const governanceRoutes = new Elysia({
 				userId: user.id,
 				entityType: params.entityType,
 				entityId: params.entityId,
-				toStatus: body.toStatus,
+				toStatus: normalizeGovernanceStatus(body.toStatus),
 				role: normalizeGovernanceRole(resolved.role),
 				reason: body.reason,
 				override: body.override,

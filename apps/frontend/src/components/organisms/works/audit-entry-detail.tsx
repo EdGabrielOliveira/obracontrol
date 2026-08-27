@@ -1,3 +1,11 @@
+import {
+	AUDIT_ACTION_STATUS_MAP,
+	CONTRACT_STATUS_MAP,
+	MEASUREMENT_STATUS_MAP,
+	PAYMENT_STATUS_MAP,
+	WORK_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,6 +55,18 @@ function stringify(value: unknown): string {
 	return String(value);
 }
 
+function statusMapForEntity(entityType: string) {
+	if (entityType === "WORK") return WORK_STATUS_MAP;
+	if (entityType === "CONTRACT") return CONTRACT_STATUS_MAP;
+	if (
+		entityType === "WORK_MEASUREMENT" ||
+		entityType === "CONTRACT_MEASUREMENT"
+	)
+		return MEASUREMENT_STATUS_MAP;
+	if (entityType === "CONTRACT_PAYMENT") return PAYMENT_STATUS_MAP;
+	return MEASUREMENT_STATUS_MAP;
+}
+
 export function AuditEntryDetail({
 	entry,
 	onOpenChange,
@@ -69,9 +89,10 @@ export function AuditEntryDetail({
 								<p className="text-muted-foreground">Ação</p>
 								<p className="flex items-center gap-2 font-medium">
 									{auditActionLabel(entry.action)}
-									<Badge variant="outline">
-										{auditActionLabel(entry.action)}
-									</Badge>
+									<StatusBadge
+										status={entry.action}
+										map={AUDIT_ACTION_STATUS_MAP}
+									/>
 								</p>
 							</div>
 							<div>
@@ -110,6 +131,32 @@ export function AuditEntryDetail({
 							>
 								{entry.navigationTarget.label}
 							</Button>
+						)}
+						{entry.action === "STATUS_CHANGED" && (
+							<div className="rounded-lg border border-border bg-muted/30 p-3">
+								<p className="mb-2 text-sm font-medium">Transição de status</p>
+								<div className="flex flex-wrap items-center gap-2 text-sm">
+									<StatusBadge
+										status={String(
+											entry.metadata?.fromStatus ??
+												entry.previousState?.status ??
+												entry.previousState?.operationalStatus ??
+												"",
+										)}
+										map={statusMapForEntity(entry.entityType)}
+									/>
+									<span aria-hidden="true">→</span>
+									<StatusBadge
+										status={String(
+											entry.metadata?.toStatus ??
+												entry.newState?.status ??
+												entry.newState?.operationalStatus ??
+												"",
+										)}
+										map={statusMapForEntity(entry.entityType)}
+									/>
+								</div>
+							</div>
 						)}
 
 						<div className="rounded-lg border p-3 text-sm">

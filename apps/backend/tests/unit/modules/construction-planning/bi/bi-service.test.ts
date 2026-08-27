@@ -259,6 +259,23 @@ describe("ConstructionBIService.getMultiworksBI via canonical source resolver", 
 		expect(withoutManual.cards.totalWorks).toBe(0);
 	});
 
+	it("keeps finalized works out of operational charts unless explicitly filtered", async () => {
+		const { service, repository } = makeService();
+		repository.getAllWorksWithItems.mockResolvedValue([
+			{
+				...workFixture({ id: "work-done", operationalStatus: "DONE" }),
+				ownerId: "owner-1",
+			},
+		] as never[]);
+		repository.getWorkMeasurementsForManyWorks.mockResolvedValue(new Map());
+
+		expect((await service.getMultiworksBI("owner-1")).cards.totalWorks).toBe(0);
+		expect(
+			(await service.getMultiworksBI("owner-1", { status: "DONE" })).cards
+				.totalWorks,
+		).toBe(1);
+	});
+
 	it("BI-004: N obras LIVE consomem 1 query em lote para medicoes, nao N+1", async () => {
 		const { service, repository } = makeService();
 		repository.getAllWorksWithItems.mockResolvedValue([

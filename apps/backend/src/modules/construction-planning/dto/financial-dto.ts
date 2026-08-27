@@ -49,6 +49,8 @@ export type WorkMeasurementDto = {
 	notes: string | null;
 	createdBy: string | null;
 	createdAt: string;
+	status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+	statusReason: string | null;
 	items: WorkMeasurementItemDto[];
 };
 
@@ -74,6 +76,9 @@ export function toWorkMeasurementDto(
 		notes: (row.notes as string | null) ?? null,
 		createdBy: (row.createdBy as string | null) ?? null,
 		createdAt: String(row.createdAt ?? ""),
+		status:
+			(row.status as WorkMeasurementDto["status"] | undefined) ?? "RASCUNHO",
+		statusReason: (row.statusReason as string | null) ?? null,
 		items: (items ?? []).map((item) => toWorkMeasurementItemDto(item)),
 	};
 }

@@ -395,8 +395,12 @@ const TYPE_LABELS: Record<ColumnDefinition["type"], string> = {
 	percent: "Percentual (0-100)",
 };
 
-function appendGuiaSection(aoa: unknown[][], sheet: SheetDefinition): void {
-	aoa.push([], [`Aba: ${sheet.name}`]);
+function appendGuiaSection(
+	aoa: unknown[][],
+	sheet: SheetDefinition,
+	displayName = sheet.name,
+): void {
+	aoa.push([], [`Aba: ${displayName}`]);
 	aoa.push([
 		"Coluna",
 		"Obrigatório",
@@ -417,13 +421,49 @@ function appendGuiaSection(aoa: unknown[][], sheet: SheetDefinition): void {
 	}
 }
 
-export function buildGuiaSheet(
-	kind?: WorkbookKind,
-	budgetItems?: Array<{ index: string; description: string }>,
-): XLSX.WorkSheet {
+function appendMeasurementInstructions(aoa: unknown[][]): void {
+	aoa.push([], ["Como preencher as medições"]);
+	aoa.push(["Passo", "O que fazer", "Aba"]);
+	aoa.push(
+		["1", "Consulte os índices e nomes dos itens disponíveis.", "Orçamento"],
+		[
+			"2",
+			"Preencha uma linha para cada item que será medido.",
+			"Medições de Obra",
+		],
+		[
+			"3",
+			"Copie o Índice exatamente como aparece na aba Orçamento.",
+			"Medições de Obra",
+		],
+		[
+			"4",
+			"Informe a Data da medição e o Percentual medido acumulado até essa data.",
+			"Medições de Obra",
+		],
+		[
+			"5",
+			"Use percentual no formato 30% (ou 0,30); não informe 30 sem o símbolo %.",
+			"Medições de Obra",
+		],
+		[
+			"6",
+			"A aba Orçamento é somente para consulta. Não altere nem preencha seus dados.",
+			"Orçamento",
+		],
+	);
+}
+
+function displayGuideSheetName(sheetName: string): string {
+	return sheetName === "Medicoes Obra" ? "Medições de Obra" : sheetName;
+}
+
+export function buildGuiaSheet(kind?: WorkbookKind): XLSX.WorkSheet {
 	const title = "Modelo de Importação - ObraControl";
-	const subtitle =
-		"Preencha os dados nas abas correspondentes e salve o arquivo. Em seguida, faça o upload no sistema ObraControl.";
+	const isMeasurementGuide = kind === "medicao-obra";
+	const subtitle = isMeasurementGuide
+		? 'Preencha somente a aba "Medições de Obra". A aba "Orçamento" contém os itens e índices da obra apenas para consulta.'
+		: "Preencha os dados nas abas correspondentes e salve o arquivo. Em seguida, faça o upload no sistema ObraControl.";
 
 	const aoa: unknown[][] = [
 		[title],
@@ -431,39 +471,24 @@ export function buildGuiaSheet(
 		[],
 		["Como preencher"],
 		[
-			"Baixe o modelo, preencha as abas de dados usando a primeira linha de exemplo como referência e envie o arquivo. As colunas marcadas como obrigatórias não podem ficar vazias. Datas no formato dd/mm/aaaa e valores monetários sem máscara.",
+			isMeasurementGuide
+				? 'Abra a aba "Medições de Obra" e preencha os dados seguindo os passos abaixo. As colunas marcadas como obrigatórias não podem ficar vazias. A validação usa o Índice para conferir o vínculo com o orçamento vigente.'
+				: "Baixe o modelo, preencha as abas de dados usando a primeira linha de exemplo como referência e envie o arquivo. As colunas marcadas como obrigatórias não podem ficar vazias. Datas no formato dd/mm/aaaa e valores monetários sem máscara.",
 		],
 	];
 
-	aoa.push(
-		[],
-		["Referência do orçamento"],
-		["Orçamento", "Índice", "Nome do item"],
-		...(budgetItems?.length
-			? budgetItems.map((item) => [
-					"Orçamento vigente",
-					item.index,
-					item.description,
-				])
-			: [
-					[
-						"Orçamento vigente",
-						"Preencha o Índice",
-						"Nome preenchido automaticamente",
-					],
-				]),
-	);
+	if (isMeasurementGuide) appendMeasurementInstructions(aoa);
 
 	if (kind !== undefined) {
 		for (const sheet of WORKBOOK_DEFINITIONS[kind].sheets) {
 			if (sheet.isDataSheet && sheet.columns.length > 0) {
-				appendGuiaSection(aoa, sheet);
+				appendGuiaSection(aoa, sheet, displayGuideSheetName(sheet.name));
 			}
 		}
 	} else {
 		for (const sheet of Object.values(SHEET_DEFINITIONS)) {
 			if (sheet.isDataSheet && sheet.columns.length > 0) {
-				appendGuiaSection(aoa, sheet);
+				appendGuiaSection(aoa, sheet, displayGuideSheetName(sheet.name));
 			}
 		}
 	}
@@ -497,8 +522,8 @@ export function buildGuiaSheet(
 				v: row[0],
 				s: GUIA_SECTION_STYLE,
 			};
-		} else if (row[0] === "Coluna") {
-			for (let c = 0; c < GUIA_TOTAL_COLS; c++) {
+		} else if (row[0] === "Coluna" || row[0] === "Passo") {
+			for (let c = 0; c < Math.min(GUIA_TOTAL_COLS, row.length); c++) {
 				ws[XLSX.utils.encode_cell({ r: rowIndex, c })] = {
 					t: "s",
 					v: row[c],
@@ -510,6 +535,20 @@ export function buildGuiaSheet(
 	}
 
 	return ws;
+}
+
+function buildBudgetReferenceSheet(
+	budgetItems?: Array<{ index: string; description: string }>,
+): XLSX.WorkSheet {
+	const rows = budgetItems?.length
+		? budgetItems.map((item) => [item.index, item.description])
+		: [["", "Baixe este modelo pela obra para carregar o orçamento vigente"]];
+
+	return buildStyledSheet(
+		"ORÇAMENTO VIGENTE — ÍNDICES PARA MEDIÇÃO",
+		["Índice", "Nome do item"],
+		rows,
+	);
 }
 
 export function buildWorkbookTemplate(
@@ -524,10 +563,16 @@ export function buildWorkbookTemplate(
 		let ws: XLSX.WorkSheet;
 		if (sheetDef.isDataSheet) {
 			ws = buildDataSheet(sheetDef, data?.[sheetDef.name]);
+		} else if (sheetDef.name === "Orçamento") {
+			ws = buildBudgetReferenceSheet(budgetItems);
 		} else {
-			ws = buildGuiaSheet(kind, budgetItems);
+			ws = buildGuiaSheet(kind);
 		}
-		XLSX.utils.book_append_sheet(wb, ws, sheetDef.name);
+		const outputSheetName =
+			kind === "medicao-obra" && sheetDef.name === "Medicoes Obra"
+				? "Medições de Obra"
+				: sheetDef.name;
+		XLSX.utils.book_append_sheet(wb, ws, outputSheetName);
 	}
 
 	return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });

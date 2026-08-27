@@ -7,10 +7,12 @@ export type DashboardSummary = {
 	works: {
 		total: number;
 		byStatus: {
+			DRAFT: number;
 			NOT_STARTED: number;
 			IN_PROGRESS: number;
 			DONE: number;
 			SUSPENDED: number;
+			IGNORED: number;
 		};
 	};
 	pendingContracts: number;

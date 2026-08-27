@@ -116,9 +116,7 @@ export class ConstructionBIService {
 		try {
 			const works = await this.repository.getAllWorksWithItems(ownerId);
 
-			let filtered = works.filter(
-				(w) => (w as { ownerId?: string }).ownerId === ownerId,
-			);
+			let filtered = works;
 			if (filter?.organizationIds?.length) {
 				const organizationIds = new Set(filter.organizationIds);
 				filtered = filtered.filter(

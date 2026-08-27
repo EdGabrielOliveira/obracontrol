@@ -1,15 +1,16 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { createFileRoute, useParams } from "@tanstack/react-router";
-import { FileDown, Gauge, ListChecks, Pencil } from "lucide-react";
+import {
+	createFileRoute,
+	useNavigate,
+	useParams,
+} from "@tanstack/react-router";
+import { FileDown, ListChecks, Pencil } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { Controller, type Path, useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 import {
 	downloadContractMeasurementPdf,
 	getContractMeasurement,
-	updateContractMeasurementItems,
+	updateContractMeasurementStatus,
 } from "@/api/contract-measurements";
 import { contractKeys, workKeys } from "@/api/query-keys";
 import { getWork } from "@/api/works";
@@ -18,18 +19,16 @@ import { ErrorFeedback } from "@/components/atoms/error-feedback";
 import { LoadingSpinner } from "@/components/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
+import {
+	MEASUREMENT_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
-import { InputFormField } from "@/components/molecules/FormField";
 import { Breadcrumb } from "@/components/organisms/layout/breadcrumb";
+import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
 import {
 	Table,
 	TableBody,
@@ -38,15 +37,14 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
 import { useBreadcrumb } from "@/lib/use-breadcrumb";
-import type {
-	ContractMeasurementDetailServiceItem,
-	ContractMeasurementItem,
-} from "@/types/contracts";
-import { parseCurrencyToNumber } from "@/utils/currency";
-import { formatCurrency, formatDate, formatPercentage } from "@/utils/format";
+import type { ContractMeasurementDetailServiceItem } from "@/types/contracts";
+import type { MeasurementLifecycleStatus } from "@/types/measurements";
+import { getErrorMessage } from "@/utils/api-error";
+import { formatDate, formatPercentage, formatQuantity } from "@/utils/format";
 
 export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/",
@@ -79,6 +77,9 @@ function RouteComponent() {
 	const { workId, contractId, measurementId } = useParams({
 		from: "/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/",
 	});
+	const navigate = useNavigate();
+	const { role } = useAuth();
+	const [statusOpen, setStatusOpen] = useState(false);
 
 	const { data: workData } = useQuery({
 		queryKey: workKeys.detail(workId),
@@ -92,17 +93,24 @@ function RouteComponent() {
 	});
 
 	const measurement = data?.measurement;
-	const [downloading, setDownloading] = useState(false);
-	const [editOpen, setEditOpen] = useState(false);
-
-	const updateItemsMutation = useMutation({
-		mutationFn: (items: Parameters<typeof updateContractMeasurementItems>[3]) =>
-			updateContractMeasurementItems(workId, contractId, measurementId, items),
+	const statusMutation = useMutation({
+		mutationFn: ({
+			status,
+			reason,
+		}: {
+			status: MeasurementLifecycleStatus;
+			reason?: string;
+		}) =>
+			updateContractMeasurementStatus(
+				workId,
+				contractId,
+				measurementId,
+				status,
+				reason,
+			),
 		onSuccess: () => {
-			toast.success("Medição atualizada!");
-			queryClient.invalidateQueries({
-				queryKey: contractKeys.measurements(workId, contractId),
-			});
+			toast.success("Status da medição atualizado.");
+			setStatusOpen(false);
 			queryClient.invalidateQueries({
 				queryKey: contractKeys.measurementDetail(
 					workId,
@@ -111,19 +119,17 @@ function RouteComponent() {
 				),
 			});
 			queryClient.invalidateQueries({
-				queryKey: contractKeys.measurementMap(workId, contractId),
+				queryKey: contractKeys.measurementsBase(workId),
 			});
 			queryClient.invalidateQueries({
 				queryKey: contractKeys.aggregate(workId, contractId),
 			});
-			queryClient.invalidateQueries({
-				queryKey: contractKeys.report(workId, contractId),
-			});
-			setEditOpen(false);
+			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
 		},
-		onError: () => toast.error("Erro ao atualizar medição."),
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Não foi possível alterar o status.")),
 	});
-
+	const [downloading, setDownloading] = useState(false);
 	const handleDownloadPdf = useCallback(async () => {
 		setDownloading(true);
 		try {
@@ -176,6 +182,22 @@ function RouteComponent() {
 				description={`#${measurement.number} - ${formatDate(measurement.date)}`}
 				actions={
 					<>
+						<StatusBadge
+							status={measurement.status ?? "RASCUNHO"}
+							map={MEASUREMENT_STATUS_MAP}
+						/>
+						{measurement.approvalStatus === "PENDING_APPROVAL" ? (
+							<StatusBadge status="PENDING_APPROVAL" />
+						) : null}
+						{role !== "SUPERVISOR" && role !== null && (
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setStatusOpen(true)}
+							>
+								Alterar status da medição
+							</Button>
+						)}
 						<Button
 							variant="outline"
 							size="sm"
@@ -188,7 +210,12 @@ function RouteComponent() {
 						<Button
 							variant="outline"
 							size="sm"
-							onClick={() => setEditOpen(true)}
+							onClick={() =>
+								navigate({
+									to: "/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit",
+									params: { workId, contractId, measurementId },
+								})
+							}
 						>
 							<Pencil className="mr-2 h-4 w-4" />
 							Editar
@@ -196,55 +223,13 @@ function RouteComponent() {
 					</>
 				}
 			/>
-			<div className="mb-6 flex flex-wrap items-center gap-3">
-				{data.totals.contractValue > 0 && (
-					<span className="text-sm text-muted-foreground">
-						Valor do contrato: {formatCurrency(data.totals.contractValue)}
-					</span>
-				)}
-				{measurement.discountValue != null && (
-					<span className="text-sm text-muted-foreground">
-						Desconto: {formatCurrency(measurement.discountValue)}
-					</span>
-				)}
-				{measurement.retentionValue != null && (
-					<span className="text-sm text-muted-foreground">
-						Retenção: {formatCurrency(measurement.retentionValue)}
-					</span>
-				)}
-			</div>
-			<Card className="mb-6">
-				<CardHeaderWithIcon
-					icon={Gauge}
-					title="Indicadores"
-					description="Totais da medição."
-				/>
-				<CardContent>
-					<div className="flex flex-wrap gap-4">
-						<div className="flex-1 min-w-[150px]">
-							<p className="text-xs text-muted-foreground">Medido (atual)</p>
-							<p className="text-lg font-bold">
-								{formatCurrency(data.totals.measuredCurrent)}
-							</p>
-						</div>
-						<div className="flex-1 min-w-[150px]">
-							<p className="text-xs text-muted-foreground">
-								Medido (acumulado)
-							</p>
-							<p className="text-lg font-bold">
-								{formatCurrency(data.totals.measuredAccumulated)}
-							</p>
-						</div>
-						<div className="flex-1 min-w-[150px]">
-							<p className="text-xs text-muted-foreground">Saldo</p>
-							<p className="text-lg font-bold">
-								{formatCurrency(data.totals.balance)}
-							</p>
-						</div>
-					</div>
-				</CardContent>
-			</Card>
-
+			<MeasurementStatusModal
+				open={statusOpen}
+				onOpenChange={setStatusOpen}
+				currentStatus={measurement.status ?? "RASCUNHO"}
+				onSave={(status, reason) => statusMutation.mutate({ status, reason })}
+				loading={statusMutation.isPending}
+			/>
 			{measurement.notes && (
 				<div className="mb-6 rounded-lg border p-4">
 					<p className="text-sm font-medium text-muted-foreground">Notas</p>
@@ -265,11 +250,7 @@ function RouteComponent() {
 								<TableRow>
 									<TableHead>Serviço</TableHead>
 									<TableHead className="text-right">Qtd Medida</TableHead>
-									<TableHead className="text-right">Valor Medido</TableHead>
 									<TableHead className="text-right">% Medido</TableHead>
-									<TableHead className="text-right">Qtd Acumulada</TableHead>
-									<TableHead className="text-right">Valor Acumulado</TableHead>
-									<TableHead className="text-right">% Acumulado</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -280,32 +261,12 @@ function RouteComponent() {
 										</TableCell>
 										<TableCell className="text-right">
 											{item.measuredQuantity != null
-												? String(item.measuredQuantity)
-												: "—"}
-										</TableCell>
-										<TableCell className="text-right">
-											{item.measuredValue != null
-												? formatCurrency(item.measuredValue)
-												: "—"}
+													? formatQuantity(item.measuredQuantity)
+													: "—"}
 										</TableCell>
 										<TableCell className="text-right">
 											{item.measuredPercentage != null
 												? formatPercentage(item.measuredPercentage)
-												: "—"}
-										</TableCell>
-										<TableCell className="text-right">
-											{item.accumulatedQuantity != null
-												? item.accumulatedQuantity
-												: "—"}
-										</TableCell>
-										<TableCell className="text-right">
-											{item.accumulatedValue != null
-												? formatCurrency(item.accumulatedValue)
-												: "—"}
-										</TableCell>
-										<TableCell className="text-right">
-											{item.accumulatedPercentage != null
-												? formatPercentage(item.accumulatedPercentage)
 												: "—"}
 										</TableCell>
 									</TableRow>
@@ -321,179 +282,6 @@ function RouteComponent() {
 					)}
 				</CardContent>
 			</Card>
-			{editOpen && measurement.items && measurement.items.length > 0 && (
-				<ContractMeasurementItemsEditModal
-					open={editOpen}
-					onOpenChange={setEditOpen}
-					items={measurement.items}
-					serviceMap={serviceMap}
-					isPending={updateItemsMutation.isPending}
-					onUpdateItems={(items) => updateItemsMutation.mutate(items)}
-				/>
-			)}
 		</PageContainer>
-	);
-}
-
-const contractMeasurementItemsEditSchema = z.object({
-	items: z.array(
-		z.object({
-			id: z.string().optional(),
-			serviceId: z.string().min(1, "Serviço obrigatório"),
-			measuredQuantity: z.string().optional(),
-			measuredValue: z.string().optional(),
-			measuredPercentage: z.string().optional(),
-		}),
-	),
-});
-
-type ContractMeasurementItemsEditValues = z.infer<
-	typeof contractMeasurementItemsEditSchema
->;
-
-interface ContractMeasurementItemsEditModalProps {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-	items: ContractMeasurementItem[];
-	serviceMap: Map<string, string>;
-	isPending?: boolean;
-	onUpdateItems: (
-		items: Parameters<typeof updateContractMeasurementItems>[3],
-	) => void;
-}
-
-function ContractMeasurementItemsEditModal({
-	open,
-	onOpenChange,
-	items,
-	serviceMap,
-	isPending,
-	onUpdateItems,
-}: ContractMeasurementItemsEditModalProps) {
-	const { control, handleSubmit } = useForm<ContractMeasurementItemsEditValues>(
-		{
-			resolver: zodResolver(contractMeasurementItemsEditSchema),
-			defaultValues: {
-				items: items.map((item) => ({
-					id: item.id,
-					serviceId: item.serviceId,
-					measuredQuantity:
-						item.measuredQuantity != null ? String(item.measuredQuantity) : "",
-					measuredValue:
-						item.measuredValue != null ? String(item.measuredValue) : "",
-					measuredPercentage:
-						item.measuredPercentage != null
-							? String(item.measuredPercentage)
-							: "",
-				})),
-			},
-		},
-	);
-
-	const { fields } = useFieldArray({ control, name: "items" });
-
-	const onSubmit = (values: ContractMeasurementItemsEditValues) => {
-		onUpdateItems(
-			values.items.map((item) => ({
-				id: item.id || undefined,
-				serviceId: item.serviceId,
-				measuredQuantity: item.measuredQuantity
-					? Number(item.measuredQuantity)
-					: undefined,
-				measuredValue: item.measuredValue
-					? (parseCurrencyToNumber(item.measuredValue) ?? undefined)
-					: undefined,
-				measuredPercentage: item.measuredPercentage
-					? Number(item.measuredPercentage)
-					: undefined,
-			})),
-		);
-	};
-
-	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>Editar Itens da Medição</DialogTitle>
-				</DialogHeader>
-				<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-					<div className="max-h-96 space-y-3 overflow-y-auto pr-1">
-						{fields.map((fieldItem, index) => (
-							<div
-								key={fieldItem.id}
-								className="rounded-lg border border-border p-3"
-							>
-								<p className="mb-2 truncate text-sm font-medium">
-									{serviceMap.get(fieldItem.serviceId) ?? fieldItem.serviceId}
-								</p>
-								<div className="grid grid-cols-3 gap-3">
-									<Controller
-										name={
-											`items.${index}.measuredQuantity` as Path<ContractMeasurementItemsEditValues>
-										}
-										control={control}
-										render={({ field, fieldState }) => (
-											<InputFormField
-												label="Quantidade Medida"
-												field={field}
-												fieldState={fieldState}
-												type="number"
-												step="0.0001"
-												placeholder="0"
-											/>
-										)}
-									/>
-									<Controller
-										name={
-											`items.${index}.measuredValue` as Path<ContractMeasurementItemsEditValues>
-										}
-										control={control}
-										render={({ field, fieldState }) => (
-											<InputFormField
-												label="Valor Medido"
-												field={field}
-												fieldState={fieldState}
-												mode="currency"
-												placeholder="0.00"
-											/>
-										)}
-									/>
-									<Controller
-										name={
-											`items.${index}.measuredPercentage` as Path<ContractMeasurementItemsEditValues>
-										}
-										control={control}
-										render={({ field, fieldState }) => (
-											<InputFormField
-												label="% Medido"
-												field={field}
-												fieldState={fieldState}
-												type="number"
-												min="0"
-												max="100"
-												step="0.01"
-												placeholder="0"
-											/>
-										)}
-									/>
-								</div>
-							</div>
-						))}
-					</div>
-					<div className="flex justify-end gap-2 pt-2">
-						<Button
-							type="button"
-							variant="outline"
-							onClick={() => onOpenChange(false)}
-						>
-							Cancelar
-						</Button>
-						<Button type="submit" loading={isPending}>
-							Salvar
-						</Button>
-					</div>
-				</form>
-			</DialogContent>
-		</Dialog>
 	);
 }

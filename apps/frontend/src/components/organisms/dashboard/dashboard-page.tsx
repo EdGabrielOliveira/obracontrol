@@ -361,11 +361,12 @@ export function DashboardPage({
 								</SelectTrigger>
 								<SelectContent>
 									<SelectItem value="ALL">Todos os status</SelectItem>
+									<SelectItem value="DRAFT">Rascunho</SelectItem>
 									<SelectItem value="NOT_STARTED">Não iniciada</SelectItem>
 									<SelectItem value="IN_PROGRESS">Em andamento</SelectItem>
 									<SelectItem value="DONE">Concluída</SelectItem>
 									<SelectItem value="SUSPENDED">Suspensa</SelectItem>
-									<SelectItem value="IGNORED">Ignorada</SelectItem>
+									<SelectItem value="IGNORED">Arquivada</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>

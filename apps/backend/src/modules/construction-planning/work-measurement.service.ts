@@ -2,7 +2,12 @@ import type { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
 import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
-import type { GovernanceRole } from "../../lib/status-machine";
+import { prisma } from "../../lib/prisma";
+import {
+	type GovernanceRole,
+	MEASUREMENT_TRANSITIONS,
+	validateStatusTransition,
+} from "../../lib/status-machine";
 import { withSerializableRetry } from "../../lib/transaction-retry";
 import { auditService } from "../audit/audit.service";
 import { getBudgetItemReferences } from "./budget-control/budget-control.repository";
@@ -14,6 +19,10 @@ import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
 } from "./governance-guard";
+import {
+	applyWorkMeasurementAcceptance,
+	reverseWorkMeasurementAcceptance,
+} from "./measurement-acceptance-effects";
 import { measurementCoverageService } from "./measurement-coverage.service";
 import { getWorkOrThrow } from "./repository";
 import type {
@@ -22,6 +31,7 @@ import type {
 	WorkMeasurementItemInput,
 } from "./schemas/work-measurement.schema";
 import * as wmRepository from "./work-measurement.repository";
+import { normalizeWorkOperationalStatus } from "./works/work-operational-status";
 
 type WorkPeriod = {
 	plannedStart?: Date | string | null;
@@ -93,7 +103,24 @@ export class WorkMeasurementService {
 		if (!measurement) {
 			throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 		}
-		return measurement;
+		const pendingApproval = await prisma.approvalRequest.findFirst({
+			where: {
+				ownerId,
+				resourceId: measurementId,
+				effectAction: "WORK_MEASUREMENT_APPROVE",
+				status: "PENDING",
+			},
+			select: { id: true },
+		});
+		if (!pendingApproval) return measurement;
+		return {
+			...measurement,
+			measurement: {
+				...measurement.measurement,
+				approvalStatus: "PENDING_APPROVAL" as const,
+				approvalRequestId: pendingApproval.id,
+			},
+		};
 	}
 
 	private assertOverrideAllowed(
@@ -175,16 +202,6 @@ export class WorkMeasurementService {
 		const availableQuantityByBudgetItemId: Record<string, number> = {};
 
 		for (const item of items) {
-			if (
-				!Number.isFinite(item.measuredQuantity) ||
-				item.measuredQuantity <= 0
-			) {
-				throw new ConstructionError(
-					"INVALID_INPUT",
-					"Quantidade medida deve ser maior que zero",
-					422,
-				);
-			}
 			const reference = referenceById.get(item.budgetItemId);
 			if (
 				!reference ||
@@ -199,11 +216,26 @@ export class WorkMeasurementService {
 				);
 			}
 			const operationalBudgetItemId = reference.operationalBudgetItemId;
+			const measuredQuantity =
+				item.measuredQuantity ??
+				(reference.quantity
+					? reference.quantity
+							.mul(new Decimal(item.measuredPercentage ?? 0))
+							.div(100)
+							.toNumber()
+					: 0);
+			if (!Number.isFinite(measuredQuantity) || measuredQuantity <= 0) {
+				throw new ConstructionError(
+					"INVALID_INPUT",
+					"Quantidade medida deve ser maior que zero",
+					422,
+				);
+			}
 
 			let derived: ReturnType<typeof deriveWorkMeasurementItem>;
 			try {
 				derived = deriveWorkMeasurementItem({
-					measuredQuantity: new Decimal(item.measuredQuantity),
+					measuredQuantity: new Decimal(measuredQuantity),
 					previousAccumulatedQuantity:
 						previousQuantities[item.budgetItemId] ?? new Decimal(0),
 					plannedQuantity: reference.quantity,
@@ -329,7 +361,12 @@ export class WorkMeasurementService {
 				const created = await wmRepository.createWorkMeasurement(
 					ownerId,
 					workId,
-					{ ...input, items: prepared.items, createdBy: ctx.userId },
+					{
+						...input,
+						items: prepared.items,
+						createdBy: ctx.userId,
+						status: "RASCUNHO",
+					},
 					tx,
 				);
 				if (!created) {
@@ -341,40 +378,21 @@ export class WorkMeasurementService {
 				}
 				createdMeasurementId = created.id;
 
-				let budgetResult: BudgetMutationResult;
-				try {
-					budgetResult = await budgetControlService.apply(
-						ownerId,
-						workId,
-						{
-							workId,
-							allocations: prepared.items.map((item) => ({
-								budgetItemId: item.budgetItemId,
-								quantity: item.measuredQuantity,
-							})),
-							impactType: "CONSUMPTION",
-							sourceType: "WORK_MEASUREMENT",
-							sourceId: created.id,
-							allowPending: input.balanceOverride === true,
-							occurredAt: new Date(input.date),
-						},
-						{ userId: ctx.userId },
-						tx,
-					);
-				} catch (error) {
-					if (
-						error instanceof ConstructionError &&
-						error.code === "BUDGET_BALANCE_EXCEEDED"
-					) {
-						throw new ConstructionError(
-							"MEASUREMENT_EXCEEDS_BALANCE",
-							"Medicao acima do saldo do item de orcamento",
-							422,
-						);
-					}
-					throw error;
-				}
-
+				const budgetResult: BudgetMutationResult = {
+					status: "PENDING_APPROVAL",
+					requiresApproval: true,
+					availableBalance: 0,
+					projectedBalance: 0,
+					allocations: prepared.items.map((item) => ({
+						budgetItemId: item.budgetItemId,
+						impactId: null,
+						impactType: "CONSUMPTION",
+						status: "PENDING_APPROVAL",
+						amount: item.measuredValue,
+						availableBalance: 0,
+						projectedBalance: 0,
+					})),
+				};
 				if (input.balanceOverride) {
 					await writeAudit(tx, {
 						userId: ctx.userId,
@@ -403,7 +421,9 @@ export class WorkMeasurementService {
 			throw error;
 		}
 
-		await this.submitMeasurementApproval(workId, operation.measurement, ctx);
+		if (ctx.role === "SUPERVISOR") {
+			await this.submitMeasurementApproval(workId, operation.measurement, ctx);
+		}
 
 		return this.formatMutationResult(
 			operation.measurement as {
@@ -443,7 +463,24 @@ export class WorkMeasurementService {
 		ctx: { userId: string; role: GovernanceRole },
 	) {
 		const work = await getWorkOrThrow(ownerId, workId);
+		const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+		if (
+			workStatus === "SUSPENDED" ||
+			workStatus === "DONE" ||
+			workStatus === "IGNORED"
+		) {
+			throw new ConstructionError(
+				"WORK_NOT_ACCEPTING_ENTRIES",
+				"A obra suspensa, concluida ou arquivada nao aceita novas medicoes",
+				422,
+			);
+		}
 		await this.governance.assertWritable(ownerId, "WORK_MEASUREMENTS", workId);
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
 
 		if (
 			input.items === undefined &&
@@ -482,10 +519,18 @@ export class WorkMeasurementService {
 			this.assertOverrideAllowed(ctx.role, input.evidenceNote);
 		}
 		const operation = await withSerializableRetry(async (tx) => {
+			const persisted = await tx.workMeasurement.findFirst({
+				where: { id: measurementId, ownerId, workId },
+				select: { status: true },
+			});
+			if (!persisted) {
+				throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
+			}
 			const hasCoverages =
 				await measurementCoverageService.hasCoveragesForWorkMeasurement(
 					ownerId,
 					measurementId,
+					tx,
 				);
 			if (hasCoverages) {
 				throw new ConstructionError(
@@ -515,38 +560,42 @@ export class WorkMeasurementService {
 				throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 			}
 
-			let budgetResult: BudgetMutationResult;
-			try {
-				budgetResult = await budgetControlService.replaceSourceImpact(
-					ownerId,
-					workId,
-					{
+			let budgetResult: Pick<BudgetMutationResult, "allocations"> = {
+				allocations: [],
+			};
+			if (persisted.status === "ACEITO") {
+				try {
+					budgetResult = await budgetControlService.replaceSourceImpact(
+						ownerId,
 						workId,
-						allocations: prepared.items.map((item) => ({
-							budgetItemId: item.budgetItemId,
-							quantity: item.measuredQuantity,
-						})),
-						impactType: "CONSUMPTION",
-						sourceType: "WORK_MEASUREMENT",
-						sourceId: measurementId,
-						allowPending: input.balanceOverride === true,
-						occurredAt: input.date ? new Date(input.date) : new Date(),
-					},
-					{ userId: ctx.userId },
-					tx,
-				);
-			} catch (error) {
-				if (
-					error instanceof ConstructionError &&
-					error.code === "BUDGET_BALANCE_EXCEEDED"
-				) {
-					throw new ConstructionError(
-						"MEASUREMENT_EXCEEDS_BALANCE",
-						"Medicao acima do saldo do item de orcamento",
-						422,
+						{
+							workId,
+							allocations: prepared.items.map((item) => ({
+								budgetItemId: item.budgetItemId,
+								quantity: item.measuredQuantity,
+							})),
+							impactType: "CONSUMPTION",
+							sourceType: "WORK_MEASUREMENT",
+							sourceId: measurementId,
+							allowPending: input.balanceOverride === true,
+							occurredAt: input.date ? new Date(input.date) : new Date(),
+						},
+						{ userId: ctx.userId },
+						tx,
 					);
+				} catch (error) {
+					if (
+						error instanceof ConstructionError &&
+						error.code === "BUDGET_BALANCE_EXCEEDED"
+					) {
+						throw new ConstructionError(
+							"MEASUREMENT_EXCEEDS_BALANCE",
+							"Medicao acima do saldo do item de orcamento",
+							422,
+						);
+					}
+					throw error;
 				}
-				throw error;
 			}
 			return { result, prepared, budgetResult };
 		});
@@ -580,6 +629,11 @@ export class WorkMeasurementService {
 	async delete(ownerId: string, workId: string, measurementId: string) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.governance.assertWritable(ownerId, "WORK_MEASUREMENTS", workId);
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
 		const result = await wmRepository.deleteWorkMeasurement(
 			ownerId,
 			workId,
@@ -589,6 +643,123 @@ export class WorkMeasurementService {
 			throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 		}
 		return result;
+	}
+
+	async setStatus(
+		ownerId: string,
+		workId: string,
+		measurementId: string,
+		status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO",
+		reason: string | null | undefined,
+		role: GovernanceRole,
+		actorId: string,
+	) {
+		if (role === "SUPERVISOR") {
+			throw new ConstructionError(
+				"FORBIDDEN",
+				"Supervisor nao pode alterar status da medicao",
+				403,
+			);
+		}
+		await getWorkOrThrow(ownerId, workId);
+		if ((status === "RECUSADO" || status === "ARQUIVADO") && !reason?.trim()) {
+			throw new ConstructionError(
+				"STATUS_REASON_REQUIRED",
+				"Motivo obrigatorio para recusar ou arquivar",
+				422,
+			);
+		}
+		const normalizedReason = reason?.trim() || null;
+		await this.governance.assertWritable(
+			ownerId,
+			"WORK_MEASUREMENT_STATUS",
+			measurementId,
+		);
+		await withSerializableRetry(async (tx) => {
+			const persisted = await tx.workMeasurement.findFirst({
+				where: { id: measurementId, ownerId, workId },
+				include: { items: true },
+			});
+			if (!persisted)
+				throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
+			const currentStatus = persisted.status ?? "RASCUNHO";
+			validateStatusTransition(
+				"WORK_MEASUREMENT",
+				MEASUREMENT_TRANSITIONS,
+				currentStatus,
+				status,
+			);
+			if (currentStatus === "ACEITO" && status !== "ACEITO") {
+				await reverseWorkMeasurementAcceptance({
+					tx,
+					ownerId,
+					workId,
+					measurementId,
+					actorId,
+				});
+			}
+			const updated = await wmRepository.updateWorkMeasurementStatus(
+				ownerId,
+				workId,
+				measurementId,
+				status,
+				normalizedReason,
+				actorId,
+				tx,
+				currentStatus,
+			);
+			if (!updated)
+				throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
+			await writeAudit(tx, {
+				userId: actorId,
+				ownerId,
+				action: "STATUS_CHANGED",
+				entityType: "WORK_MEASUREMENT",
+				entityId: measurementId,
+				entityDescription: `Medição ${persisted.number}${persisted.title ? ` - ${persisted.title}` : ""}`,
+				previousState: {
+					status: currentStatus,
+					statusReason: persisted.statusReason ?? null,
+				},
+				newState: {
+					status,
+					statusReason: normalizedReason,
+				},
+				metadata: {
+					statusField: "status",
+					fromStatus: currentStatus,
+					toStatus: status,
+					reason: normalizedReason,
+					workId,
+				},
+			});
+			if (status === "ACEITO" && currentStatus !== "ACEITO") {
+				await applyWorkMeasurementAcceptance({
+					tx,
+					ownerId,
+					workId,
+					measurementId,
+					actorId,
+					measurement: persisted,
+				});
+				if (
+					await measurementCoverageService.hasCoveragesForWorkMeasurement(
+						ownerId,
+						measurementId,
+						tx,
+					)
+				) {
+					await measurementCoverageService.syncAcceptedWorkMeasurement(
+						ownerId,
+						workId,
+						measurementId,
+						{ userId: actorId },
+						tx,
+					);
+				}
+			}
+		});
+		return this.get(ownerId, workId, measurementId);
 	}
 
 	async getMap(ownerId: string, workId: string) {
