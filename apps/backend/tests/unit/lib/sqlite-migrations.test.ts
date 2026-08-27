@@ -86,6 +86,40 @@ describe("applySqliteMigrations", () => {
 		});
 	});
 
+	test("accepts the recorded legacy checksum for an amended migration", async () => {
+		const paths = await fixture();
+		await writeFile(
+			join(paths.migrationsDirectory, "0004_repair_credential_account_ids.sql"),
+			`-- Better Auth identifies credential accounts by the stable user id.
+-- Older provisioning paths used the email address, which made sign-in
+-- unable to resolve the credential account after admin/user creation.
+UPDATE "Account"
+SET "accountId" = "userId"
+WHERE "providerId" = 'credential'
+  AND "accountId" <> "userId";
+`,
+		);
+		await applySqliteMigrations(paths);
+
+		const database = new Database(paths.databasePath);
+		database
+			.query<never, [string, string]>(
+				`UPDATE "_obracontrol_migrations"
+				 SET "checksum" = ?
+				 WHERE "name" = ?`,
+			)
+			.run(
+				"72fe8c7b29808c7aea4e376e62ac529a8e5ef30213741fa99f30bed22d6f50e2",
+				"0004_repair_credential_account_ids.sql",
+			);
+		database.close();
+
+		expect(await applySqliteMigrations(paths)).toEqual({
+			baselineCreated: false,
+			applied: [],
+		});
+	});
+
 	test("rejects an untracked divergent database", async () => {
 		const paths = await fixture();
 		const database = new Database(paths.databasePath);

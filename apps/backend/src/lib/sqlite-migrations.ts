@@ -5,6 +5,21 @@ import { basename, resolve } from "node:path";
 
 const MIGRATIONS_TABLE = "_obracontrol_migrations";
 
+// These checksums belong to migrations that were applied in production before
+// their committed files were amended. Keep this list deliberately narrow: a
+// checksum mismatch remains an error for every other migration.
+const acceptedLegacyChecksums: Readonly<Record<string, readonly string[]>> = {
+	"0004_repair_credential_account_ids.sql": [
+		"72fe8c7b29808c7aea4e376e62ac529a8e5ef30213741fa99f30bed22d6f50e2",
+	],
+	"0005_add_credential_account_issuer.sql": [
+		"951508b164a06133861f963fa581cbc59da23f537937c5ddd2fb8d9bd7e1f8e7",
+	],
+	"0008_company_membership.sql": [
+		"90142f376c2ec97fab3e1fd6b4c26b0c1a8629a30a10494b43dce195953db418",
+	],
+};
+
 type SchemaRow = {
 	type: string;
 	name: string;
@@ -40,6 +55,10 @@ export function databaseSchemaFingerprint(database: Database): string {
 
 function checksum(contents: string): string {
 	return createHash("sha256").update(contents).digest("hex");
+}
+
+function isAcceptedChecksum(name: string, checksum: string): boolean {
+	return acceptedLegacyChecksums[name]?.includes(checksum) ?? false;
 }
 
 function ensureMigrationsTable(database: Database): void {
@@ -121,7 +140,10 @@ export async function applySqliteMigrations(options: {
 			const appliedChecksum = appliedByName.get(name);
 
 			if (appliedChecksum) {
-				if (appliedChecksum !== fileChecksum) {
+				if (
+					appliedChecksum !== fileChecksum &&
+					!isAcceptedChecksum(name, appliedChecksum)
+				) {
 					throw new Error(`Migration aplicada foi alterada: ${name}`);
 				}
 				continue;
