@@ -19,6 +19,7 @@ import { listContractRequests } from "@/api/contract-requests";
 import {
 	type ContractFilter,
 	deleteContract,
+	getContractSummary,
 	listContracts,
 	updateContract,
 } from "@/api/contracts";
@@ -29,6 +30,8 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { KpiCard } from "@/components/atoms/kpi-card";
+import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { ContractStatusModal } from "@/components/organisms/contracts/contract-status-modal";
@@ -55,6 +58,7 @@ import { paginationSchema } from "@/schemas/pagination";
 import type { Contract, ContractStatus } from "@/types/contracts";
 import type { PaginationMeta } from "@/types/shared";
 import { getErrorMessage } from "@/utils/api-error";
+import { formatCurrency } from "@/utils/format";
 import { getPaginationMeta } from "@/utils/pagination";
 
 const contractFilterSchema = z
@@ -108,12 +112,14 @@ function RouteComponent() {
 			searchParams as Record<string, unknown>,
 		),
 		queryFn: () => listContracts(workId, searchParams as ContractFilter),
-		staleTime: 2 * 60 * 1000,
 	});
 	const { data: pendingRequests = [] } = useQuery({
 		queryKey: ["contract-requests", workId],
 		queryFn: () => listContractRequests(workId),
-		staleTime: 30_000,
+	});
+	const { data: summaryData } = useQuery({
+		queryKey: workKeys.contractsSummary(workId),
+		queryFn: () => getContractSummary(workId),
 	});
 
 	const handlePageChange = (page: number) => {
@@ -175,7 +181,10 @@ function RouteComponent() {
 		},
 		onError: (error) =>
 			toast.error(
-				getErrorMessage(error, "Não foi possível alterar o status do contrato."),
+				getErrorMessage(
+					error,
+					"Não foi possível alterar o status do contrato.",
+				),
 			),
 	});
 
@@ -236,7 +245,28 @@ function RouteComponent() {
 	}));
 	const tableRows: ContractTableRow[] = [...contractList, ...pendingRows];
 	const totalContractCount = data.total + pendingRows.length;
+	const pendingContractCount =
+		(summaryData?.pendingContracts ?? 0) + pendingRows.length;
 	const paginationMeta: PaginationMeta = getPaginationMeta(data);
+	const contractKpis = (
+		<KpiGrid>
+			<KpiCard
+				title="Valor dos contratos"
+				value={formatCurrency(summaryData?.totalContractValue ?? 0)}
+				tone="default"
+			/>
+			<KpiCard
+				title="Total de contratos"
+				value={`${totalContractCount}`}
+				tone="default"
+			/>
+			<KpiCard
+				title="Contratos pendentes"
+				value={`${pendingContractCount}`}
+				tone={pendingContractCount > 0 ? "warning" : "default"}
+			/>
+		</KpiGrid>
+	);
 
 	if (contractList.length === 0 && pendingRequests.length === 0) {
 		return (
@@ -246,6 +276,7 @@ function RouteComponent() {
 					title="Contratos"
 					description="Contratos da obra"
 				/>
+				{contractKpis}
 				<EmptyStateCard
 					icon={FolderOpen}
 					title="Nenhum contrato"
@@ -285,8 +316,9 @@ function RouteComponent() {
 					</>
 				}
 			/>
+			{contractKpis}
 			{tableRows.length > 0 ? (
-				<Card>
+				<Card className="mt-4">
 					<CardHeaderWithIcon
 						icon={FolderOpen}
 						title="Lista de Contratos"

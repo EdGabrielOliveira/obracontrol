@@ -203,8 +203,8 @@ describe("contract measurement repository", () => {
 		expect(result?.totals.measuredCurrent).toBe(50);
 		expect(result?.totals.measuredAccumulated).toBe(50);
 		expect(result?.serviceTree[0]).toMatchObject({
-				measuredCurrent: { quantity: 1, value: 50, percentage: 10 },
-				measuredAccumulated: { quantity: 1, value: 50, percentage: 10 },
+			measuredCurrent: { quantity: 1, value: 50, percentage: 10 },
+			measuredAccumulated: { quantity: 1, value: 50, percentage: 10 },
 			balance: { quantity: 9, value: 450, percentage: 90 },
 		});
 	});

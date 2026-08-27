@@ -127,10 +127,10 @@ export function buildMeasurementItemData(
 	const measuredPercentage =
 		measuredQuantity !== undefined && serviceQuantity > 0
 			? roundCurrency((measuredQuantity / serviceQuantity) * 100)
-			: explicitMeasuredPercentage ??
+			: (explicitMeasuredPercentage ??
 				(measuredValue !== undefined && serviceTotalCost > 0
 					? roundCurrency((measuredValue / serviceTotalCost) * 100)
-					: undefined);
+					: undefined));
 	const resolvedQuantity =
 		measuredQuantity ??
 		(explicitMeasuredPercentage !== undefined && serviceQuantity > 0

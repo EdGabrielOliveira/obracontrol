@@ -123,7 +123,10 @@ export function ContractTable({
 				const row = info.row.original;
 				if (row.isPending) return null;
 				return (
-					<div className="flex items-center gap-1" data-no-row-click>
+					<div
+						className="flex w-full items-center justify-end gap-1"
+						data-no-row-click
+					>
 						{canChangeStatus ? (
 							<Button
 								variant="ghost"

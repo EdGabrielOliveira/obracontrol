@@ -703,8 +703,8 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 						objectDescription: existing.objectDescription,
 						startDate: existing.startDate,
 						endDate: existing.endDate,
-					status: existing.status,
-				},
+						status: existing.status,
+					},
 			newState: statusChanged
 				? {
 						status: updated.status,
@@ -716,8 +716,8 @@ const CONTRACT_UPDATE: ApprovalEffectHandler = {
 						objectDescription: updated.objectDescription,
 						startDate: updated.startDate,
 						endDate: updated.endDate,
-					status: updated.status,
-				},
+						status: updated.status,
+					},
 			metadata: {
 				actorRole: request.actorRole,
 				organizationId: request.organizationId,

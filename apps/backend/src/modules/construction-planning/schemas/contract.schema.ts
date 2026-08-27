@@ -181,7 +181,10 @@ export const measurementCoverageSchema = z.object({
 
 export const contractMeasurementItemSchema = z.object({
 	serviceId: z.string().min(1),
-	measuredQuantity: z.number().finite().positive("Quantidade deve ser maior que zero"),
+	measuredQuantity: z
+		.number()
+		.finite()
+		.positive("Quantidade deve ser maior que zero"),
 	// Mantido apenas para leitura/importação de medições antigas; o cadastro
 	// simplificado não solicita nem processa coberturas.
 	coverages: z.array(measurementCoverageSchema).optional(),
@@ -209,7 +212,10 @@ export const updateContractMeasurementSchema = z.object({
 			z.object({
 				id: z.string().optional(),
 				serviceId: z.string().min(1),
-				measuredQuantity: z.number().finite().positive("Quantidade deve ser maior que zero"),
+				measuredQuantity: z
+					.number()
+					.finite()
+					.positive("Quantidade deve ser maior que zero"),
 			}),
 		)
 		.optional(),

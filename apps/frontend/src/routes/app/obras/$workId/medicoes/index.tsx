@@ -273,7 +273,7 @@ function RouteComponent() {
 						tone={
 							(summaryData?.balanceToMeasure ?? 0) <= 0 ? "danger" : "warning"
 						}
-					/> 
+					/>
 				</KpiGrid>
 
 				<Tabs

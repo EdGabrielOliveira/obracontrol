@@ -1,5 +1,5 @@
-import { ConstructionError } from "../../lib/errors";
 import { writeAudit } from "../../lib/audit-writer";
+import { ConstructionError } from "../../lib/errors";
 import { resolveResourceScope } from "../../lib/resource-scope";
 import {
 	MEASUREMENT_TRANSITIONS,
