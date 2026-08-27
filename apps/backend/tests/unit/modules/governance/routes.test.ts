@@ -69,7 +69,11 @@ mock.module("../../../../src/lib/resource-scope", () => ({
 mock.module("../../../../src/modules/governance/governance.service", () => ({
 	governanceService: { transition, get },
 	normalizeGovernanceRole: (role: string | null | undefined) =>
-		role === "ADMIN" || role === "GERENTE" || role === "APROVADOR"
+		role === "ADMIN" ||
+		role === "GERENTE" ||
+		role === "GESTOR" ||
+		role === "SUPERVISOR" ||
+		role === "APROVADOR"
 			? role
 			: "VISUALIZADOR",
 }));
@@ -204,6 +208,79 @@ describe("governance routes target and owner validation", () => {
 		expect(transition).toHaveBeenCalledWith(
 			expect.objectContaining({ role: "APROVADOR" }),
 		);
+	});
+
+	it("passes a gestor with work scope through to the governance service", async () => {
+		resolveResourceScope.mockResolvedValue(
+			makeScope({ role: "GESTOR", canWrite: true, canApprove: true }),
+		);
+
+		const response = await governanceRoutes.handle(
+			new Request(
+				"http://localhost/governance/WORK_MEASUREMENT_STATUS/measurement-1/transition",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						toStatus: "ACEITO",
+						reason: "Medição importada validada",
+					}),
+				},
+			),
+		);
+
+		expect(response.status).toBe(200);
+		expect(transition).toHaveBeenCalledWith(
+			expect.objectContaining({
+				entityType: "WORK_MEASUREMENT_STATUS",
+				role: "GESTOR",
+				toStatus: "ACEITO",
+			}),
+		);
+	});
+
+	it("normalizes ACCEPT to the internal accepted status", async () => {
+		const response = await governanceRoutes.handle(
+			new Request(
+				"http://localhost/governance/WORK_MEASUREMENT_STATUS/measurement-1/transition",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						toStatus: "ACCEPT",
+						reason: "Medição importada validada",
+					}),
+				},
+			),
+		);
+
+		expect(response.status).toBe(200);
+		expect(transition).toHaveBeenCalledWith(
+			expect.objectContaining({ toStatus: "ACEITO" }),
+		);
+	});
+
+	it("blocks a supervisor even when the resolved scope reports write access", async () => {
+		resolveResourceScope.mockResolvedValue(
+			makeScope({ role: "SUPERVISOR", canWrite: true, canApprove: true }),
+		);
+
+		const response = await governanceRoutes.handle(
+			new Request(
+				"http://localhost/governance/WORK_MEASUREMENT_STATUS/measurement-1/transition",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						toStatus: "ACEITO",
+						reason: "Não autorizado",
+					}),
+				},
+			),
+		);
+
+		expect(response.status).toBe(403);
+		expect(transition).not.toHaveBeenCalled();
 	});
 
 	it("reads governance state under the resolved owner", async () => {

@@ -123,13 +123,16 @@ export function ContractModal({
 
 	const onEditSubmit = (data: ContractEditFormValues) => {
 		setSubmitting(true);
+		const statusChanged = data.status !== contract?.status;
 		const payload: ContractEditInput = {
 			title: data.title,
 			serviceType: data.serviceType,
 			objectDescription: data.objectDescription,
 			startDate: data.startDate,
 			endDate: data.endDate,
-			status: data.status,
+			...(statusChanged
+				? { status: data.status, statusReason: data.statusReason }
+				: {}),
 		};
 		updateMutation.mutate(payload);
 	};
@@ -143,6 +146,7 @@ export function ContractModal({
 					startDate: contract.startDate ?? undefined,
 					endDate: contract.endDate ?? undefined,
 					status: contract.status,
+					statusReason: undefined,
 				}
 			: undefined;
 

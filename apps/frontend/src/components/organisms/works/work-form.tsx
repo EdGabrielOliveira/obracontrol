@@ -69,7 +69,11 @@ export function WorkForm({
 	const [budgetFile, setBudgetFile] = useState<File | null>(null);
 	const { control, handleSubmit } = useForm<WorkFormValues>({
 		resolver: zodResolver(workFormSchema),
-		defaultValues: { ...defaultValues, costCenterId },
+		defaultValues: {
+			operationalStatus: "DRAFT",
+			...defaultValues,
+			costCenterId,
+		},
 	});
 
 	const handleFormSubmit = handleSubmit((data) => onSubmit(data, budgetFile));
@@ -247,6 +251,55 @@ export function WorkForm({
 									)}
 								/>
 							</div>
+						</>
+					)}
+					{mode === "edit" && (
+						<>
+							<Controller
+								name="operationalStatus"
+								control={control}
+								render={({ field, fieldState }) => (
+									<SelectFormField
+										label="Status operacional"
+										field={field}
+										fieldState={fieldState}
+										placeholder="Selecione o status"
+										options={[
+											{ id: "DRAFT", value: "DRAFT", label: "Rascunho" },
+											{
+												id: "NOT_STARTED",
+												value: "NOT_STARTED",
+												label: "Não iniciada",
+											},
+											{
+												id: "IN_PROGRESS",
+												value: "IN_PROGRESS",
+												label: "Em andamento",
+											},
+											{
+												id: "SUSPENDED",
+												value: "SUSPENDED",
+												label: "Suspensa",
+											},
+											{ id: "DONE", value: "DONE", label: "Finalizada" },
+											{ id: "IGNORED", value: "IGNORED", label: "Arquivada" },
+										]}
+									/>
+								)}
+							/>
+							<Controller
+								name="statusReason"
+								control={control}
+								render={({ field, fieldState }) => (
+									<InputFormField
+										label="Motivo da alteração de status"
+										field={field}
+										fieldState={fieldState}
+										placeholder="Obrigatório ao suspender ou arquivar"
+										className="sm:col-span-2"
+									/>
+								)}
+							/>
 						</>
 					)}
 				</CardContent>

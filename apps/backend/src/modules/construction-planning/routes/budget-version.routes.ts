@@ -4,6 +4,7 @@ import {
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
 import {
+	archiveBudgetVersion,
 	createDraftBudgetVersion,
 	getBudgetVersion,
 	listBudgetVersions,
@@ -180,6 +181,24 @@ export const budgetVersionRoutes = new Elysia({
 			detail: {
 				tags: ["Budget"],
 				summary: "Submeter versão em rascunho para aprovação",
+			},
+		},
+	)
+	.use(requireRole("approve"))
+	.post(
+		"/:versionId/archive",
+		async ({ params, body, user }) =>
+			archiveBudgetVersion(
+				user.id,
+				params.workId,
+				params.versionId,
+				body.reason,
+			),
+		{
+			body: t.Object({ reason: t.Optional(t.String({ maxLength: 1000 })) }),
+			detail: {
+				tags: ["Budget"],
+				summary: "Arquivar versão de orçamento fora do escopo operacional",
 			},
 		},
 	);

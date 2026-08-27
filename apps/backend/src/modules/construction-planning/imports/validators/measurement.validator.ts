@@ -11,7 +11,7 @@ import { validateBudgetReference } from "./shared";
 export function normalizeMeasurements(
 	workbook: ParsedWorkbook,
 	errors: ImportValidationError[],
-	budgetIndexes: Set<string>,
+	budgetIndexes: ReadonlySet<string>,
 ): NormalizedMeasurement[] {
 	return (workbook.measurementRows ?? []).flatMap((row) => {
 		const index = row.index ? normalizeHierarchyIndex(row.index) : null;
@@ -57,6 +57,7 @@ export function normalizeMeasurements(
 			{
 				rowNumber: row.rowNumber,
 				index,
+				itemName: row.itemName,
 				measurementDate,
 				measuredPercentageAccumulated,
 				measuredQuantityAccumulated,

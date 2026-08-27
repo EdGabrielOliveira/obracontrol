@@ -4,6 +4,7 @@ export type EditMeasurementItemRow = {
 	id?: string;
 	budgetItemId: string;
 	measuredQuantity: string;
+	measuredPercentage?: string;
 };
 
 export function hydrateEditItems(
@@ -16,5 +17,6 @@ export function hydrateEditItems(
 		id: item.id,
 		budgetItemId: item.budgetItemId,
 		measuredQuantity: item.measuredQuantity?.toString() ?? "",
+		measuredPercentage: item.measuredPercentage?.toString(),
 	}));
 }

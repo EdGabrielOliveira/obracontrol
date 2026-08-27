@@ -61,7 +61,9 @@ export async function updateContractMeasurement(
 	workId: string,
 	contractId: string,
 	measurementId: string,
-	input: UpdateContractMeasurementMetadataInput,
+	input: UpdateContractMeasurementMetadataInput & {
+		items?: UpdateContractMeasurementItemsInput["items"];
+	},
 ) {
 	const { data } = await api.patch<ContractMeasurement>(
 		`/construction/works/${workId}/contracts/${contractId}/measurements/${measurementId}`,
@@ -80,24 +82,29 @@ export async function deleteContractMeasurement(
 	);
 }
 
+export async function updateContractMeasurementStatus(
+	workId: string,
+	contractId: string,
+	measurementId: string,
+	status: ContractMeasurement["status"],
+	reason?: string | null,
+) {
+	const { data } = await api.patch<ContractMeasurement>(
+		`/construction/works/${workId}/contracts/${contractId}/measurements/${measurementId}/status`,
+		{ status, reason },
+	);
+	return data;
+}
+
 export async function updateContractMeasurementItems(
 	workId: string,
 	contractId: string,
 	measurementId: string,
 	items: UpdateContractMeasurementItemsInput["items"],
 ) {
-	const cleaned = items.map((item) => ({
-		...item,
-		measuredQuantity: item.measuredQuantity ?? undefined,
-		measuredValue: item.measuredValue ?? undefined,
-		measuredPercentage: item.measuredPercentage ?? undefined,
-		accumulatedQuantity: item.accumulatedQuantity ?? undefined,
-		accumulatedValue: item.accumulatedValue ?? undefined,
-		accumulatedPercentage: item.accumulatedPercentage ?? undefined,
-	}));
 	const { data } = await api.patch<ContractMeasurement>(
 		`/construction/works/${workId}/contracts/${contractId}/measurements/${measurementId}`,
-		{ items: cleaned },
+		{ items },
 	);
 	return data;
 }

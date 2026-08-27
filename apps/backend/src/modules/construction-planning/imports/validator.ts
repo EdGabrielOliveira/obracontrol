@@ -1,5 +1,5 @@
 import { ConstructionError } from "../../../lib/errors";
-import { parseNumber } from "../../../lib/text-utils";
+import { normalizeText, parseNumber } from "../../../lib/text-utils";
 import {
 	WORKBOOK_DEFINITIONS,
 	type WorkbookKind,
@@ -168,7 +168,12 @@ function validateUnifiedWorkbook(workbook: ParsedWorkbook): ValidationResult {
 }
 
 const SHEET_NAME_ALIASES: Record<string, string[]> = {
-	"Medicoes Obra": ["Medicoes Obra", "Medicoes", "Medições"],
+	"Medicoes Obra": [
+		"Medições de Obra",
+		"Medicoes Obra",
+		"Medicoes",
+		"Medições",
+	],
 	Orcamento: ["Orcamento", "Orçamento"],
 	"Cronograma Original": ["Cronograma Original", "Cronograma"],
 	"Itens do Orcamento": ["Itens do Orcamento", "Itens do Orçamento"],
@@ -176,6 +181,79 @@ const SHEET_NAME_ALIASES: Record<string, string[]> = {
 
 function getAliases(sheetName: string): string[] {
 	return SHEET_NAME_ALIASES[sheetName] ?? [sheetName];
+}
+
+const COLUMN_ALIASES: Record<string, string[]> = {
+	Índice: ["Índice", "Indice"],
+	"Data da medição": ["Data da medição", "Data da medicao"],
+	"Percentual medido acumulado": [
+		"Percentual medido acumulado",
+		"Percentual medido",
+		"% medido",
+	],
+	"Quantidade medida acumulada": [
+		"Quantidade medida acumulada",
+		"Quantidade medida",
+	],
+};
+
+function hasColumn(
+	normalizedHeaders: Set<string>,
+	columnHeader: string,
+): boolean {
+	const aliases = COLUMN_ALIASES[columnHeader] ?? [columnHeader];
+	return aliases.some((alias) => normalizedHeaders.has(normalizeText(alias)));
+}
+
+function actualSheetName(
+	workbook: ParsedWorkbook,
+	expectedName: string,
+): string | null {
+	const aliases = getAliases(expectedName).map(normalizeText);
+	return (
+		workbook.sheetNames.find((name) => aliases.includes(normalizeText(name))) ??
+		null
+	);
+}
+
+function validateSheetHeaders(
+	workbook: ParsedWorkbook,
+	kind: WorkbookKind,
+	errors: ImportValidationError[],
+) {
+	// ParsedWorkbook fixtures created directly in unit tests do not have header
+	// metadata. Real uploads always come from parseWorkbookByKind, which fills it.
+	if (!workbook.sheetHeaders) return;
+
+	for (const sheet of WORKBOOK_DEFINITIONS[kind].sheets) {
+		if (!sheet.isDataSheet) continue;
+		const actualName = actualSheetName(workbook, sheet.name);
+		if (!actualName) continue;
+
+		const headers = workbook.sheetHeaders[actualName] ?? [];
+		const normalizedHeaders = new Set(headers.map(normalizeText));
+		if (headers.length === 0) {
+			errors.push({
+				sheet: sheet.name,
+				field: sheet.name,
+				code: "MISSING_HEADER_ROW",
+				message: `Aba "${sheet.name}" nao possui uma linha de cabecalho valida`,
+			});
+			continue;
+		}
+
+		for (const column of sheet.columns) {
+			if (!column.required || hasColumn(normalizedHeaders, column.header)) {
+				continue;
+			}
+			errors.push({
+				sheet: sheet.name,
+				field: column.header,
+				code: "MISSING_REQUIRED_COLUMN",
+				message: `Coluna obrigatoria "${column.header}" nao encontrada na aba "${sheet.name}"`,
+			});
+		}
+	}
 }
 
 function validateQuotationRows(
@@ -282,6 +360,7 @@ function validateQuotationRows(
 export function validateWorkbookByKind(
 	workbook: ParsedWorkbook,
 	kind: WorkbookKind,
+	options: { measurementBudgetIndexes?: ReadonlySet<string> } = {},
 ): ValidationResult {
 	const definition = WORKBOOK_DEFINITIONS[kind];
 	if (!definition) {
@@ -294,6 +373,7 @@ export function validateWorkbookByKind(
 
 	const errors: ImportValidationError[] = [];
 	const warnings: ImportValidationError[] = [];
+	validateSheetHeaders(workbook, kind, errors);
 
 	const dataSheetNames = definition.sheets
 		.filter((s) => s.isDataSheet)
@@ -396,6 +476,17 @@ export function validateWorkbookByKind(
 	const hasCronogramaOriginal = dataSheetNames.includes("Cronograma Original");
 	const hasReplanejamento = dataSheetNames.includes("Replanejamento");
 	const hasMedicoesObra = dataSheetNames.includes("Medicoes Obra");
+	const medicoesObraInFile =
+		hasMedicoesObra &&
+		hasRequiredSheet(workbook.sheetNames, getAliases("Medicoes Obra"));
+	if (kind === "medicao-obra" && !medicoesObraInFile) {
+		errors.push({
+			sheet: "Medicoes Obra",
+			field: "Medicoes Obra",
+			code: "MISSING_REQUIRED_SHEET",
+			message: 'Aba obrigatoria "Medicoes Obra" nao encontrada',
+		});
+	}
 	const hasCustosRealizados = dataSheetNames.includes("Custos Realizados");
 
 	const measurementIndexes = new Set<string>(
@@ -411,10 +502,11 @@ export function validateWorkbookByKind(
 			.filter((i): i is string => i !== null),
 	);
 
-	const measurementBudgetIndexes: Set<string> =
-		budgetIndexes && budgetIndexes.size > 0
+	const measurementBudgetIndexes: ReadonlySet<string> =
+		options.measurementBudgetIndexes ??
+		(budgetIndexes && budgetIndexes.size > 0
 			? budgetIndexes
-			: measurementIndexes;
+			: measurementIndexes);
 	const costBudgetIndexes: Set<string> =
 		budgetIndexes && budgetIndexes.size > 0 ? budgetIndexes : costIndexes;
 
@@ -427,6 +519,19 @@ export function validateWorkbookByKind(
 	const measurements = hasMedicoesObra
 		? normalizeMeasurements(workbook, errors, measurementBudgetIndexes)
 		: [];
+	if (
+		kind === "medicao-obra" &&
+		medicoesObraInFile &&
+		(workbook.measurementRows ?? []).length === 0
+	) {
+		errors.push({
+			sheet: "Medicoes Obra",
+			field: "Medicoes Obra",
+			code: "NO_DATA",
+			message:
+				'A aba "Medicoes Obra" nao possui nenhuma linha de medicao para importar',
+		});
+	}
 	const actualCosts = hasCustosRealizados
 		? normalizeActualCosts(workbook, errors, costBudgetIndexes)
 		: [];

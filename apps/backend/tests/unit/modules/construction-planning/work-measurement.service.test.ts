@@ -54,6 +54,10 @@ const replaceSourceImpact = mock(async () => ({
 		},
 	],
 }));
+const reverse = mock(async () => undefined);
+const reject = mock(async () => undefined);
+const workMeasurementFindFirst = mock(async () => ({ status: "RASCUNHO" }));
+const updateWorkMeasurementStatus = mock(async () => true);
 
 mock.module(
 	"../../../../src/modules/construction-planning/work-measurement.repository",
@@ -61,7 +65,8 @@ mock.module(
 		createWorkMeasurement,
 		updateWorkMeasurement,
 		getLatestWorkMeasurementQuantities,
-		getWorkMeasurementById: mock(async () => null),
+		getWorkMeasurementById: mock(async () => ({ id: "measurement-1" })),
+		getWorkMeasurementDetail: mock(async () => ({ id: "measurement-1" })),
 		listWorkMeasurements: mock(async () => ({
 			data: [],
 			total: 0,
@@ -73,6 +78,7 @@ mock.module(
 		getWorkMeasurementReports: mock(async () => ({})),
 		getWorkMeasurementReportById: mock(async () => ({})),
 		getWorkMeasurementSummary: mock(async () => ({})),
+		updateWorkMeasurementStatus,
 	}),
 );
 
@@ -100,7 +106,7 @@ mock.module(
 mock.module(
 	"../../../../src/modules/construction-planning/budget-control/budget-control.service",
 	() => ({
-		budgetControlService: { apply, replaceSourceImpact },
+		budgetControlService: { apply, replaceSourceImpact, reverse, reject },
 	}),
 );
 
@@ -109,7 +115,16 @@ mock.module(
 	() => ({
 		measurementCoverageService: {
 			hasCoveragesForWorkMeasurement: mock(async () => false),
+			syncAcceptedWorkMeasurement: mock(async () => undefined),
 		},
+	}),
+);
+
+mock.module(
+	"../../../../src/modules/construction-planning/measurement-acceptance-effects",
+	() => ({
+		applyWorkMeasurementAcceptance: mock(async () => undefined),
+		reverseWorkMeasurementAcceptance: mock(async () => undefined),
 	}),
 );
 
@@ -142,10 +157,16 @@ mock.module(
 
 mock.module("../../../../src/lib/transaction-retry", () => ({
 	withSerializableRetry: async (operation: (tx: unknown) => Promise<unknown>) =>
-		operation({}),
+		operation({
+			workMeasurement: {
+				findFirst: workMeasurementFindFirst,
+			},
+		}),
 }));
 
-mock.module("../../../../src/lib/prisma", () => ({ prisma: {} }));
+mock.module("../../../../src/lib/prisma", () => ({
+	prisma: { approvalRequest: { findFirst: mock(async () => null) } },
+}));
 mock.module("../../../../src/lib/audit-writer", () => ({
 	writeAudit: mock(async () => undefined),
 }));
@@ -157,7 +178,7 @@ mock.module("../../../../src/modules/governance/approval.service", () => ({
 }));
 
 describe("WorkMeasurementService quantity-first flow", () => {
-	it("derives fields and creates an approved budget consumption", async () => {
+	it("derives fields and creates a draft without financial effects", async () => {
 		const { WorkMeasurementService } = await import(
 			"../../../../src/modules/construction-planning/work-measurement.service"
 		);
@@ -192,27 +213,19 @@ describe("WorkMeasurementService quantity-first flow", () => {
 						accumulatedPercentage: 25,
 					}),
 				],
+				status: "RASCUNHO",
 			}),
 			expect.anything(),
 		);
-		expect(apply).toHaveBeenCalledWith(
-			"owner-1",
-			"work-1",
-			expect.objectContaining({
-				sourceType: "WORK_MEASUREMENT",
-				allocations: [{ budgetItemId: "budget-item-1", quantity: 5 }],
-				allowPending: false,
-			}),
-			expect.anything(),
-			expect.anything(),
-		);
+		expect(apply).not.toHaveBeenCalled();
 		expect(result.items[0]).toMatchObject({
 			measuredValue: 500,
-			impactStatus: "APPROVED",
+			impactStatus: "PENDING_APPROVAL",
 		});
 	});
 
-	it("replaces the prior source impact during update", async () => {
+	it("does not create an impact while updating a draft", async () => {
+		replaceSourceImpact.mockClear();
 		const { WorkMeasurementService } = await import(
 			"../../../../src/modules/construction-planning/work-measurement.service"
 		);
@@ -245,13 +258,39 @@ describe("WorkMeasurementService quantity-first flow", () => {
 			{ userId: "user-1", role: "ADMIN" },
 		);
 
+		expect(replaceSourceImpact).not.toHaveBeenCalled();
+	});
+
+	it("replaces the source impact only when updating an accepted measurement", async () => {
+		const { WorkMeasurementService } = await import(
+			"../../../../src/modules/construction-planning/work-measurement.service"
+		);
+		const service = new WorkMeasurementService({
+			assertWritable: mock(async () => undefined),
+			isWritableBlocked: mock(async () => false),
+		});
+		workMeasurementFindFirst.mockResolvedValueOnce({ status: "ACEITO" });
+		(updateWorkMeasurement as ReturnType<typeof mock>).mockResolvedValueOnce({
+			id: "measurement-1",
+			items: [{ budgetItemId: "budget-item-1", measuredQuantity: 2 }],
+		});
+		replaceSourceImpact.mockClear();
+
+		await service.update(
+			"owner-1",
+			"work-1",
+			"measurement-1",
+			{
+				items: [{ budgetItemId: "budget-item-1", measuredQuantity: 2 }],
+				balanceOverride: false,
+			},
+			{ userId: "user-1", role: "ADMIN" },
+		);
+
 		expect(replaceSourceImpact).toHaveBeenCalledWith(
 			"owner-1",
 			"work-1",
-			expect.objectContaining({
-				sourceType: "WORK_MEASUREMENT",
-				sourceId: "measurement-1",
-			}),
+			expect.objectContaining({ sourceId: "measurement-1" }),
 			expect.anything(),
 			expect.anything(),
 		);
@@ -407,20 +446,14 @@ describe("WorkMeasurementService override (MED-004)", () => {
 		evidenceNote: "Execucao extraordinaria aprovada em reuniao",
 	};
 
-	it("condicao normal: ADMIN com nota de evidencia pode exceder o saldo", async () => {
+	it("condicao normal: ADMIN com nota de evidencia cria um rascunho", async () => {
 		await expect(
 			service().create("owner-1", "work-1", input, {
 				userId: "user-1",
 				role: "ADMIN",
 			}),
 		).resolves.toBeTruthy();
-		expect(apply).toHaveBeenCalledWith(
-			"owner-1",
-			"work-1",
-			expect.objectContaining({ allowPending: true }),
-			expect.anything(),
-			expect.anything(),
-		);
+		expect(apply).not.toHaveBeenCalled();
 	});
 
 	it("ausencia de permissao: GERENTE nao pode executar override (403)", async () => {
@@ -490,6 +523,7 @@ describe("WorkMeasurementService override (MED-004)", () => {
 	});
 
 	it("sobreposicao: atualizacao com itens e override ADMIN valida nota e aplica", async () => {
+		replaceSourceImpact.mockClear();
 		const repository = await import(
 			"../../../../src/modules/construction-planning/work-measurement.repository"
 		);
@@ -517,15 +551,6 @@ describe("WorkMeasurementService override (MED-004)", () => {
 				{ userId: "user-1", role: "ADMIN" },
 			),
 		).resolves.toBeTruthy();
-		expect(replaceSourceImpact).toHaveBeenCalledWith(
-			"owner-1",
-			"work-1",
-			expect.objectContaining({
-				sourceType: "WORK_MEASUREMENT",
-				sourceId: "measurement-1",
-			}),
-			expect.anything(),
-			expect.anything(),
-		);
+		expect(replaceSourceImpact).not.toHaveBeenCalled();
 	});
 });

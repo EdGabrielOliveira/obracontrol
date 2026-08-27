@@ -15,7 +15,14 @@ export const dashboardSearchSchema = z.object({
 	workIds: z.string().optional(),
 	q: z.string().max(100).optional(),
 	status: z
-		.enum(["NOT_STARTED", "IN_PROGRESS", "DONE", "SUSPENDED", "IGNORED"])
+		.enum([
+			"DRAFT",
+			"NOT_STARTED",
+			"IN_PROGRESS",
+			"DONE",
+			"SUSPENDED",
+			"IGNORED",
+		])
 		.optional(),
 });
 

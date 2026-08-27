@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/atoms/page-header";
 import { SupplierProfileForm } from "@/components/organisms/suppliers/supplier-profile-form";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
 	type SupplierFormValues,
 	supplierFormSchema,

@@ -152,6 +152,7 @@ function RouteComponent() {
 				: undefined,
 			areaM2: formData.areaM2 ? Number(formData.areaM2) : undefined,
 			responsibleName: formData.responsibleName || undefined,
+			operationalStatus: formData.operationalStatus,
 			structuredAddress: formData.structuredAddress,
 		});
 	};
@@ -194,6 +195,7 @@ function RouteComponent() {
 							plannedEnd: work.plannedEnd ?? undefined,
 							areaM2: work.areaM2 ?? undefined,
 							responsibleName: work.responsibleName ?? undefined,
+							operationalStatus: work.operationalStatus ?? "NOT_STARTED",
 							structuredAddress: work.structuredAddress,
 						}}
 						onSubmit={handleSubmit}
@@ -220,11 +222,7 @@ function RouteComponent() {
 				</TabsContent>
 
 				<TabsContent value="relatorios">
-					<WorkReportsTab
-						workId={workId}
-						asOfDate={search.asOfDate}
-						onAsOfDateChange={(asOfDate) => updateSearch({ asOfDate })}
-					/>
+					<WorkReportsTab workId={workId} asOfDate={search.asOfDate} />
 				</TabsContent>
 			</Tabs>
 

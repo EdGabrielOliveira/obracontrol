@@ -82,6 +82,7 @@ import { Route as AppObrasWorkIdContratosRequestIdAprovacaoIndexRouteImport } fr
 import { Route as AppObrasWorkIdContratosRequestIdComparativoIndexRouteImport } from './routes/app/obras/$workId/contratos/$requestId/comparativo/index'
 import { Route as AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRouteImport } from './routes/app/obras/$workId/medicoes/$measurementId/relatorio/index'
 import { Route as AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRouteImport } from './routes/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/index'
+import { Route as AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRouteImport } from './routes/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
 import { Route as AppObrasWorkIdContratosContractIdMedicoesMapaIndexRouteImport } from './routes/app/obras/$workId/contratos/$contractId/medicoes/mapa/index'
 
 const IndexRoute = IndexRouteImport.update({
@@ -495,6 +496,12 @@ const AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute =
       getParentRoute: () => AppObrasWorkIdRouteRoute,
     } as any,
   )
+const AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute =
+  AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRouteImport.update({
+    id: '/contratos/$contractId/medicoes/$measurementId/edit',
+    path: '/contratos/$contractId/medicoes/$measurementId/edit',
+    getParentRoute: () => AppObrasWorkIdRouteRoute,
+  } as any)
 const AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute =
   AppObrasWorkIdContratosContractIdMedicoesMapaIndexRouteImport.update({
     id: '/contratos/$contractId/medicoes/mapa/',
@@ -575,6 +582,7 @@ export interface FileRoutesByFullPath {
   '/app/obras/$workId/contratos/$requestId/aprovacao/': typeof AppObrasWorkIdContratosRequestIdAprovacaoIndexRoute
   '/app/obras/$workId/contratos/$requestId/comparativo/': typeof AppObrasWorkIdContratosRequestIdComparativoIndexRoute
   '/app/obras/$workId/medicoes/$measurementId/relatorio/': typeof AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute
+  '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/mapa/': typeof AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute
 }
@@ -649,6 +657,7 @@ export interface FileRoutesByTo {
   '/app/obras/$workId/contratos/$requestId/aprovacao': typeof AppObrasWorkIdContratosRequestIdAprovacaoIndexRoute
   '/app/obras/$workId/contratos/$requestId/comparativo': typeof AppObrasWorkIdContratosRequestIdComparativoIndexRoute
   '/app/obras/$workId/medicoes/$measurementId/relatorio': typeof AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute
+  '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/mapa': typeof AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute
 }
@@ -726,6 +735,7 @@ export interface FileRoutesById {
   '/app/obras/$workId/contratos/$requestId/aprovacao/': typeof AppObrasWorkIdContratosRequestIdAprovacaoIndexRoute
   '/app/obras/$workId/contratos/$requestId/comparativo/': typeof AppObrasWorkIdContratosRequestIdComparativoIndexRoute
   '/app/obras/$workId/medicoes/$measurementId/relatorio/': typeof AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute
+  '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/': typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute
   '/app/obras/$workId/contratos/$contractId/medicoes/mapa/': typeof AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute
 }
@@ -804,6 +814,7 @@ export interface FileRouteTypes {
     | '/app/obras/$workId/contratos/$requestId/aprovacao/'
     | '/app/obras/$workId/contratos/$requestId/comparativo/'
     | '/app/obras/$workId/medicoes/$measurementId/relatorio/'
+    | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
     | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/'
     | '/app/obras/$workId/contratos/$contractId/medicoes/mapa/'
   fileRoutesByTo: FileRoutesByTo
@@ -878,6 +889,7 @@ export interface FileRouteTypes {
     | '/app/obras/$workId/contratos/$requestId/aprovacao'
     | '/app/obras/$workId/contratos/$requestId/comparativo'
     | '/app/obras/$workId/medicoes/$measurementId/relatorio'
+    | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
     | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId'
     | '/app/obras/$workId/contratos/$contractId/medicoes/mapa'
   id:
@@ -954,6 +966,7 @@ export interface FileRouteTypes {
     | '/app/obras/$workId/contratos/$requestId/aprovacao/'
     | '/app/obras/$workId/contratos/$requestId/comparativo/'
     | '/app/obras/$workId/medicoes/$measurementId/relatorio/'
+    | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
     | '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/'
     | '/app/obras/$workId/contratos/$contractId/medicoes/mapa/'
   fileRoutesById: FileRoutesById
@@ -1479,6 +1492,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRouteImport
       parentRoute: typeof AppObrasWorkIdRouteRoute
     }
+    '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit': {
+      id: '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
+      path: '/contratos/$contractId/medicoes/$measurementId/edit'
+      fullPath: '/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit'
+      preLoaderRoute: typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRouteImport
+      parentRoute: typeof AppObrasWorkIdRouteRoute
+    }
     '/app/obras/$workId/contratos/$contractId/medicoes/mapa/': {
       id: '/app/obras/$workId/contratos/$contractId/medicoes/mapa/'
       path: '/contratos/$contractId/medicoes/mapa'
@@ -1523,6 +1543,7 @@ interface AppObrasWorkIdRouteRouteChildren {
   AppObrasWorkIdContratosRequestIdAprovacaoIndexRoute: typeof AppObrasWorkIdContratosRequestIdAprovacaoIndexRoute
   AppObrasWorkIdContratosRequestIdComparativoIndexRoute: typeof AppObrasWorkIdContratosRequestIdComparativoIndexRoute
   AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute: typeof AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute
+  AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute: typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute
   AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute: typeof AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute
   AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute: typeof AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute
 }
@@ -1573,6 +1594,8 @@ const AppObrasWorkIdRouteRouteChildren: AppObrasWorkIdRouteRouteChildren = {
     AppObrasWorkIdContratosRequestIdComparativoIndexRoute,
   AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute:
     AppObrasWorkIdMedicoesMeasurementIdRelatorioIndexRoute,
+  AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute:
+    AppObrasWorkIdContratosContractIdMedicoesMeasurementIdEditRoute,
   AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute:
     AppObrasWorkIdContratosContractIdMedicoesMeasurementIdIndexRoute,
   AppObrasWorkIdContratosContractIdMedicoesMapaIndexRoute:

@@ -276,7 +276,7 @@ export async function generateContractMeasurementPdf(
 		throw new ConstructionError("NOT_FOUND", "Medicao nao encontrada", 404);
 	}
 
-	const { measurement, totals } = detail;
+	const { measurement } = detail;
 	const contractLabel = `${detail.contract.code} - ${detail.contract.supplierName}`;
 
 	const flatItems = flattenServiceItems(detail.serviceTree);
@@ -303,13 +303,9 @@ export async function generateContractMeasurementPdf(
 			y -= 28;
 
 			const columns: TableColumn[] = [
-				{ label: "Serviço", width: 170, align: "left" },
-				{ label: "Qtd Medida", width: 65, align: "right" },
-				{ label: "Valor Medido", width: 95, align: "right" },
-				{ label: "% Medido", width: 65, align: "right" },
-				{ label: "Qtd Acum.", width: 65, align: "right" },
-				{ label: "Valor Acum.", width: 95, align: "right" },
-				{ label: "% Acum.", width: 65, align: "right" },
+				{ label: "Serviço", width: 260, align: "left" },
+				{ label: "Qtd Medida", width: 90, align: "right" },
+				{ label: "% Referente", width: 90, align: "right" },
 			];
 
 			drawTableHeader(page, font, boldFont, MARGIN + TABLE_MARGIN, y, columns);
@@ -348,106 +344,14 @@ export async function generateContractMeasurementPdf(
 					[
 						truncateText(item.description, 40),
 						formatNumber(item.measuredCurrent.quantity),
-						fmtCurrency(item.measuredCurrent.value),
 						formatPct(item.measuredCurrent.percentage / 100),
-						formatNumber(item.measuredAccumulated.quantity),
-						fmtCurrency(item.measuredAccumulated.value),
-						formatPct(item.measuredAccumulated.percentage / 100),
 					],
 					i,
 				);
 				y -= 22;
 			}
 
-			y -= 12;
-
-			const totalWidth = columns.reduce((s, c) => s + c.width, 0);
-			drawSummaryLine(
-				page,
-				font,
-				boldFont,
-				MARGIN + TABLE_MARGIN,
-				y,
-				"Total Medido (Atual)",
-				fmtCurrency(totals.measuredCurrent),
-				totalWidth,
-			);
-			y -= 22;
-			drawSummaryLine(
-				page,
-				font,
-				boldFont,
-				MARGIN + TABLE_MARGIN,
-				y,
-				"Total Medido (Acumulado)",
-				fmtCurrency(totals.measuredAccumulated),
-				totalWidth,
-			);
-			y -= 22;
-
-			const discountValue = Number(measurement.discountValue ?? 0);
-			const retentionValue = Number(measurement.retentionValue ?? 0);
-
-			if (discountValue > 0 || retentionValue > 0) {
-				y -= 8;
-				drawYAxis(page, boldFont, y, "Descontos e Retenções");
-				y -= 28;
-
-				const financialColumns: TableColumn[] = [
-					{ label: "Descrição", width: 350, align: "left" },
-					{ label: "Valor", width: 150, align: "right" },
-				];
-				drawTableHeader(
-					page,
-					font,
-					boldFont,
-					MARGIN + TABLE_MARGIN,
-					y,
-					financialColumns,
-				);
-				y -= 24;
-
-				let rowIdx = 0;
-				if (discountValue > 0) {
-					drawTableRow(
-						page,
-						font,
-						MARGIN + TABLE_MARGIN,
-						y,
-						financialColumns,
-						["Desconto", fmtCurrency(discountValue)],
-						rowIdx++,
-					);
-					y -= 22;
-				}
-				if (retentionValue > 0) {
-					drawTableRow(
-						page,
-						font,
-						MARGIN + TABLE_MARGIN,
-						y,
-						financialColumns,
-						["Retenção", fmtCurrency(retentionValue)],
-						rowIdx++,
-					);
-					y -= 22;
-				}
-
-				const netValue =
-					totals.measuredCurrent - discountValue - retentionValue;
-				y -= 8;
-				drawSummaryLine(
-					page,
-					font,
-					boldFont,
-					MARGIN + TABLE_MARGIN,
-					y,
-					"Valor Líquido",
-					fmtCurrency(netValue),
-					financialColumns.reduce((s, c) => s + c.width, 0),
-				);
-				y -= 36;
-			}
+			y -= 24;
 
 			if (measurement.notes) {
 				y -= 8;

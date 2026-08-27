@@ -642,6 +642,78 @@ describe("parseWorkbook", () => {
 			expect(parsed.actualCostRows).toHaveLength(0);
 		});
 
+		it("rejects a measurement workbook without the real measurement fields", () => {
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(
+				workbook,
+				XLSX.utils.aoa_to_sheet([
+					["Código", "Descrição", "Valor"],
+					["A-1", "Documento sem vínculo", 100],
+				]),
+				"Medicoes Obra",
+			);
+
+			const parsed = parseWorkbookByKind(
+				toBytes(workbook),
+				"sem-vinculo.xlsx",
+				"medicao-obra",
+			);
+			const validation = validateWorkbookByKind(parsed, "medicao-obra", {
+				measurementBudgetIndexes: new Set(["1.1"]),
+			});
+
+			expect(validation.valid).toBe(false);
+			expect(validation.errors).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						code: "MISSING_REQUIRED_COLUMN",
+						field: "Índice",
+					}),
+					expect.objectContaining({
+						code: "MISSING_REQUIRED_COLUMN",
+						field: "Data da medição",
+					}),
+					expect.objectContaining({
+						code: "MISSING_REQUIRED_COLUMN",
+						field: "Percentual medido acumulado",
+					}),
+				]),
+			);
+		});
+
+		it("rejects a measurement workbook with no rows to import", () => {
+			const workbook = XLSX.utils.book_new();
+			XLSX.utils.book_append_sheet(
+				workbook,
+				XLSX.utils.aoa_to_sheet([
+					[
+						"Índice",
+						"Nome do item",
+						"Data da medição",
+						"Percentual medido acumulado",
+					],
+				]),
+				"Medicoes Obra",
+			);
+
+			const parsed = parseWorkbookByKind(
+				toBytes(workbook),
+				"sem-linhas.xlsx",
+				"medicao-obra",
+			);
+			const validation = validateWorkbookByKind(parsed, "medicao-obra", {
+				measurementBudgetIndexes: new Set(["1.1"]),
+			});
+
+			expect(validation.valid).toBe(false);
+			expect(validation.errors).toContainEqual(
+				expect.objectContaining({
+					code: "NO_DATA",
+					field: "Medicoes Obra",
+				}),
+			);
+		});
+
 		it("custos kind only parses actual cost sheets", () => {
 			const parsed = parseWorkbookByKind(
 				toBytes(makeFullWorkbook()),
@@ -1108,9 +1180,14 @@ describe("parse-back smoke per workbook kind", () => {
 		it(`${kind}: template gera, XLSX le, parser e validator consomem sem crash`, () => {
 			const def = WORKBOOK_DEFINITIONS[kind];
 			const bytes = buildWorkbookTemplate(kind);
+			const expectedSheetNames = def.sheets.map((sheet) =>
+				kind === "medicao-obra" && sheet.name === "Medicoes Obra"
+					? "Medições de Obra"
+					: sheet.name,
+			);
 
 			const workbook = XLSX.read(bytes, { type: "buffer" });
-			expect(workbook.SheetNames).toEqual(def.sheets.map((s) => s.name));
+			expect(workbook.SheetNames).toEqual(expectedSheetNames);
 
 			const parsed = parseWorkbookByKind(bytes, def.filename, kind);
 			expect(parsed.sheetNames).toEqual(workbook.SheetNames);

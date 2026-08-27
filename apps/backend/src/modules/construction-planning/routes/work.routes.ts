@@ -56,6 +56,15 @@ function parseStructuredAddress(
 
 const scheduleService = new ConstructionScheduleService(repository);
 
+const workOperationalStatusSchema = t.Union([
+	t.Literal("NOT_STARTED"),
+	t.Literal("DRAFT"),
+	t.Literal("IN_PROGRESS"),
+	t.Literal("DONE"),
+	t.Literal("SUSPENDED"),
+	t.Literal("IGNORED"),
+]);
+
 function assertStructuralRole(role: string | null | undefined): void {
 	if (normalizeRole(role) === "SUPERVISOR") {
 		throw new ConstructionError(
@@ -228,6 +237,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					plannedEnd: body.plannedEnd,
 					areaM2: body.areaM2,
 					responsibleName: body.responsibleName?.trim() || undefined,
+					operationalStatus: body.operationalStatus,
+					statusReason: body.statusReason,
 				},
 			)) as {
 				id: string;
@@ -273,6 +284,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				plannedEnd: t.Optional(t.String()),
 				areaM2: t.Optional(t.Number()),
 				responsibleName: t.Optional(t.String()),
+				operationalStatus: t.Optional(workOperationalStatusSchema),
+				statusReason: t.Optional(t.String({ maxLength: 1000 })),
 			}),
 			detail: { tags: ["Works"] },
 		},
@@ -312,6 +325,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				plannedEnd: body.plannedEnd,
 				areaM2: body.areaM2,
 				responsibleName: body.responsibleName?.trim() || undefined,
+				operationalStatus: body.operationalStatus,
+				statusReason: body.statusReason,
 				creationIdempotencyKey: idempotencyKey,
 			})) as {
 				id: string;
@@ -386,6 +401,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				plannedEnd: t.Optional(t.String()),
 				areaM2: t.Optional(t.Number()),
 				responsibleName: t.Optional(t.String()),
+				operationalStatus: t.Optional(workOperationalStatusSchema),
+				statusReason: t.Optional(t.String({ maxLength: 1000 })),
 				file: t.Optional(t.MaybeEmpty(t.File())),
 			}),
 			detail: {
@@ -409,7 +426,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				body.areaM2 === undefined &&
 				body.responsibleName === undefined &&
 				body.plannedStart === undefined &&
-				body.plannedEnd === undefined
+				body.plannedEnd === undefined &&
+				body.operationalStatus === undefined
 			) {
 				throw new ConstructionError(
 					"NO_FIELDS",
@@ -424,16 +442,38 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				scope.resourceOwnerId,
 				params.workId,
 				body,
+				{ userId: user.id, role: user.role },
 			);
-			auditService.log({
+			const statusChanged =
+				body.operationalStatus !== undefined &&
+				(old?.operationalStatus ?? "NOT_STARTED") !== result.operationalStatus;
+			await auditService.log({
 				userId: user.id,
 				ownerId: scope.resourceOwnerId,
-				action: "UPDATE",
+				action: statusChanged ? "STATUS_CHANGED" : "UPDATE",
 				entityType: "WORK",
 				entityId: params.workId,
 				entityDescription: `Obra ${result.code} - ${result.name}`,
-				previousState: old as unknown as Record<string, unknown>,
-				newState: result as unknown as Record<string, unknown>,
+				previousState: statusChanged
+					? {
+							operationalStatus: old?.operationalStatus ?? "NOT_STARTED",
+							statusReason: old?.statusReason ?? null,
+						}
+					: (old as unknown as Record<string, unknown>),
+				newState: statusChanged
+					? {
+							operationalStatus: result.operationalStatus,
+							statusReason: result.statusReason ?? null,
+						}
+					: (result as unknown as Record<string, unknown>),
+				metadata: statusChanged
+					? {
+							statusField: "operationalStatus",
+							fromStatus: old?.operationalStatus ?? "NOT_STARTED",
+							toStatus: result.operationalStatus,
+							reason: result.statusReason ?? null,
+						}
+					: undefined,
 			});
 			return result;
 		},
@@ -463,6 +503,8 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				responsibleName: t.Optional(t.String()),
 				plannedStart: t.Optional(t.String()),
 				plannedEnd: t.Optional(t.String()),
+				operationalStatus: t.Optional(workOperationalStatusSchema),
+				statusReason: t.Optional(t.String({ maxLength: 1000 })),
 			}),
 			detail: { tags: ["Works"] },
 		},

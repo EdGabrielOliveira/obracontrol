@@ -165,20 +165,12 @@ export const contractMeasurementRoutes = new Elysia({
 			body: t.Object({
 				number: t.Optional(t.Number()),
 				date: t.String(),
-				title: t.Optional(t.String()),
-				discountValue: t.Optional(t.Number()),
-				retentionValue: t.Optional(t.Number()),
-				taxValue: t.Optional(t.Number()),
+				title: t.String(),
 				notes: t.Optional(t.String()),
 				items: t.Array(
 					t.Object({
 						serviceId: t.String(),
-						measuredQuantity: t.Optional(t.Number()),
-						measuredValue: t.Optional(t.Number()),
-						measuredPercentage: t.Optional(t.Number()),
-						accumulatedQuantity: t.Optional(t.Number()),
-						accumulatedValue: t.Optional(t.Number()),
-						accumulatedPercentage: t.Optional(t.Number()),
+						measuredQuantity: t.Number(),
 					}),
 				),
 			}),
@@ -201,24 +193,42 @@ export const contractMeasurementRoutes = new Elysia({
 			body: t.Object({
 				title: t.Optional(t.String()),
 				date: t.Optional(t.String()),
-				discountValue: t.Optional(t.Number()),
-				retentionValue: t.Optional(t.Number()),
-				taxValue: t.Optional(t.Number()),
 				notes: t.Optional(t.String()),
 				items: t.Optional(
 					t.Array(
 						t.Object({
 							id: t.Optional(t.String()),
 							serviceId: t.String(),
-							measuredQuantity: t.Optional(t.Number()),
-							measuredValue: t.Optional(t.Number()),
-							measuredPercentage: t.Optional(t.Number()),
-							accumulatedQuantity: t.Optional(t.Number()),
-							accumulatedValue: t.Optional(t.Number()),
-							accumulatedPercentage: t.Optional(t.Number()),
+							measuredQuantity: t.Number(),
 						}),
 					),
 				),
+			}),
+			detail: { tags: ["Contract Measurements"] },
+		},
+	)
+	.patch(
+		"/measurements/:mId/status",
+		async ({ params, body, user, scope }) => {
+			return contractMeasurementService.setMeasurementStatus(
+				scope.resourceOwnerId,
+				params.contractId,
+				params.mId,
+				body.status,
+				body.reason,
+				normalizeMeasurementRole(user.role),
+				user.id,
+			);
+		},
+		{
+			body: t.Object({
+				status: t.Union([
+					t.Literal("RASCUNHO"),
+					t.Literal("ACEITO"),
+					t.Literal("RECUSADO"),
+					t.Literal("ARQUIVADO"),
+				]),
+				reason: t.Optional(t.Union([t.String(), t.Null()])),
 			}),
 			detail: { tags: ["Contract Measurements"] },
 		},
@@ -542,6 +552,9 @@ export const contractMeasurementRoutes = new Elysia({
 							retentionValue: measurement.retentionValue,
 							taxValue: measurement.taxValue,
 							notes: measurement.notes ?? null,
+							status: "ACEITO",
+							statusReason: "Importado e validado",
+							statusChangedAt: new Date(),
 						},
 					});
 					await tx.contractMeasurementItem.createMany({

@@ -4,7 +4,10 @@ import { Fragment, useState } from "react";
 import { EmptyState } from "@/atoms/empty-state";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
-import { Badge } from "@/components/ui/badge";
+import {
+	APPROVAL_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -40,15 +43,6 @@ export const APPROVAL_ACTION_LABELS: Record<string, string> = {
 	CONTRACT_CREATE: "Criar contrato",
 	CONTRACT_UPDATE: "Editar contrato",
 	SUPPLIER_CREATE: "Cadastrar fornecedor",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-	PENDING: "Pendente",
-	APPROVED: "Aprovada",
-	REJECTED: "Rejeitada",
-	CONFLICTED: "Conflitada",
-	CANCELLED: "Cancelada",
-	EXECUTED: "Executada",
 };
 
 const APPROVER_LABELS: Record<string, string> = {
@@ -227,9 +221,10 @@ export function ApprovalsTab({
 											</div>
 										) : (
 											<div className="flex flex-col items-end gap-1">
-												<Badge variant="secondary">
-													{STATUS_LABELS[row.status] ?? row.status}
-												</Badge>
+												<StatusBadge
+													status={row.status}
+													map={APPROVAL_STATUS_MAP}
+												/>
 												{row.decisionReason && (
 													<span className="text-xs text-muted-foreground">
 														{row.decisionReason}

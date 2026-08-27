@@ -26,6 +26,7 @@ import type {
 	ImportActualCostRow,
 	UpdateActualCostInput,
 } from "../schema";
+import { normalizeWorkOperationalStatus } from "../works/work-operational-status";
 
 function assertFutureCostPaymentStatus(
 	costType: string | undefined,
@@ -163,7 +164,19 @@ export class ConstructionManualEntryService {
 		workId: string,
 		input: CreateMeasurementInput,
 	) {
-		await this.getWorkOrThrow(ownerId, workId);
+		const work = await this.getWorkOrThrow(ownerId, workId);
+		const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+		if (
+			workStatus === "SUSPENDED" ||
+			workStatus === "DONE" ||
+			workStatus === "IGNORED"
+		) {
+			throw new ConstructionError(
+				"WORK_NOT_ACCEPTING_ENTRIES",
+				"A obra suspensa, concluida ou arquivada nao aceita novos custos",
+				422,
+			);
+		}
 		await this.assertWritable(ownerId, workId, "WORK_MEASUREMENTS");
 		return this.repository.createMeasurement(ownerId, workId, null, input);
 	}
@@ -173,7 +186,19 @@ export class ConstructionManualEntryService {
 		workId: string,
 		rows: CreateMeasurementInput[],
 	) {
-		await this.getWorkOrThrow(ownerId, workId);
+		const work = await this.getWorkOrThrow(ownerId, workId);
+		const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+		if (
+			workStatus === "SUSPENDED" ||
+			workStatus === "DONE" ||
+			workStatus === "IGNORED"
+		) {
+			throw new ConstructionError(
+				"WORK_NOT_ACCEPTING_ENTRIES",
+				"A obra suspensa, concluida ou arquivada nao aceita novas medicoes",
+				422,
+			);
+		}
 		await this.assertWritable(ownerId, workId, "WORK_MEASUREMENTS");
 		return this.repository.importMeasurements(ownerId, workId, rows);
 	}

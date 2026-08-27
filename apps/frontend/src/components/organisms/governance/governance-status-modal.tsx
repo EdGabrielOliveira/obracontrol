@@ -2,6 +2,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getGovernanceRecord, transitionGovernance } from "@/api/governance";
+import {
+	GOVERNANCE_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -12,22 +17,13 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/lib/auth-context";
+import {
+	getGovernanceStatusOptions,
+	governanceTransitionRequiresReason,
+} from "@/lib/governance-status";
 import type { GovernanceRecord, GovernanceStatus } from "@/types/governance";
 import { getErrorMessage } from "@/utils/api-error";
-
-const labels: Record<GovernanceStatus, string> = {
-	RASCUNHO: "Rascunho",
-	EM_REVISAO: "Em revisão",
-	ACEITO: "Aceito",
-	TRAVADO: "Travado",
-};
-
-const transitions: Record<GovernanceStatus, GovernanceStatus[]> = {
-	RASCUNHO: ["EM_REVISAO"],
-	EM_REVISAO: ["RASCUNHO", "ACEITO"],
-	ACEITO: ["EM_REVISAO", "TRAVADO"],
-	TRAVADO: ["EM_REVISAO"],
-};
 
 export function GovernanceStatusModal({
 	open,
@@ -45,12 +41,15 @@ export function GovernanceStatusModal({
 	onChanged?: (record: GovernanceRecord) => void;
 }) {
 	const queryClient = useQueryClient();
+	const { role } = useAuth();
 	const [target, setTarget] = useState<GovernanceStatus>("RASCUNHO");
 	const [reason, setReason] = useState("");
 	const status = current?.status ?? "RASCUNHO";
-	const options = useMemo(() => transitions[status], [status]);
-	const requiresReason =
-		(status === "ACEITO" || status === "TRAVADO") && target === "EM_REVISAO";
+	const options = useMemo(
+		() => getGovernanceStatusOptions(status, role),
+		[status, role],
+	);
+	const requiresReason = governanceTransitionRequiresReason(status, target);
 
 	useEffect(() => {
 		setTarget(options[0] ?? status);
@@ -79,8 +78,8 @@ export function GovernanceStatusModal({
 				<DialogHeader>
 					<DialogTitle>Alterar status de governança</DialogTitle>
 					<DialogDescription>
-						Status atual: <strong>{labels[status]}</strong>. A alteração é
-						registrada em auditoria.
+						Status atual: <strong>{GOVERNANCE_STATUS_MAP[status].label}</strong>
+						. A alteração é registrada em auditoria.
 					</DialogDescription>
 				</DialogHeader>
 				<label className="grid gap-2 text-sm font-medium">
@@ -94,7 +93,7 @@ export function GovernanceStatusModal({
 					>
 						{options.map((option) => (
 							<option key={option} value={option}>
-								{labels[option]}
+								{GOVERNANCE_STATUS_MAP[option].label}
 							</option>
 						))}
 					</select>
@@ -137,23 +136,26 @@ export function GovernanceStatusBadge({
 }) {
 	if (error) {
 		return (
-			<span className="rounded-full border border-destructive/40 px-2 py-1 text-xs font-medium text-destructive">
-				Governança indisponível
-			</span>
+			<StatusBadge
+				status="ERROR"
+				map={{ ERROR: { label: "Governança indisponível", tone: "danger" } }}
+			/>
 		);
 	}
 	if (loading && !record) {
 		return (
-			<span className="rounded-full border px-2 py-1 text-xs font-medium text-muted-foreground">
-				Carregando governança…
-			</span>
+			<StatusBadge
+				status="LOADING"
+				map={{ LOADING: { label: "Carregando governança…", tone: "neutral" } }}
+			/>
 		);
 	}
 	const status = record?.status ?? "RASCUNHO";
+	const config = GOVERNANCE_STATUS_MAP[status];
 	return (
-		<span className="rounded-full border px-2 py-1 text-xs font-medium">
-			Governança: {labels[status]}
-		</span>
+		<Badge variant="tag" tone={config.tone}>
+			Governança: {config.label}
+		</Badge>
 	);
 }
 

@@ -2,8 +2,6 @@ import { Link } from "@tanstack/react-router";
 import {
 	Building2,
 	Calendar,
-	CalendarClock,
-	CircleDollarSign,
 	Info,
 	MapPin,
 	TrendingDown,

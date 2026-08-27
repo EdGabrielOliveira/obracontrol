@@ -248,7 +248,7 @@ export async function resolveActualCostDependencies(
 
 export const existingEntityLookup: ExistingEntityLookup = {
 	hasBudgetIndexes: (context, indexes) =>
-		importRepository.existingBudgetIndexes(context, indexes),
+		importRepository.existingActiveBudgetIndexes(context, indexes),
 	hasScheduleIndexes: (context, indexes) =>
 		importRepository.existingScheduleIndexes(context, indexes),
 };

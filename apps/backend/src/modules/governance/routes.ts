@@ -19,8 +19,15 @@ const governanceStatus = t.Union([
 	t.Literal("RASCUNHO"),
 	t.Literal("EM_REVISAO"),
 	t.Literal("ACEITO"),
+	t.Literal("ACCEPT"),
 	t.Literal("TRAVADO"),
 ]);
+
+function normalizeGovernanceStatus(
+	status: "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "ACCEPT" | "TRAVADO",
+) {
+	return status === "ACCEPT" ? "ACEITO" : status;
+}
 
 type ResolvedGovernanceScope = {
 	workId: string;
@@ -225,7 +232,7 @@ export const governanceRoutes = new Elysia({
 				userId: user.id,
 				entityType: params.entityType,
 				entityId: params.entityId,
-				toStatus: body.toStatus,
+				toStatus: normalizeGovernanceStatus(body.toStatus),
 				role: normalizeGovernanceRole(resolved.role),
 				reason: body.reason,
 				override: body.override,

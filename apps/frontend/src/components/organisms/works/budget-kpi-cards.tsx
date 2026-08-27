@@ -49,11 +49,6 @@ export function BudgetKpiCards({
 				value={formatCurrency(summary.balanceToMeasure)}
 				tone="warning"
 			/>
-			<KpiCard
-				title="Medições"
-				value={summary.measurementCount}
-				tone="default"
-			/>
 		</KpiGrid>
 	);
 }

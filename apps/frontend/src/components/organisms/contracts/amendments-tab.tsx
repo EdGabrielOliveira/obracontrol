@@ -6,6 +6,10 @@ import { z } from "zod";
 import { ConfirmDialog } from "@/components/atoms/confirm-dialog";
 import { EmptyState } from "@/components/atoms/empty-state";
 import { LoadingSpinner } from "@/components/atoms/loading-spinner";
+import {
+	AMENDMENT_APPROVAL_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import {
 	InputFormField,
@@ -43,13 +47,6 @@ const AMENDMENT_KIND_OPTIONS = [
 	{ id: "ADITIVO", value: "ADITIVO", label: "Aditivo" },
 	{ id: "REDUCAO", value: "REDUCAO", label: "Redução" },
 ] as const;
-
-const APPROVAL_STATUS_LABELS: Record<string, string> = {
-	PENDING_GESTOR: "Aguardando gestor",
-	PENDING_GERENTE: "Aguardando gerente",
-	APPROVED: "Aprovado",
-	REJECTED: "Rejeitado",
-};
 
 export const amendmentFormSchema = z
 	.object({
@@ -235,10 +232,10 @@ export function AmendmentsTab({
 										<TableCell>{formatDate(amendment.date)}</TableCell>
 										<TableCell>{amendment.reason}</TableCell>
 										<TableCell>
-											<Badge variant="outline">
-												{APPROVAL_STATUS_LABELS[amendment.approvalStatus] ??
-													amendment.approvalStatus}
-											</Badge>
+											<StatusBadge
+												status={amendment.approvalStatus}
+												map={AMENDMENT_APPROVAL_STATUS_MAP}
+											/>
 										</TableCell>
 										<TableCell>
 											{amendment.measurementIds?.length ?? 0}

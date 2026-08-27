@@ -81,8 +81,12 @@ export function ServicesTab({
 						: "-"}
 				</span>
 			),
+			meta: { mobileLabel: "Tipo" },
 		}),
-		servicesHelper.accessor("description", { header: "Descrição" }),
+		servicesHelper.accessor("description", {
+			header: "Descrição",
+			meta: { mobileLabel: "Descrição" },
+		}),
 		servicesHelper.accessor("budgetItemId", {
 			header: "Vínculo",
 			cell: (info) => {
@@ -109,16 +113,19 @@ export function ServicesTab({
 					</span>
 				);
 			},
+			meta: { mobileLabel: "Vínculo" },
 		}),
 		servicesHelper.accessor("unit", {
 			header: "Unid. orçamento",
 			cell: (info) =>
 				info.row.original.budgetItem?.unit ?? info.getValue() ?? "-",
+			meta: { mobileLabel: "Unid. orçamento" },
 		}),
 		servicesHelper.accessor("quantity", {
 			header: "Qtd. orçamento",
 			cell: (info) =>
 				info.row.original.budgetItem?.quantity ?? info.getValue() ?? "-",
+			meta: { className: "text-right", mobileLabel: "Qtd. orçamento" },
 		}),
 		servicesHelper.accessor("unitCost", {
 			header: "Custo unit. orçamento",
@@ -126,6 +133,7 @@ export function ServicesTab({
 				const value = info.row.original.budgetItem?.unitCost ?? info.getValue();
 				return value != null ? formatCurrency(Number(value)) : "-";
 			},
+			meta: { className: "text-right", mobileLabel: "Custo unit. orçamento" },
 		}),
 		servicesHelper.accessor("totalCost", {
 			header: "Total orçamento",
@@ -134,11 +142,16 @@ export function ServicesTab({
 					info.row.original.budgetItem?.totalCost ?? info.getValue();
 				return value != null ? formatCurrency(Number(value)) : "-";
 			},
+			meta: {
+				className: "text-right font-medium",
+				mobileLabel: "Total orçamento",
+			},
 		}),
 		servicesHelper.display({
 			id: "contractQuantity",
 			header: "Qtd. contrato",
 			cell: (info) => info.row.original.quantity ?? "-",
+			meta: { className: "text-right", mobileLabel: "Qtd. contrato" },
 		}),
 	];
 
@@ -261,8 +274,9 @@ export function ServicesTab({
 
 				<DataTable
 					columns={servicesColumns}
-					data={services}
+					data={[...services].sort((a, b) => a.sortOrder - b.sortOrder)}
 					searchPlaceholder="Buscar serviços..."
+					pageSize={50}
 					emptyMessage="Nenhum serviço selecionado no orçamento."
 				/>
 			</CardContent>

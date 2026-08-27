@@ -9,9 +9,19 @@ const contractFindUnique = mock(async () => ({
 const costFindUnique = mock(async () => ({
 	work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
 }));
-const measurementFindUnique = mock(async () => ({
-	work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
-}));
+type MeasurementTarget = {
+	work: { id: string; ownerId: string; workspaceId: string };
+};
+const measurementFindUnique = mock(
+	async (): Promise<MeasurementTarget | null> => ({
+		work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+	}),
+);
+const workMeasurementFindUnique = mock(
+	async (): Promise<MeasurementTarget | null> => ({
+		work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+	}),
+);
 const contractMeasurementFindUnique = mock(async () => ({
 	contract: { work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" } },
 }));
@@ -22,6 +32,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		contract: { findUnique: contractFindUnique },
 		constructionActualCost: { findUnique: costFindUnique },
 		constructionMeasurement: { findUnique: measurementFindUnique },
+		workMeasurement: { findUnique: workMeasurementFindUnique },
 		contractMeasurement: { findUnique: contractMeasurementFindUnique },
 	},
 }));
@@ -36,8 +47,12 @@ describe("resolveGovernanceTarget", () => {
 		contractFindUnique.mockClear();
 		costFindUnique.mockClear();
 		measurementFindUnique.mockClear();
+		workMeasurementFindUnique.mockClear();
 		contractMeasurementFindUnique.mockClear();
 		workFindUnique.mockResolvedValue({ id: "work-1" });
+		workMeasurementFindUnique.mockResolvedValue({
+			work: { id: "work-1", ownerId: "owner-1", workspaceId: "ws-1" },
+		});
 	});
 
 	it("resolves work-scoped entity types to the existing work", async () => {
@@ -76,7 +91,7 @@ describe("resolveGovernanceTarget", () => {
 		for (const [entityType, delegate] of [
 			["CONTRACT_STATUS", contractFindUnique],
 			["COST_STATUS", costFindUnique],
-			["WORK_MEASUREMENT_STATUS", measurementFindUnique],
+			["WORK_MEASUREMENT_STATUS", workMeasurementFindUnique],
 			["CONTRACT_MEASUREMENT_STATUS", contractMeasurementFindUnique],
 		] as const) {
 			expect(await resolveGovernanceTarget(entityType, "resource-1")).toEqual({
@@ -86,6 +101,19 @@ describe("resolveGovernanceTarget", () => {
 			});
 			expect(delegate).toHaveBeenCalled();
 		}
+	});
+
+	it("falls back to the legacy construction measurement model", async () => {
+		workMeasurementFindUnique.mockResolvedValue(null);
+
+		expect(
+			await resolveGovernanceTarget("WORK_MEASUREMENT_STATUS", "legacy-1"),
+		).toEqual({
+			workId: "work-1",
+			resourceOwnerId: "owner-1",
+			workspaceId: "ws-1",
+		});
+		expect(measurementFindUnique).toHaveBeenCalled();
 	});
 
 	it("returns null when the work does not exist", async () => {

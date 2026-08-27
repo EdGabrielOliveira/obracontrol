@@ -13,7 +13,7 @@ export type GovernanceRecord = {
 };
 
 export type GovernanceTransitionInput = {
-	toStatus: GovernanceStatus;
+	toStatus: GovernanceStatus | "ACCEPT";
 	reason?: string;
 	override?: boolean;
 };

@@ -6,7 +6,7 @@ export function validateBudgetReference(
 	sheet: string,
 	row: number,
 	index: string | null,
-	indexes: Set<string> | null,
+	indexes: ReadonlySet<string> | null,
 	options?: { code?: string; targetName?: string },
 ): index is string {
 	if (!index) {

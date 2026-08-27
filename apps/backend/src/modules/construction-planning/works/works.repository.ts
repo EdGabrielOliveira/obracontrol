@@ -135,6 +135,7 @@ export function buildWorkSummaries(
 			name: w.name,
 			costCenterId: w.costCenterId,
 			clientName: w.clientName,
+			operationalStatus: w.operationalStatus,
 			plannedStart: w.plannedStart,
 			plannedEnd: w.plannedEnd,
 			baseDate: w.baseDate,
@@ -218,11 +219,16 @@ async function getActiveImportChildren(
 			Promise.all([
 				prisma.constructionMeasurement.findMany({
 					where: {
-						OR: [
-							...measurementConditions,
-							...(activeItemIds.length > 0
-								? [{ budgetItemId: { in: batch } }]
-								: []),
+						AND: [
+							{ status: "ACEITO" },
+							{
+								OR: [
+									...measurementConditions,
+									...(activeItemIds.length > 0
+										? [{ budgetItemId: { in: batch } }]
+										: []),
+								],
+							},
 						],
 					},
 					orderBy: { measurementDate: "asc" },
@@ -337,7 +343,9 @@ async function getBatchActiveImportChildren(
 				})
 			: Promise.resolve([]),
 		prisma.constructionMeasurement.findMany({
-			where: { OR: manualOrActiveWhereConditions },
+			where: {
+				AND: [{ status: "ACEITO" }, { OR: manualOrActiveWhereConditions }],
+			},
 			orderBy: { measurementDate: "asc" },
 		}),
 		prisma.constructionActualCost.findMany({
@@ -391,6 +399,10 @@ export async function createWorkManual(
 		plannedEnd: Date | null;
 		areaM2: number | null;
 		responsibleName: string | null;
+		operationalStatus?: string;
+		statusReason?: string | null;
+		statusChangedAt?: Date | null;
+		statusChangedBy?: string | null;
 		structuredAddress?: StructuredAddressInput | null;
 		creationIdempotencyKey?: string | null;
 	},
@@ -421,6 +433,7 @@ export async function createWorkManual(
 				plannedEnd: data.plannedEnd,
 				areaM2: data.areaM2,
 				responsibleName: data.responsibleName,
+				operationalStatus: data.operationalStatus ?? "DRAFT",
 				structuredAddressId: address?.id ?? null,
 			},
 		});
@@ -515,6 +528,9 @@ export async function listWorks(
 	const where: Prisma.ConstructionWorkWhereInput = {
 		id: { in: accessibleWorkIds },
 	};
+	// Arquivadas são históricas e ficam fora da listagem padrão; o filtro
+	// explícito de status=IGNORED continua permitindo consultá-las.
+	if (status !== "IGNORED") where.operationalStatus = { not: "IGNORED" };
 	if (costCenterId) where.costCenterId = costCenterId;
 	if (q) {
 		where.OR = [{ name: { contains: q } }, { code: { contains: q } }];
@@ -709,6 +725,7 @@ export async function getWorkById(ownerId: string, workId: string) {
 		name: work.name,
 		costCenterId: work.costCenterId,
 		clientName: work.clientName,
+		operationalStatus: work.operationalStatus,
 		plannedStart: work.plannedStart,
 		plannedEnd: work.plannedEnd,
 		baseDate: work.baseDate,
@@ -740,6 +757,10 @@ export async function updateWork(
 		clientName?: string;
 		areaM2?: number;
 		responsibleName?: string;
+		operationalStatus?: string;
+		statusReason?: string;
+		statusChangedBy?: string;
+		expectedOperationalStatus?: string;
 		plannedStart?: string;
 		plannedEnd?: string;
 		structuredAddress?: StructuredAddressInput | null;
@@ -757,8 +778,13 @@ export async function updateWork(
 
 	const updateData: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(data)) {
-		if (value !== undefined && key !== "plannedStart" && key !== "plannedEnd") {
-			updateData[key] = value || null;
+		if (
+			value !== undefined &&
+			key !== "plannedStart" &&
+			key !== "plannedEnd" &&
+			key !== "expectedOperationalStatus"
+		) {
+			updateData[key] = value === "" ? null : value;
 		}
 	}
 	if (data.plannedStart !== undefined)
@@ -767,6 +793,12 @@ export async function updateWork(
 			: null;
 	if (data.plannedEnd !== undefined)
 		updateData.plannedEnd = data.plannedEnd ? new Date(data.plannedEnd) : null;
+	if (data.statusReason !== undefined)
+		updateData.statusReason = data.statusReason?.trim() || null;
+	if (data.operationalStatus !== undefined) {
+		updateData.statusChangedAt = new Date();
+		updateData.statusChangedBy = data.statusChangedBy ?? null;
+	}
 	if (data.structuredAddress !== undefined) {
 		if (data.structuredAddress) {
 			const address = await prisma.address.create({
@@ -776,6 +808,18 @@ export async function updateWork(
 		} else {
 			updateData.structuredAddressId = null;
 		}
+	}
+
+	if (data.expectedOperationalStatus !== undefined) {
+		const updated = await prisma.constructionWork.updateMany({
+			where: {
+				id: workId,
+				operationalStatus: data.expectedOperationalStatus,
+			},
+			data: updateData,
+		});
+		if (updated.count === 0) return null;
+		return prisma.constructionWork.findUnique({ where: { id: workId } });
 	}
 
 	return prisma.constructionWork.update({

@@ -53,6 +53,7 @@ export const costRiskSchema = z.enum([
 ]);
 
 export const constructionItemStatusSchema = z.enum([
+	"DRAFT",
 	"NOT_STARTED",
 	"IN_PROGRESS",
 	"DONE",
@@ -67,6 +68,12 @@ export type ConstructionItemStatus = z.infer<
 >;
 
 export type PaymentStatus = "PAID" | "OPEN";
+
+export type MeasurementLifecycleStatus =
+	| "RASCUNHO"
+	| "ACEITO"
+	| "RECUSADO"
+	| "ARQUIVADO";
 
 export type ApiErrorField = {
 	field?: string;

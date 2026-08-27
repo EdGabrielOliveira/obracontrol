@@ -5,6 +5,7 @@ import { prisma } from "../../lib/prisma";
 import {
 	type GovernanceRole,
 	type GovernanceStatus,
+	isCanonicalGovernanceTransition,
 	validateGovernanceTransition,
 } from "../../lib/status-machine";
 import { auditService } from "../audit/audit.service";
@@ -217,6 +218,10 @@ export class GovernanceService {
 				tx,
 			);
 			const currentStatus = (current?.status ?? "RASCUNHO") as GovernanceStatus;
+			const directTransition = !isCanonicalGovernanceTransition(
+				currentStatus,
+				input.toStatus,
+			);
 			validateGovernanceTransition(currentStatus, input.toStatus, {
 				role: input.role,
 				reason: input.reason,
@@ -288,7 +293,7 @@ export class GovernanceService {
 						status: input.toStatus,
 						version: next.version,
 						reason,
-						override: input.override ?? false,
+						override: directTransition,
 					},
 				},
 				tx,

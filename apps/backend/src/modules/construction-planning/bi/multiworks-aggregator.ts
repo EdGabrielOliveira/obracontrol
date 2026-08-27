@@ -1,5 +1,9 @@
 import type { MultiworksBIResponse } from "../types";
 import {
+	isOperationalPortfolioWork,
+	normalizeWorkOperationalStatus,
+} from "../works/work-operational-status";
+import {
 	computeWorkStatus,
 	type WorkForBIInput,
 	type WorkMetricCalculationResult,
@@ -71,10 +75,22 @@ export async function buildMultiworksAggregate(input: {
 		});
 	}
 
-	let selected = entries;
+	// Obras concluídas ou ignoradas permanecem consultáveis, mas não devem
+	// contaminar os gráficos operacionais do portfólio. Um filtro explícito
+	// continua permitindo analisá-las isoladamente.
+	let selected = entries.filter(
+		({ work }) =>
+			status !== undefined ||
+			isOperationalPortfolioWork(
+				normalizeWorkOperationalStatus(work.operationalStatus),
+			),
+	);
 	if (status) {
 		selected = selected.filter(
-			({ metrics }) => computeWorkStatus(metrics.measuredPercentage) === status,
+			({ work, metrics }) =>
+				(work.operationalStatus
+					? normalizeWorkOperationalStatus(work.operationalStatus)
+					: computeWorkStatus(metrics.measuredPercentage)) === status,
 		);
 	}
 

@@ -82,8 +82,21 @@ const approveBudgetImpact = mock(async () => ({
 	allocations: [],
 }));
 const rejectBudgetImpact = mock(async () => undefined);
+const applyBudgetImpact = mock(async () => ({
+	status: "APPROVED",
+	requiresApproval: false,
+	availableBalance: 0,
+	projectedBalance: 0,
+	allocations: [],
+}));
 const projectApprovedVersion = mock(async () => ({ importId: "import-1" }));
 const workDeleteMany = mock(async () => ({ count: 0 }));
+const activateContractMeasurement = mock(async () => undefined);
+
+mock.module(
+	"../../../../src/modules/construction-planning/measurement-coverage.service",
+	() => ({ measurementCoverageService: { activateContractMeasurement } }),
+);
 
 mock.module(
 	"../../../../src/modules/construction-planning/budget-version-projection.service",
@@ -108,9 +121,17 @@ mock.module(
 	"../../../../src/modules/construction-planning/budget-control/budget-control.service",
 	() => ({
 		budgetControlService: {
+			apply: applyBudgetImpact,
 			approve: approveBudgetImpact,
 			reject: rejectBudgetImpact,
 		},
+	}),
+);
+mock.module(
+	"../../../../src/modules/construction-planning/budget-control/budget-control.repository",
+	() => ({
+		findActiveImpactsBySource: mock(async () => []),
+		getBudgetItemReferences: mock(async () => ({ found: [], missing: [] })),
 	}),
 );
 
@@ -135,6 +156,17 @@ function makeTx() {
 			findFirst: scheduleVersionFindFirst,
 			updateMany: scheduleVersionUpdateMany,
 			update: scheduleVersionUpdate,
+		},
+		workMeasurement: {
+			findFirst: mock(async () => ({
+				id: "measurement-1",
+				ownerId: "owner-1",
+				workId: "work-1",
+				status: "RASCUNHO",
+				date: new Date("2026-08-04"),
+				items: [{ budgetItemId: "budget-item-1", measuredQuantity: 1 }],
+			})),
+			updateMany: mock(async () => ({ count: 1 })),
 		},
 		governanceRecord: { upsert: governanceRecordUpsert },
 		importBatch: {
@@ -236,25 +268,28 @@ describe("approval effect handlers", () => {
 		);
 	});
 
-	it("WORK_MEASUREMENT_APPROVE nao grava lock legado ACEITO (decisao vem do ApprovalRequest)", async () => {
+	it("WORK_MEASUREMENT_APPROVE aplica o efeito e marca a medicao como aceita", async () => {
 		const handler = approvalEffectHandlers.find(
 			(h) => h.action === "WORK_MEASUREMENT_APPROVE",
 		);
 		expect(handler).toBeDefined();
+		const tx = makeTx();
 
 		await handler?.apply({
-			tx: makeTx() as never,
+			tx: tx as never,
 			request: makeRequest({
 				resourceId: "work-1",
-				payloadJson: { workId: "work-1" },
+				payloadJson: { workId: "work-1", measurementId: "measurement-1" },
 			}) as never,
 			decision,
 		});
 
-		const governanceUpsert = makeTx().governanceRecord.upsert as ReturnType<
-			typeof mock
-		>;
-		expect(governanceUpsert).not.toHaveBeenCalled();
+		expect(applyBudgetImpact).toHaveBeenCalled();
+		expect(tx.workMeasurement.updateMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ status: "ACEITO" }),
+			}),
+		);
 	});
 
 	it("applies only the selected valid or warning staged rows", async () => {
@@ -283,7 +318,7 @@ describe("approval effect handlers", () => {
 		});
 
 		expect(applyStagedWorkbook).toHaveBeenCalledWith(
-			"user-1",
+			"owner-1",
 			"work-1",
 			expect.objectContaining({
 				budgetRows: [{ rowNumber: 2, index: "1" }],
@@ -419,6 +454,7 @@ describe("approval effect handlers", () => {
 						code: "CT-001",
 						supplierName: "Fornecedor",
 						contractValue: 1000,
+						objectDescription: "Execução de serviços existentes",
 					},
 					services: [
 						{
@@ -448,6 +484,7 @@ describe("approval effect handlers", () => {
 				contract: expect.objectContaining({
 					code: "CT-001",
 					contractValue: 1000,
+					objectDescription: "Execução de serviços existentes",
 				}),
 				services: [{ budgetItemId: "item-1", quantity: 10, unitCost: 100 }],
 			}),
@@ -460,7 +497,7 @@ describe("approval effect handlers", () => {
 			ownerId: "owner-1",
 			workId: "work-1",
 			code: "CT-001",
-			status: "RASCUNHO",
+			status: "A_INICIAR",
 			title: "Contrato de fundacao",
 			serviceType: null,
 			objectDescription: "Fundacao",
@@ -499,13 +536,17 @@ describe("approval effect handlers", () => {
 		});
 
 		expect(contractUpdate).toHaveBeenCalledWith({
-			where: { id: "contract-1" },
-			data: { status: "EM_ANDAMENTO" },
+			where: { id: "contract-1", status: "A_INICIAR" },
+			data: expect.objectContaining({
+				status: "EM_ANDAMENTO",
+				statusChangedBy: "admin-1",
+				statusChangedAt: expect.any(Date),
+			}),
 		});
 		expect(writeAudit).toHaveBeenCalledWith(
 			expect.anything(),
 			expect.objectContaining({
-				previousState: expect.objectContaining({ status: "RASCUNHO" }),
+				previousState: expect.objectContaining({ status: "A_INICIAR" }),
 				newState: expect.objectContaining({ status: "EM_ANDAMENTO" }),
 			}),
 		);

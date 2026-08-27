@@ -72,6 +72,19 @@ export async function deleteWorkMeasurement(
 	);
 }
 
+export async function updateWorkMeasurementStatus(
+	workId: string,
+	measurementId: string,
+	status: WorkMeasurement["status"],
+	reason?: string | null,
+) {
+	const { data } = await api.patch<WorkMeasurement>(
+		`/construction/works/${workId}/work-measurements/${measurementId}/status`,
+		{ status, reason },
+	);
+	return data;
+}
+
 export async function getWorkMeasurementMap(workId: string) {
 	const { data } = await api.get<WorkMeasurementMapResponse>(
 		`/construction/works/${workId}/work-measurements/map`,

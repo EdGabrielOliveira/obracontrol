@@ -3,9 +3,16 @@ import { z } from "zod";
 export const workMeasurementItemSchema = z
 	.object({
 		budgetItemId: z.string().min(1),
-		measuredQuantity: z.number().finite(),
+		measuredQuantity: z.number().finite().positive().optional(),
+		measuredPercentage: z.number().finite().positive().max(100).optional(),
 	})
-	.strict();
+	.strict()
+	.refine(
+		(item) =>
+			item.measuredQuantity !== undefined ||
+			item.measuredPercentage !== undefined,
+		{ message: "Informe a quantidade ou o percentual medido" },
+	);
 
 export const createWorkMeasurementSchema = z
 	.object({

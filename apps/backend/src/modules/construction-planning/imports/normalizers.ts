@@ -32,9 +32,11 @@ export function normalizePercentage(value: unknown): number | null {
 	if (value === null || value === undefined || value === "") return 0;
 
 	let num: number;
+	let hasExplicitPercentSign = false;
 	if (typeof value === "number") {
 		num = value;
 	} else if (typeof value === "string") {
+		hasExplicitPercentSign = value.includes("%");
 		const cleaned = value.replace(/[^\d.,-]/g, "").replace(",", ".");
 		num = Number(cleaned);
 	} else {
@@ -43,6 +45,7 @@ export function normalizePercentage(value: unknown): number | null {
 
 	if (Number.isNaN(num)) return null;
 
+	if (num >= 0 && num <= 1 && !hasExplicitPercentSign) return num;
 	if (num >= 0 && num <= 100) return num / 100;
 
 	return null;

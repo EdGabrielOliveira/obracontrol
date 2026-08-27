@@ -116,6 +116,31 @@ describe("GovernanceService", () => {
 		});
 	});
 
+	it("allows a gestor to jump status and derives the audit override flag", async () => {
+		const store = createRepository();
+		const audit = createAudit();
+		const service = createService(store.repository, audit.audit);
+
+		await expect(
+			service.transition({
+				ownerId: "owner-1",
+				userId: "gestor-1",
+				entityType: "WORK_MEASUREMENT_STATUS",
+				entityId: "measurement-1",
+				toStatus: "TRAVADO",
+				role: "GESTOR",
+				reason: "Importação validada e encerrada",
+			}),
+		).resolves.toMatchObject({ status: "TRAVADO", version: 1 });
+		expect(audit.entries[0]).toMatchObject({
+			newState: {
+				status: "TRAVADO",
+				reason: "Importação validada e encerrada",
+				override: true,
+			},
+		});
+	});
+
 	it("increments the version and persists the reason when reopening", async () => {
 		const changedAt = new Date("2026-08-01T12:00:00.000Z");
 		const store = createRepository({

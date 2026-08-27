@@ -10,6 +10,12 @@ function governancePath(entityType: string, entityId: string) {
 	return `/governance/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`;
 }
 
+export function toGovernanceApiStatus(
+	status: GovernanceTransitionInput["toStatus"],
+): GovernanceTransitionInput["toStatus"] {
+	return status === "ACEITO" ? "ACCEPT" : status;
+}
+
 // WORK_STATUS was introduced after the original work-scoped governance
 // endpoint. Keeping this fallback makes a rolling frontend/backend deployment
 // safe: an already deployed frontend can still manage a work while an older
@@ -49,10 +55,14 @@ export async function transitionGovernance(
 	entityId: string,
 	input: GovernanceTransitionInput,
 ) {
+	const apiInput = {
+		...input,
+		toStatus: toGovernanceApiStatus(input.toStatus),
+	};
 	try {
 		const { data } = await api.post<GovernanceRecord>(
 			`${governancePath(entityType, entityId)}/transition`,
-			input,
+			apiInput,
 		);
 		return data;
 	} catch (error) {

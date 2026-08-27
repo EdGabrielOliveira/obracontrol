@@ -1,5 +1,6 @@
 import { toNum } from "../../../lib/decimal-utils";
 import { deriveWorkIdentity } from "../identity";
+import { normalizeWorkOperationalStatus } from "../works/work-operational-status";
 import type {
 	DbActualCostInput,
 	DbBaselineScheduleInput,
@@ -27,6 +28,7 @@ function emptyWorkSummary(overrides: {
 	baseDate: string | null;
 	code?: string;
 	clientName?: string | null;
+	operationalStatus?: string | null;
 }) {
 	return {
 		id: overrides.id,
@@ -63,7 +65,10 @@ function emptyWorkSummary(overrides: {
 			hasUnappropriatedActualCosts: false,
 			hasUnappropriatedFutureCosts: false,
 		},
-		computedStatus: "NOT_STARTED" as const,
+		computedStatus: normalizeWorkOperationalStatus(overrides.operationalStatus),
+		operationalStatus: normalizeWorkOperationalStatus(
+			overrides.operationalStatus,
+		),
 		scheduleRisk: "UNAVAILABLE" as const,
 		costRisk: "UNAVAILABLE" as const,
 		lastImportAt: overrides.lastImportAt,
@@ -76,6 +81,7 @@ export function computeWorkSummary(w: {
 	name: string;
 	costCenterId?: string | null;
 	clientName: string | null;
+	operationalStatus?: string | null;
 	plannedStart: Date | null;
 	plannedEnd: Date | null;
 	baseDate: Date | null;
@@ -96,6 +102,7 @@ export function computeWorkSummary(w: {
 			name: identity.name,
 			costCenterId: w.costCenterId,
 			clientName: w.clientName,
+			operationalStatus: w.operationalStatus,
 			plannedStart: w.plannedStart?.toISOString() ?? null,
 			plannedEnd: w.plannedEnd?.toISOString() ?? null,
 			baseDate: identity.baseDate?.toISOString() ?? null,
@@ -131,7 +138,7 @@ export function computeWorkSummary(w: {
 			: undefined,
 	);
 
-	return buildWorkSummary(
+	const summary = buildWorkSummary(
 		{
 			id: w.id,
 			code: identity.code,
@@ -146,4 +153,10 @@ export function computeWorkSummary(w: {
 		},
 		metrics,
 	);
+	const operationalStatus = normalizeWorkOperationalStatus(w.operationalStatus);
+	return {
+		...summary,
+		operationalStatus,
+		computedStatus: operationalStatus,
+	};
 }

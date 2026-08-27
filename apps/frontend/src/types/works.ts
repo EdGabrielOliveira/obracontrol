@@ -35,6 +35,7 @@ export type WorkSummary = {
 	balance: number;
 	dataCompleteness?: DataCompleteness;
 	computedStatus: ConstructionItemStatus;
+	operationalStatus: ConstructionItemStatus;
 	lastImportAt: string;
 	scheduleRisk: ScheduleRisk;
 	costRisk: CostRisk;
@@ -57,7 +58,8 @@ export type WorkDetail = {
 	plannedStart: string | null;
 	plannedEnd: string | null;
 	areaM2: string | null;
-	operationalStatus: string | null;
+	operationalStatus: ConstructionItemStatus | null;
+	statusReason?: string | null;
 	responsibleName: string | null;
 	costCenterId: string | null;
 	organizationId: string | null;
@@ -104,6 +106,8 @@ export type WorkCreateInput = {
 	plannedEnd?: string;
 	areaM2?: number;
 	responsibleName?: string;
+	operationalStatus?: ConstructionItemStatus;
+	statusReason?: string;
 };
 
 export type WorkUpdateInput = Partial<WorkCreateInput>;

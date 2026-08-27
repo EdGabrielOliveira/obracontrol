@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
-import { ArrowUpRight, Trash2 } from "lucide-react";
+import { Pencil, RefreshCw, Trash2 } from "lucide-react";
 import { CONTRACT_STATUS_MAP, StatusBadge } from "@/atoms/status-badge";
 import { DataTable } from "@/components/atoms/data-table";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,10 @@ interface ContractTableProps {
 	contracts: ContractTableRow[];
 	workId: string;
 	onDelete?: (contractId: string) => void;
+	onEdit?: (contract: Contract) => void;
+	canChangeStatus?: boolean;
+	onOpenStatus?: (contract: Contract) => void;
+	isUpdatingStatus?: boolean;
 	onRowClick?: (contract: ContractTableRow) => void;
 	onPendingClick?: (requestId: string) => void;
 }
@@ -42,12 +46,16 @@ export function ContractTable({
 	contracts,
 	workId,
 	onDelete,
+	onEdit,
+	canChangeStatus = false,
+	onOpenStatus,
+	isUpdatingStatus,
 	onRowClick,
 	onPendingClick,
 }: ContractTableProps) {
 	const columns = [
-		helper.accessor("supplierName", {
-			header: "Fornecedor / contrato",
+		helper.accessor("title", {
+			header: "Título",
 			cell: (info) => {
 				const row = info.row.original;
 				return row.isPending ? (
@@ -59,7 +67,7 @@ export function ContractTable({
 							onPendingClick?.(row.requestId);
 						}}
 					>
-						<span>{info.getValue()}</span>
+						<span>{info.getValue() || row.supplierName}</span>
 						<span className="ml-2 text-xs font-normal text-muted-foreground">
 							({row.serviceType})
 						</span>
@@ -71,11 +79,11 @@ export function ContractTable({
 						className="link-navigation"
 						data-no-row-click
 					>
-						{info.getValue()}
+						{info.getValue() || row.supplierName}
 					</Link>
 				);
 			},
-			meta: { mobileLabel: "Fornecedor / contrato" },
+			meta: { mobileLabel: "Título" },
 		}),
 		helper.accessor("contractValue", {
 			header: "Valor",
@@ -113,27 +121,39 @@ export function ContractTable({
 			header: () => <span className="sr-only">Ações</span>,
 			cell: (info) => {
 				const row = info.row.original;
+				if (row.isPending) return null;
 				return (
 					<div className="flex items-center gap-1" data-no-row-click>
-						{row.isPending ? (
+						{canChangeStatus ? (
 							<Button
-								variant="outline"
-								size="sm"
-								onClick={() => onPendingClick?.(row.requestId)}
+								variant="ghost"
+								size="icon"
+								title="Alterar status do contrato"
+								aria-label="Alterar status do contrato"
+								disabled={isUpdatingStatus}
+								onClick={(event) => {
+									event.stopPropagation();
+									onOpenStatus?.(row);
+								}}
 							>
-								Abrir comparação
+								<RefreshCw className="h-4 w-4" />
 							</Button>
-						) : (
-							<Link
-								to="/app/obras/$workId/contratos/$contractId"
-								params={{ workId, contractId: row.id }}
+						) : null}
+						{onEdit ? (
+							<Button
+								variant="ghost"
+								size="icon"
+								title="Editar contrato"
+								aria-label="Editar contrato"
+								onClick={(event) => {
+									event.stopPropagation();
+									onEdit(row);
+								}}
 							>
-								<Button variant="outline" size="sm" className="gap-1">
-									Abrir <ArrowUpRight className="h-3 w-3" />
-								</Button>
-							</Link>
-						)}
-						{onDelete && !row.isPending ? (
+								<Pencil className="h-4 w-4" />
+							</Button>
+						) : null}
+						{onDelete ? (
 							<Button
 								variant="ghost"
 								size="icon"

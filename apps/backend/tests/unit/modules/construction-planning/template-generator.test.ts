@@ -523,11 +523,11 @@ describe("WORKBOOK_DEFINITIONS", () => {
 		expect(sheetNames).toEqual(["Guia", "Orcamento", "Cronograma Original"]);
 	});
 
-	it("medicao-obra has 2 sheets", () => {
+	it("medicao-obra has measurement and budget reference sheets", () => {
 		const sheetNames = WORKBOOK_DEFINITIONS["medicao-obra"].sheets.map(
 			(s) => s.name,
 		);
-		expect(sheetNames).toEqual(["Guia", "Medicoes Obra"]);
+		expect(sheetNames).toEqual(["Guia", "Medicoes Obra", "Orçamento"]);
 	});
 
 	it("medicao-contrato has 5 sheets", () => {
@@ -632,10 +632,15 @@ describe("buildWorkbookTemplate", () => {
 		expect(wb.SheetNames).toEqual(["Guia", "Orcamento", "Cronograma Original"]);
 	});
 
-	it("medicao-obra produces 2 sheets", () => {
+	it("medicao-obra produces measurement and budget reference sheets", () => {
 		const buffer = buildWorkbookTemplate("medicao-obra");
 		const wb = XLSX.read(buffer, { type: "buffer" });
-		expect(wb.SheetNames).toEqual(["Guia", "Medicoes Obra"]);
+		expect(wb.SheetNames).toEqual(["Guia", "Medições de Obra", "Orçamento"]);
+		const budgetRows = XLSX.utils.sheet_to_json(wb.Sheets.Orçamento, {
+			header: 1,
+			defval: "",
+		});
+		expect(budgetRows[1]).toEqual(["Índice", "Nome do item"]);
 	});
 
 	it("medicao-contrato produces 5 sheets", () => {
@@ -1056,15 +1061,57 @@ describe("buildWorkbookTemplate", () => {
 	it("medicao-obra workbook has correct structure for parser", () => {
 		const buffer = buildWorkbookTemplate("medicao-obra");
 		const wb = XLSX.read(buffer, { type: "buffer" });
-		expect(wb.SheetNames).toContain("Medicoes Obra");
+		expect(wb.SheetNames).toContain("Medições de Obra");
 
 		const measurementData = XLSX.utils.sheet_to_json(
-			wb.Sheets["Medicoes Obra"],
+			wb.Sheets["Medições de Obra"],
 			{ header: 1, defval: "" },
 		);
 		expect(measurementData[0]).toBeDefined();
 		const measurementRow0 = measurementData[0] as string[];
 		expect(measurementRow0[0]).toBe("Índice");
+	});
+
+	it("medicao-obra contextual workbook lists budget indexes and item names", () => {
+		const buffer = buildWorkbookTemplate(
+			"medicao-obra",
+			{
+				"Medicoes Obra": [
+					{
+						Índice: "1.1",
+						"Nome do item": "Escavação",
+						"Data da medição": "",
+						"Percentual medido acumulado": "",
+						"Quantidade medida acumulada": "",
+						Observação: "",
+					},
+				],
+			},
+			[{ index: "1.1", description: "Escavação" }],
+		);
+		const wb = XLSX.read(buffer, { type: "buffer" });
+		const rows = XLSX.utils.sheet_to_json(wb.Sheets["Medições de Obra"], {
+			header: 1,
+			defval: "",
+		});
+
+		expect(rows[1]).toEqual(["1.1", "Escavação", "", "", "", ""]);
+
+		const budgetRows = XLSX.utils.sheet_to_json(wb.Sheets.Orçamento, {
+			header: 1,
+			defval: "",
+		});
+		expect(budgetRows[2]).toEqual(["1.1", "Escavação"]);
+
+		const guideRows = XLSX.utils.sheet_to_json(wb.Sheets.Guia, {
+			header: 1,
+			defval: "",
+		}) as unknown[][];
+		const guideText = guideRows.flat().join(" ");
+		expect(guideText).toContain("Medições de Obra");
+		expect(guideText).toContain("somente para consulta");
+		expect(guideText).toContain("30% (ou 0,30)");
+		expect(guideText).not.toContain("Referência do orçamento");
 	});
 
 	it("medicao-contrato workbook has correct structure for parser", () => {

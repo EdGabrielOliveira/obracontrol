@@ -172,7 +172,10 @@ function RouteComponent() {
 					<CardContent className="space-y-4">
 						<div>
 							<p className="text-sm text-muted-foreground">Status</p>
-							<Badge variant="outline">
+							<Badge
+								variant="tag"
+								tone={company.contractTemplateSha256 ? "success" : "neutral"}
+							>
 								{company.contractTemplateSha256
 									? "Cadastrado"
 									: "Não cadastrado"}

@@ -64,6 +64,18 @@ export async function submitBudgetVersion(
 	return data;
 }
 
+export async function archiveBudgetVersion(
+	workId: string,
+	versionId: string,
+	reason?: string,
+) {
+	const { data } = await api.post<BudgetVersionSummary>(
+		`/construction/works/${workId}/budget-versions/${versionId}/archive`,
+		{ reason },
+	);
+	return data;
+}
+
 export async function previewBudgetVersionImport(
 	workId: string,
 	input: { title: string; file: File; idempotencyKey?: string },

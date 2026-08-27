@@ -13,8 +13,13 @@ export const TEMPLATE_FILENAMES: Record<ConstructionTemplateKind, string> = {
 
 export async function downloadTemplate(
 	kind: ConstructionTemplateKind,
+	workId?: string,
 ): Promise<Blob> {
-	const { data } = await api.get<Blob>(`/construction/templates/${kind}`, {
+	const endpoint =
+		kind === "medicao-obra" && workId
+			? `/construction/templates/${kind}/${workId}`
+			: `/construction/templates/${kind}`;
+	const { data } = await api.get<Blob>(endpoint, {
 		responseType: "blob",
 	});
 	return data;

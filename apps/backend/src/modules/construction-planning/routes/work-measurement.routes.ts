@@ -127,9 +127,9 @@ export const workMeasurementRoutes = new Elysia({
 						t.Object(
 							{
 								budgetItemId: t.String(),
-								measuredQuantity: t.Number(),
+								measuredQuantity: t.Optional(t.Number()),
+								measuredPercentage: t.Optional(t.Number()),
 								measuredValue: t.Optional(t.Never()),
-								measuredPercentage: t.Optional(t.Never()),
 								accumulatedQuantity: t.Optional(t.Never()),
 								accumulatedValue: t.Optional(t.Never()),
 								accumulatedPercentage: t.Optional(t.Never()),
@@ -169,9 +169,9 @@ export const workMeasurementRoutes = new Elysia({
 							t.Object(
 								{
 									budgetItemId: t.String(),
-									measuredQuantity: t.Number(),
+									measuredQuantity: t.Optional(t.Number()),
+									measuredPercentage: t.Optional(t.Number()),
 									measuredValue: t.Optional(t.Never()),
-									measuredPercentage: t.Optional(t.Never()),
 									accumulatedQuantity: t.Optional(t.Never()),
 									accumulatedValue: t.Optional(t.Never()),
 									accumulatedPercentage: t.Optional(t.Never()),
@@ -183,6 +183,37 @@ export const workMeasurementRoutes = new Elysia({
 				},
 				{ additionalProperties: false },
 			),
+			detail: { tags: ["Work Measurements"] },
+		},
+	)
+	.patch(
+		"/:id/status",
+		async ({ params, body, user, scope }) => {
+			const status = body.status as
+				| "RASCUNHO"
+				| "ACEITO"
+				| "RECUSADO"
+				| "ARQUIVADO";
+			return workMeasurementService.setStatus(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+				status,
+				body.reason,
+				normalizeGovernanceRole(user.role),
+				user.id,
+			);
+		},
+		{
+			body: t.Object({
+				status: t.Union([
+					t.Literal("RASCUNHO"),
+					t.Literal("ACEITO"),
+					t.Literal("RECUSADO"),
+					t.Literal("ARQUIVADO"),
+				]),
+				reason: t.Optional(t.Union([t.String(), t.Null()])),
+			}),
 			detail: { tags: ["Work Measurements"] },
 		},
 	)

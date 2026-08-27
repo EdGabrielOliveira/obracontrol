@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { QueryClient } from "@tanstack/react-query";
 import { authQueryKeys, clearAuthSessionCache } from "@/lib/query-cache";
+import { createQueryClient } from "@/lib/query-client";
 
 test("removes cached authentication data without clearing domain queries", () => {
 	const client = new QueryClient();
@@ -18,4 +19,18 @@ test("removes cached authentication data without clearing domain queries", () =>
 test("groups every authentication query under one cache key", () => {
 	expect(authQueryKeys.session.slice(0, 1)).toEqual(authQueryKeys.all);
 	expect(authQueryKeys.authorization.slice(0, 1)).toEqual(authQueryKeys.all);
+});
+
+test("invalidates cached queries after every successful mutation", async () => {
+	const client = createQueryClient();
+	const queryKey = ["works", "list"] as const;
+	client.setQueryData(queryKey, { data: [] });
+
+	const mutation = client.getMutationCache().build(client, {
+		mutationFn: async () => ({ id: "work-1" }),
+	});
+
+	await mutation.execute(undefined);
+
+	expect(client.getQueryState(queryKey)?.isInvalidated).toBe(true);
 });

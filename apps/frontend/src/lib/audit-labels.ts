@@ -29,6 +29,11 @@ export const AUDIT_ACTION_LABELS: Record<
 		description: "Registro alterado",
 		severity: "info",
 	},
+	STATUS_CHANGED: {
+		label: "Alteração de status",
+		description: "Status alterado",
+		severity: "warning",
+	},
 	DELETE: {
 		label: "Exclusão",
 		description: "Registro excluído",

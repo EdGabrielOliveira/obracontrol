@@ -19,6 +19,7 @@ function auditDateBoundary(value: string, endOfDay: boolean): Date {
 export type AuditAction =
 	| "CREATE"
 	| "UPDATE"
+	| "STATUS_CHANGED"
 	| "DELETE"
 	| "APPROVE"
 	| "REJECT"

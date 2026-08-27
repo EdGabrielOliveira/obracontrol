@@ -9,6 +9,7 @@ export const CONTRACT_STATUS_OPTIONS = [
 	{ id: "EM_ANDAMENTO", value: "EM_ANDAMENTO", label: "Em andamento" },
 	{ id: "PARALISADO", value: "PARALISADO", label: "Paralisado" },
 	{ id: "FINALIZADO", value: "FINALIZADO", label: "Finalizado" },
+	{ id: "ARQUIVADO", value: "ARQUIVADO", label: "Arquivado" },
 ] as const;
 
 export const DEFAULT_CONTRACT_STATUS = "RASCUNHO" as const;

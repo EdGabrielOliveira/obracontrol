@@ -94,6 +94,9 @@ export function WorkMeasurementCreateForm({
 						selectedItems={items.map((item) => ({
 							budgetItemId: item.budgetItemId,
 							quantity: Number(item.measuredQuantity) || 0,
+							percentage: item.measuredPercentage
+								? Number(item.measuredPercentage)
+								: undefined,
 						}))}
 						onChange={(next) =>
 							replace(
@@ -101,10 +104,15 @@ export function WorkMeasurementCreateForm({
 									budgetItemId: item.budgetItemId,
 									measuredQuantity:
 										item.quantity > 0 ? String(item.quantity) : "",
+									measuredPercentage:
+										item.percentage != null
+											? String(item.percentage)
+											: undefined,
 								})),
 							)
 						}
 						quantityLabel="Qtd. medida"
+						showMeasurementPercentage
 						showUnitPrice
 						editableUnitPrice={false}
 					/>

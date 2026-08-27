@@ -114,8 +114,9 @@ export class ConstructionImportService {
 	private validateWorkbook(
 		workbook: ParsedWorkbook,
 		kind: WorkbookKind,
+		options: { measurementBudgetIndexes?: ReadonlySet<string> } = {},
 	): ValidationResult {
-		const validation = validateWorkbookByKind(workbook, kind);
+		const validation = validateWorkbookByKind(workbook, kind, options);
 		const structural = structuralErrors(validation);
 		if (structural.length > 0) {
 			throw new ConstructionError(
@@ -330,6 +331,7 @@ export class ConstructionImportService {
 				scheduleRevisions: resolved.acceptedRevisions,
 				measurements: resolved.acceptedMeasurements,
 				actualCosts: resolved.acceptedActualCosts,
+				measurementsAsWorkMeasurements: kind === "medicao-obra",
 				rowCount: resolved.importedCount,
 				reprocessOfId,
 				errorSummary,
@@ -502,7 +504,32 @@ export class ConstructionImportService {
 				422,
 			);
 		}
-		const validation = this.validateWorkbook(workbook, kind);
+		const validation = this.validateWorkbook(
+			workbook,
+			kind,
+			kind === "medicao-obra"
+				? {
+						measurementBudgetIndexes:
+							await importRepository.activeBudgetIndexes(ownerId, workId),
+					}
+				: undefined,
+		);
+		if (kind === "medicao-obra") {
+			const readinessErrors =
+				await importRepository.validateWorkMeasurementsFromImport(
+					ownerId,
+					workId,
+					validation.measurements,
+				);
+			if (readinessErrors.length > 0) {
+				throw new ConstructionError(
+					"VALIDATION_FAILED",
+					"Planilha de medicao invalida para o orcamento ativo",
+					422,
+					readinessErrors,
+				);
+			}
+		}
 		const resolved = await this.resolveDependencies(
 			{ ownerId, workId },
 			validation,
@@ -522,6 +549,7 @@ export class ConstructionImportService {
 				scheduleRevisions: resolved.acceptedRevisions,
 				measurements: resolved.acceptedMeasurements,
 				actualCosts: resolved.acceptedActualCosts,
+				measurementsAsWorkMeasurements: kind === "medicao-obra",
 				rowCount: resolved.importedCount,
 				reprocessOfId: options.reprocessOfId ?? null,
 				errorSummary,

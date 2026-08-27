@@ -3,13 +3,17 @@ import { createColumnHelper } from "@tanstack/react-table";
 import {
 	ClipboardList,
 	Download,
-	ExternalLink,
 	Pencil,
 	Plus,
+	RefreshCw,
 	Trash2,
 } from "lucide-react";
 import { DataTable } from "@/components/atoms/data-table";
 import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import {
+	MEASUREMENT_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { ImportBatchAction } from "@/components/organisms/imports/import-batch-action";
 import { Button } from "@/components/ui/button";
@@ -25,6 +29,9 @@ interface WorkMeasurementListTabProps {
 	onCreate: () => void;
 	onEdit: (m: WorkMeasurement) => void;
 	onDelete: (id: string) => void;
+	canChangeStatus?: boolean;
+	onOpenStatus?: (measurement: WorkMeasurement) => void;
+	isUpdatingStatus?: boolean;
 	currentPage: number;
 	totalPages: number;
 	workId: string;
@@ -38,6 +45,9 @@ export function WorkMeasurementListTab({
 	onEdit,
 	onDelete,
 	workId,
+	canChangeStatus = false,
+	onOpenStatus,
+	isUpdatingStatus,
 }: WorkMeasurementListTabProps) {
 	if (measurements.length === 0) {
 		return (
@@ -66,30 +76,6 @@ export function WorkMeasurementListTab({
 	}
 
 	const measurementColumns = [
-		helper.accessor("number", {
-			header: "#",
-			cell: (info) => {
-				const m = info.row.original;
-				return (
-					<Link
-						to="/app/obras/$workId/medicoes/$measurementId"
-						params={{
-							workId,
-							measurementId: m.id,
-						}}
-						className="link-navigation font-mono text-xs"
-					>
-						{info.getValue()}
-					</Link>
-				);
-			},
-			meta: { mobileLabel: "#" },
-		}),
-		helper.accessor("date", {
-			header: "Data",
-			cell: (info) => formatDate(info.getValue()),
-			meta: { mobileLabel: "Data" },
-		}),
 		helper.accessor("title", {
 			header: "Título",
 			cell: (info) => {
@@ -118,6 +104,27 @@ export function WorkMeasurementListTab({
 			),
 			meta: { mobileLabel: "Valor" },
 		}),
+		helper.accessor("date", {
+			header: "Data",
+			cell: (info) => formatDate(info.getValue()),
+			meta: { mobileLabel: "Data" },
+		}),
+		helper.display({
+			id: "status",
+			header: "Status",
+			cell: (info) => {
+				const status = info.row.original.status ?? "RASCUNHO";
+				return (
+					<div className="flex flex-wrap gap-1">
+						<StatusBadge status={status} map={MEASUREMENT_STATUS_MAP} />
+						{info.row.original.approvalStatus === "PENDING_APPROVAL" ? (
+							<StatusBadge status="PENDING_APPROVAL" />
+						) : null}
+					</div>
+				);
+			},
+			meta: { mobileLabel: "Status" },
+		}),
 		helper.display({
 			id: "actions",
 			header: () => <span className="sr-only">Ações</span>,
@@ -128,18 +135,21 @@ export function WorkMeasurementListTab({
 						className="flex items-center justify-end gap-1"
 						data-no-row-click
 					>
-						<Button variant="outline" size="xs" asChild>
-							<Link
-								to="/app/obras/$workId/medicoes/$measurementId"
-								params={{
-									workId,
-									measurementId: m.id,
+						{canChangeStatus ? (
+							<Button
+								variant="ghost"
+								size="icon"
+								title="Alterar status da medição"
+								aria-label="Alterar status da medição"
+								disabled={isUpdatingStatus}
+								onClick={(e) => {
+									e.stopPropagation();
+									onOpenStatus?.(m);
 								}}
 							>
-								<ExternalLink className="h-3 w-3" />
-								Ver detalhe
-							</Link>
-						</Button>
+								<RefreshCw className="h-4 w-4" />
+							</Button>
+						) : null}
 						<Button
 							variant="ghost"
 							size="icon"

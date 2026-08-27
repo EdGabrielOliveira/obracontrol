@@ -8,6 +8,11 @@ export type MeasurementWarning = {
 };
 
 export type MeasurementApprovalStatus = "APPROVED" | "PENDING_APPROVAL";
+export type MeasurementLifecycleStatus =
+	| "RASCUNHO"
+	| "ACEITO"
+	| "RECUSADO"
+	| "ARQUIVADO";
 
 export type WorkMeasurement = {
 	id: string;
@@ -28,6 +33,8 @@ export type WorkMeasurement = {
 
 	createdByName?: string | null;
 	createdAt: string;
+	status: MeasurementLifecycleStatus;
+	statusReason?: string | null;
 
 	approvalStatus?: MeasurementApprovalStatus;
 	approvalRequestId?: string | null;
@@ -213,6 +220,7 @@ export type CreateMeasurementInput = {
 	items: Array<{
 		budgetItemId: string;
 		measuredQuantity: number;
+		measuredPercentage?: number;
 	}>;
 	balanceOverride?: boolean;
 	evidenceNote?: string;

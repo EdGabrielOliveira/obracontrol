@@ -271,6 +271,7 @@ export async function getBudgetItemDetail(
 				},
 			},
 			workMeasurementItems: {
+				where: { measurement: { status: "ACEITO" } },
 				include: {
 					measurement: {
 						select: {

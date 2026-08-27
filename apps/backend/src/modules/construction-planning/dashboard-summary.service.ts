@@ -4,6 +4,7 @@ import {
 	getAccessibleOrgIds,
 } from "../../lib/scope-access";
 import { computeWorkSummary } from "./bi/work-summary";
+import { normalizeWorkOperationalStatus } from "./works/work-operational-status";
 import { getAllWorksWithItems } from "./works/works.repository";
 
 export async function getDashboardSummary(ownerId: string) {
@@ -33,10 +34,12 @@ export async function getDashboardSummary(ownerId: string) {
 	]);
 
 	const byStatus = {
+		DRAFT: 0,
 		NOT_STARTED: 0,
 		IN_PROGRESS: 0,
 		DONE: 0,
 		SUSPENDED: 0,
+		IGNORED: 0,
 	};
 	let worksAtRisk = 0;
 	for (const work of works) {
@@ -53,7 +56,7 @@ export async function getDashboardSummary(ownerId: string) {
 			lastImportAt: work.imports[0]?.createdAt ?? work.createdAt,
 			activeChildren: work,
 		});
-		const status = summary.computedStatus as keyof typeof byStatus;
+		const status = normalizeWorkOperationalStatus(work.operationalStatus);
 		byStatus[status] += 1;
 		if (summary.scheduleRisk === "BEHIND" || summary.costRisk === "OVER_COST") {
 			worksAtRisk += 1;

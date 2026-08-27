@@ -69,12 +69,24 @@ export async function resolveGovernanceTarget(
 					},
 				});
 			case "WORK_MEASUREMENT_STATUS":
-				return prisma.constructionMeasurement.findUnique({
-					where: { id: entityId },
-					select: {
-						work: { select: { id: true, ownerId: true, workspaceId: true } },
-					},
-				});
+				return (
+					(await prisma.workMeasurement.findUnique({
+						where: { id: entityId },
+						select: {
+							work: {
+								select: { id: true, ownerId: true, workspaceId: true },
+							},
+						},
+					})) ??
+					(await prisma.constructionMeasurement.findUnique({
+						where: { id: entityId },
+						select: {
+							work: {
+								select: { id: true, ownerId: true, workspaceId: true },
+							},
+						},
+					}))
+				);
 			case "CONTRACT_MEASUREMENT_STATUS":
 				return prisma.contractMeasurement.findUnique({
 					where: { id: entityId },

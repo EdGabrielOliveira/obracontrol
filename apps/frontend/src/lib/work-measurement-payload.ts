@@ -10,6 +10,9 @@ export function buildWorkMeasurementPayload(
 		items: values.items.map((item) => ({
 			budgetItemId: item.budgetItemId,
 			measuredQuantity: Number(item.measuredQuantity),
+			...(item.measuredPercentage
+				? { measuredPercentage: Number(item.measuredPercentage) }
+				: {}),
 		})),
 	};
 	if (values.balanceOverride) {

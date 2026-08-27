@@ -1,6 +1,11 @@
 import { ConstructionError } from "../../../lib/errors";
+import { validateStatusTransition } from "../../../lib/status-machine";
 import * as workRepository from "../repository";
 import type { ConstructionWorksFilter } from "../schema";
+import {
+	normalizeWorkOperationalStatus,
+	WORK_OPERATIONAL_TRANSITIONS,
+} from "./work-operational-status";
 
 type WorkResult = Record<string, unknown>;
 type WorkRepository = Omit<
@@ -41,6 +46,8 @@ export type CreateManualWorkInput = {
 	plannedEnd?: string;
 	areaM2?: number;
 	responsibleName?: string;
+	operationalStatus?: string;
+	statusReason?: string;
 	creationIdempotencyKey?: string;
 };
 
@@ -55,6 +62,8 @@ export type UpdateManualWorkInput = {
 	responsibleName?: string;
 	plannedStart?: string;
 	plannedEnd?: string;
+	operationalStatus?: string;
+	statusReason?: string;
 };
 
 export class ConstructionWorkService {
@@ -117,6 +126,10 @@ export class ConstructionWorkService {
 			plannedEnd: input.plannedEnd ? new Date(input.plannedEnd) : null,
 			areaM2: input.areaM2 ?? null,
 			responsibleName: input.responsibleName?.trim() || null,
+			// Toda obra nova nasce como rascunho; a promoção para "não iniciada"
+			// é uma transição operacional explícita posterior.
+			operationalStatus: "DRAFT",
+			statusReason: null,
 			creationIdempotencyKey: input.creationIdempotencyKey ?? null,
 		});
 	}
@@ -133,7 +146,12 @@ export class ConstructionWorkService {
 		return work;
 	}
 
-	async update(ownerId: string, workId: string, input: UpdateManualWorkInput) {
+	async update(
+		ownerId: string,
+		workId: string,
+		input: UpdateManualWorkInput,
+		ctx?: { userId: string; role?: string | null },
+	) {
 		if (
 			!input.code &&
 			!input.name &&
@@ -144,7 +162,8 @@ export class ConstructionWorkService {
 			input.areaM2 === undefined &&
 			input.responsibleName === undefined &&
 			input.plannedStart === undefined &&
-			input.plannedEnd === undefined
+			input.plannedEnd === undefined &&
+			input.operationalStatus === undefined
 		) {
 			throw new ConstructionError(
 				"NO_FIELDS",
@@ -152,8 +171,49 @@ export class ConstructionWorkService {
 				400,
 			);
 		}
+		let expectedOperationalStatus: string | undefined;
+		if (input.operationalStatus !== undefined) {
+			if (ctx?.role === "SUPERVISOR") {
+				throw new ConstructionError(
+					"FORBIDDEN",
+					"Supervisor nao pode alterar o status operacional da obra",
+					403,
+				);
+			}
+			const current = await this.repository.getWorkById(ownerId, workId);
+			if (!current) {
+				throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
+			}
+			const persistedStatus =
+				(
+					current as { operationalStatus?: string | null }
+				).operationalStatus?.trim() || "NOT_STARTED";
+			const currentStatus = normalizeWorkOperationalStatus(persistedStatus);
+			expectedOperationalStatus = persistedStatus;
+			validateStatusTransition(
+				"Obra",
+				WORK_OPERATIONAL_TRANSITIONS,
+				currentStatus,
+				input.operationalStatus,
+			);
+			if (
+				(input.operationalStatus === "SUSPENDED" ||
+					input.operationalStatus === "IGNORED") &&
+				!input.statusReason?.trim()
+			) {
+				throw new ConstructionError(
+					"STATUS_REASON_REQUIRED",
+					"Informe o motivo para suspender ou arquivar a obra",
+					422,
+				);
+			}
+		}
 
-		const result = await this.repository.updateWork(ownerId, workId, input);
+		const result = await this.repository.updateWork(ownerId, workId, {
+			...input,
+			statusChangedBy: ctx?.userId,
+			expectedOperationalStatus,
+		});
 		if (!result) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}

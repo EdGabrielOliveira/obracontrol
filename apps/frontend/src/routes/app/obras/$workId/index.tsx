@@ -12,11 +12,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getWorkAudit } from "@/api/audit";
 import { getWorkBI } from "@/api/bi";
-import {
-	decideApproval,
-	getGovernanceRecord,
-	listPendingApprovals,
-} from "@/api/governance";
+import { decideApproval, listPendingApprovals } from "@/api/governance";
 import { getWorkManagement } from "@/api/management";
 import {
 	auditKeys,
@@ -30,13 +26,11 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
-import {
-	GovernanceStatusBadge,
-	GovernanceStatusModal,
-} from "@/components/organisms/governance/governance-status-modal";
+import { StatusBadge } from "@/components/atoms/status-badge";
 import { AprovacoesSection } from "@/components/organisms/works/approvals-section";
 import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
 import type { AuditFilters } from "@/components/organisms/works/audit-log-table";
+import { WorkOperationalStatusModal } from "@/components/organisms/works/work-operational-status-modal";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
@@ -106,10 +100,6 @@ function RouteComponent() {
 	const [auditPage, setAuditPage] = useState(1);
 	const [auditDetail, setAuditDetail] = useState<AuditLogEntry | null>(null);
 	const [governanceOpen, setGovernanceOpen] = useState(false);
-	const governanceQuery = useQuery({
-		queryKey: governanceKeys.detail("WORK_STATUS", workId),
-		queryFn: () => getGovernanceRecord("WORK_STATUS", workId),
-	});
 
 	const handleAuditFiltersChange = (filters: AuditFilters) => {
 		setAuditFilters(filters);
@@ -223,16 +213,11 @@ function RouteComponent() {
 				description={`Código: ${work.code}`}
 				actions={
 					<>
-						<GovernanceStatusBadge
-							record={governanceQuery.data}
-							loading={governanceQuery.isLoading}
-							error={governanceQuery.isError}
-						/>
+						<StatusBadge status={work.operationalStatus ?? "NOT_STARTED"} />
 						{role !== "SUPERVISOR" && (
 							<Button
 								size="sm"
 								variant="outline"
-								disabled={governanceQuery.isLoading || governanceQuery.isError}
 								onClick={() => setGovernanceOpen(true)}
 							>
 								Alterar status
@@ -249,13 +234,17 @@ function RouteComponent() {
 					</>
 				}
 			/>
-			<GovernanceStatusModal
+			<WorkOperationalStatusModal
 				open={governanceOpen}
 				onOpenChange={setGovernanceOpen}
-				entityType="WORK_STATUS"
-				entityId={workId}
-				current={governanceQuery.data}
-				onChanged={() => governanceQuery.refetch()}
+				workId={workId}
+				currentStatus={work.operationalStatus}
+				onChanged={() => {
+					void queryClient.invalidateQueries({
+						queryKey: workKeys.detail(workId),
+					});
+					void queryClient.invalidateQueries({ queryKey: workKeys.all });
+				}}
 			/>
 			<WorkDetailHeader work={work} />
 			<WorkHub

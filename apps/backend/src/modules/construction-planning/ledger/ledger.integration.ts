@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
 import { ConstructionError } from "../../../lib/errors";
 import { toFiniteNumber } from "../../../lib/number-utils";
@@ -87,14 +88,18 @@ export async function resolveLedgerItemRef(
 	actorId: string,
 	workId: string,
 	budgetItemId: string,
+	tx?: Prisma.TransactionClient,
 ): Promise<{
 	identityId: string;
 	versionItemId: string;
 	operationalBudgetItemId: string | null;
 } | null> {
-	const { found } = await getBudgetItemReferences(actorId, workId, [
-		budgetItemId,
-	]);
+	const { found } = await getBudgetItemReferences(
+		actorId,
+		workId,
+		[budgetItemId],
+		tx,
+	);
 	const reference = found[0];
 	if (!reference) return null;
 	return {

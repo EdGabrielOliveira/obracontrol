@@ -6,6 +6,7 @@ export const contractStatusEnum = z.enum([
 	"EM_ANDAMENTO",
 	"PARALISADO",
 	"FINALIZADO",
+	"ARQUIVADO",
 ]);
 
 export const paymentStatusEnum = z.enum(["EM_ABERTO", "PAGO"]);
@@ -95,6 +96,7 @@ export const updateContractSchema = z.object({
 		.optional()
 		.refine((v) => !v || !Number.isNaN(Date.parse(v)), "Data de fim invalida."),
 	status: contractStatusEnum.optional(),
+	statusReason: z.string().max(1000).optional(),
 });
 
 export const quotationBudgetItemSchema = z.object({
@@ -179,12 +181,9 @@ export const measurementCoverageSchema = z.object({
 
 export const contractMeasurementItemSchema = z.object({
 	serviceId: z.string().min(1),
-	measuredQuantity: z.number().optional(),
-	measuredValue: z.number().optional(),
-	measuredPercentage: z.number().min(0).max(100).optional(),
-	accumulatedQuantity: z.number().optional(),
-	accumulatedValue: z.number().optional(),
-	accumulatedPercentage: z.number().min(0).max(100).optional(),
+	measuredQuantity: z.number().finite().positive("Quantidade deve ser maior que zero"),
+	// Mantido apenas para leitura/importação de medições antigas; o cadastro
+	// simplificado não solicita nem processa coberturas.
 	coverages: z.array(measurementCoverageSchema).optional(),
 });
 
@@ -196,33 +195,21 @@ const measurementDateString = z
 export const createContractMeasurementSchema = z.object({
 	number: z.number().int().min(1).optional(),
 	date: measurementDateString,
-	title: z.string().optional(),
-	discountValue: z.number().optional(),
-	retentionValue: z.number().optional(),
-	taxValue: z.number().optional(),
+	title: z.string().trim().min(1, "Titulo obrigatorio"),
 	notes: z.string().optional(),
 	items: z.array(contractMeasurementItemSchema).min(1),
 });
 
 export const updateContractMeasurementSchema = z.object({
-	title: z.string().optional(),
+	title: z.string().trim().min(1, "Titulo obrigatorio").optional(),
 	date: measurementDateString.optional(),
-	discountValue: z.number().optional(),
-	retentionValue: z.number().optional(),
-	taxValue: z.number().optional(),
 	notes: z.string().optional(),
 	items: z
 		.array(
 			z.object({
 				id: z.string().optional(),
 				serviceId: z.string().min(1),
-				measuredQuantity: z.number().optional(),
-				measuredValue: z.number().optional(),
-				measuredPercentage: z.number().min(0).max(100).optional(),
-				accumulatedQuantity: z.number().optional(),
-				accumulatedValue: z.number().optional(),
-				accumulatedPercentage: z.number().min(0).max(100).optional(),
-				coverages: z.array(measurementCoverageSchema).optional(),
+				measuredQuantity: z.number().finite().positive("Quantidade deve ser maior que zero"),
 			}),
 		)
 		.optional(),
@@ -323,15 +310,43 @@ export type UpdateContractServiceInput = z.infer<
 >;
 export type LinkBudgetInput = z.infer<typeof linkBudgetSchema>;
 
-export type CreateContractMeasurementInput = z.infer<
-	typeof createContractMeasurementSchema
->;
-export type UpdateContractMeasurementInput = z.infer<
-	typeof updateContractMeasurementSchema
->;
-export type ContractMeasurementItemInput = z.infer<
-	typeof contractMeasurementItemSchema
->;
+type LegacyContractMeasurementItemFields = {
+	measuredValue?: number;
+	measuredPercentage?: number;
+	accumulatedQuantity?: number;
+	accumulatedValue?: number;
+	accumulatedPercentage?: number;
+	coverages?: Array<z.infer<typeof measurementCoverageSchema>>;
+};
+
+export type ContractMeasurementItemInput = Omit<
+	z.infer<typeof contractMeasurementItemSchema>,
+	"measuredQuantity"
+> & {
+	measuredQuantity?: number;
+} & LegacyContractMeasurementItemFields;
+export type CreateContractMeasurementInput = Omit<
+	z.infer<typeof createContractMeasurementSchema>,
+	"items"
+> & {
+	items: ContractMeasurementItemInput[];
+	discountValue?: number;
+	retentionValue?: number;
+	taxValue?: number;
+};
+export type UpdateContractMeasurementInput = Omit<
+	z.infer<typeof updateContractMeasurementSchema>,
+	"items"
+> & {
+	items?: Array<
+		ContractMeasurementItemInput & {
+			id?: string;
+		}
+	>;
+	discountValue?: number;
+	retentionValue?: number;
+	taxValue?: number;
+};
 export type MeasurementCoverageInput = z.infer<
 	typeof measurementCoverageSchema
 >;

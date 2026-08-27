@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { validateStatusTransition } from "../../lib/status-machine";
 import { withSerializableRetry } from "../../lib/transaction-retry";
 import { auditService } from "../audit/audit.service";
 import { findActiveImpactsBySource } from "./budget-control/budget-control.repository";
@@ -12,6 +13,7 @@ import type {
 } from "./budget-control/budget-control.types";
 import { withOverflowApproval } from "./budget-control/overflow-approval";
 import * as contractRepository from "./contract.repository";
+import { CONTRACT_TRANSITIONS } from "./contract-status";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
@@ -325,6 +327,24 @@ export class ContractService {
 		);
 		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
+		}
+		if (input.status !== undefined) {
+			validateStatusTransition(
+				"Contrato",
+				CONTRACT_TRANSITIONS,
+				existing.status,
+				input.status,
+			);
+			if (
+				(input.status === "PARALISADO" || input.status === "ARQUIVADO") &&
+				!input.statusReason?.trim()
+			) {
+				throw new ConstructionError(
+					"STATUS_REASON_REQUIRED",
+					"Informe o motivo para suspender ou arquivar o contrato",
+					422,
+				);
+			}
 		}
 		const { submitApproval } = await import("../governance/approval.service");
 		const commandId = `contract-update-${contractId}-${crypto.randomUUID()}`;
@@ -932,6 +952,7 @@ export class ContractService {
 						ownerId,
 						workId,
 						link.budgetItemId,
+						tx,
 					);
 					if (!ref) {
 						throw new ConstructionError(

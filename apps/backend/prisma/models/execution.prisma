@@ -11,7 +11,7 @@ model ConstructionMeasurement {
   measuredPercentageAccumulated Decimal?
   measuredQuantityAccumulated   Decimal?
   measuredValue                 Decimal?
-  status                        String?
+  status                        String   @default("RASCUNHO")
   notes                         String?
   createdAt                     DateTime  @default(now())
   updatedAt                     DateTime  @updatedAt
@@ -120,6 +120,11 @@ model WorkMeasurement {
   evidenceNote    String?
   createdBy       String?
   notes           String?
+  status          String    @default("RASCUNHO")
+  archivedAt      DateTime?
+  archivedBy      String?
+  statusReason    String?
+  statusChangedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

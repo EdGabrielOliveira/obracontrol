@@ -43,6 +43,7 @@ export type WorkMetricInput = {
 	name: string;
 	costCenterId?: string | null;
 	clientName?: string | null;
+	operationalStatus?: string | null;
 	plannedStart: Date | null;
 	plannedEnd: Date | null;
 	baseDate: Date | null;

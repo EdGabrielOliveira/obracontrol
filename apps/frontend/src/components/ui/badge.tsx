@@ -4,6 +4,8 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+export type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger";
+
 const badgeVariants = cva(
 	"inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border border-transparent px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&>svg]:pointer-events-none [&>svg]:size-3",
 	{
@@ -21,11 +23,11 @@ const badgeVariants = cva(
 				tag: "rounded-md px-2 py-0.5 text-xs font-semibold",
 			},
 			tone: {
-				purple: "status-info",
-				orange: "status-warning",
-				green: "status-success",
-				red: "status-danger",
-				amber: "status-warning",
+				neutral: "status-neutral",
+				info: "status-info",
+				success: "status-success",
+				warning: "status-warning",
+				danger: "status-danger",
 			},
 		},
 		defaultVariants: {

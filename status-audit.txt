@@ -1,0 +1,429 @@
+apps/frontend/src\constants\status-options.ts:7:	{ id: "RASCUNHO", value: "RASCUNHO", label: "Rascunho" },
+apps/frontend/src\constants\status-options.ts:12:	{ id: "ARQUIVADO", value: "ARQUIVADO", label: "Arquivado" },
+apps/frontend/src\constants\status-options.ts:15:export const DEFAULT_CONTRACT_STATUS = "RASCUNHO" as const;
+apps/backend/prisma\seed.ts:258:			operationalStatus: work.factor >= 0.8 ? "EM_EXECUCAO" : "PLANEJADA",
+apps/backend/prisma\seed.ts:444:				status: "RASCUNHO",
+apps/backend/prisma\seed.ts:655:			status: work.factor > 0.8 ? "EM_ANDAMENTO" : "RASCUNHO",
+apps/backend/prisma\seed.ts:911:				status: "ACEITO",
+apps/frontend/src\lib\governance-status.ts:5:	"RASCUNHO",
+apps/frontend/src\lib\governance-status.ts:7:	"ACEITO",
+apps/frontend/src\lib\governance-status.ts:15:	RASCUNHO: ["EM_REVISAO"],
+apps/frontend/src\lib\governance-status.ts:16:	EM_REVISAO: ["RASCUNHO", "ACEITO"],
+apps/frontend/src\lib\governance-status.ts:17:	ACEITO: ["EM_REVISAO", "TRAVADO"],
+apps/frontend/src\lib\governance-status.ts:47:		(currentStatus === "ACEITO" || currentStatus === "TRAVADO") &&
+apps/frontend/src\components\atoms\status-badge.tsx:19:	IGNORED: { label: "Arquivado", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:24:	RASCUNHO: { label: "Rascunho", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:29:	ARQUIVADO: { label: "Arquivado", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:42:	RASCUNHO: { label: "Rascunho", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:44:	ACEITO: { label: "Aceito", tone: "success" },
+apps/frontend/src\components\atoms\status-badge.tsx:48:export const MEASUREMENT_STATUS_MAP: StatusMap = {
+apps/frontend/src\components\atoms\status-badge.tsx:49:	RASCUNHO: { label: "Rascunho", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:50:	ACEITO: { label: "Aceito", tone: "success" },
+apps/frontend/src\components\atoms\status-badge.tsx:52:	ARQUIVADO: { label: "Arquivado", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:56:	RASCUNHO: { label: "Rascunho", tone: "neutral" },
+apps/frontend/src\components\atoms\status-badge.tsx:58:	ACEITO: { label: "Aceito", tone: "success" },
+apps/frontend/src\components\atoms\status-badge.tsx:64:	PENDING_APPROVAL: { label: "Aguardando aprovação", tone: "warning" },
+apps/frontend/src\components\atoms\status-badge.tsx:70:	PENDING_APPROVAL: { label: "Aguardando aprovação", tone: "warning" },
+apps/frontend/src\components\atoms\status-badge.tsx:77:	PENDING_APPROVAL: { label: "Em aprovação", tone: "warning" },
+apps/frontend/src\components\atoms\status-badge.tsx:129:	ACEITO: "success",
+apps/frontend/src\components\atoms\status-badge.tsx:183:	PENDING_APPROVAL: "warning",
+apps/frontend/src\api\governance.ts:16:	return status === "ACEITO" ? "ACCEPT" : status;
+apps/frontend/src\api\dashboard.ts:15:			IGNORED: number;
+apps/backend/prisma\models\governance.prisma:6:  status     String   @default("RASCUNHO")
+apps/backend/prisma\models\work.prisma:16:  operationalStatus   String?
+apps/backend/prisma\models\work.prisma:17:  statusReason        String?
+apps/backend/prisma\models\work.prisma:18:  statusChangedAt     DateTime?
+apps/backend/prisma\models\work.prisma:19:  statusChangedBy     String?
+apps/backend/prisma\models\execution.prisma:123:  status          String    @default("RASCUNHO")
+apps/backend/prisma\models\execution.prisma:126:  statusReason    String?
+apps/backend/prisma\models\execution.prisma:127:  statusChangedAt DateTime?
+apps/backend/prisma\models\schedule.prisma:58:  status        String    @default("RASCUNHO")
+apps/backend/prisma\models\contract.prisma:17:  status                    String    @default("RASCUNHO")
+apps/backend/prisma\models\contract.prisma:18:  statusReason              String?
+apps/backend/prisma\models\contract.prisma:19:  statusChangedAt           DateTime?
+apps/backend/prisma\models\contract.prisma:20:  statusChangedBy           String?
+apps/backend/prisma\models\contract.prisma:24:  // contrato RASCUNHO por solicitacao).
+apps/backend/prisma\models\contract.prisma:114:  status          String    @default("RASCUNHO")
+apps/backend/prisma\models\contract.prisma:117:  statusReason    String?
+apps/backend/prisma\models\contract.prisma:118:  statusChangedAt DateTime?
+apps/backend/prisma\models\budget.prisma:65:  status            String    @default("RASCUNHO")
+apps/backend/prisma\models\budget.prisma:73:  // rascunho; somente status ACEITO impacta o saldo oficial.
+apps/backend/prisma\models\ledger.prisma:75:  status      String   @default("RASCUNHO")
+apps/frontend/src\routes\app\index.tsx:364:							<div><p className="text-2xl font-semibold">{summary.works.byStatus.IGNORED}</p><p className="text-xs text-muted-foreground">Arquivadas</p></div>
+apps/frontend/src\schemas\works.ts:28:	operationalStatus: z
+apps/frontend/src\schemas\works.ts:29:		.enum(["DRAFT", "NOT_STARTED", "IN_PROGRESS", "DONE", "SUSPENDED", "IGNORED"])
+apps/frontend/src\schemas\works.ts:31:	statusReason: z.string().max(1000).optional(),
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:1:ALTER TABLE "ConstructionWork" ADD COLUMN "statusReason" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:2:ALTER TABLE "ConstructionWork" ADD COLUMN "statusChangedAt" DATETIME;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:3:ALTER TABLE "ConstructionWork" ADD COLUMN "statusChangedBy" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:5:ALTER TABLE "Contract" ADD COLUMN "statusReason" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:6:ALTER TABLE "Contract" ADD COLUMN "statusChangedAt" DATETIME;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:7:ALTER TABLE "Contract" ADD COLUMN "statusChangedBy" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:9:ALTER TABLE "WorkMeasurement" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'RASCUNHO';
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:12:ALTER TABLE "WorkMeasurement" ADD COLUMN "statusReason" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:13:ALTER TABLE "WorkMeasurement" ADD COLUMN "statusChangedAt" DATETIME;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:15:ALTER TABLE "ContractMeasurement" ADD COLUMN "status" TEXT NOT NULL DEFAULT 'RASCUNHO';
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:18:ALTER TABLE "ContractMeasurement" ADD COLUMN "statusReason" TEXT;
+apps/backend/prisma\migrations\0009_status_lifecycle.sql:19:ALTER TABLE "ContractMeasurement" ADD COLUMN "statusChangedAt" DATETIME;
+apps/frontend/src\schemas\dashboard.ts:18:		.enum(["NOT_STARTED", "IN_PROGRESS", "DONE", "SUSPENDED", "IGNORED"])
+apps/frontend/src\schemas\contracts.ts:5:	"RASCUNHO",
+apps/frontend/src\schemas\contracts.ts:10:	"ARQUIVADO",
+apps/frontend/src\schemas\contracts.ts:93:	statusReason: z.string().max(1000).optional(),
+apps/frontend/src\types\governance.ts:1:export type GovernanceStatus = "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "TRAVADO";
+apps/frontend/src\types\works.ts:3:	ConstructionItemStatus,
+apps/frontend/src\types\works.ts:37:	computedStatus: ConstructionItemStatus;
+apps/frontend/src\types\works.ts:38:	operationalStatus: ConstructionItemStatus;
+apps/frontend/src\types\works.ts:61:	operationalStatus: ConstructionItemStatus | null;
+apps/frontend/src\types\works.ts:62:	statusReason?: string | null;
+apps/frontend/src\types\works.ts:70:	computedStatus: ConstructionItemStatus;
+apps/frontend/src\types\works.ts:94:		computedStatus: ConstructionItemStatus;
+apps/frontend/src\types\works.ts:109:	operationalStatus?: ConstructionItemStatus;
+apps/frontend/src\types\works.ts:110:	statusReason?: string;
+apps/frontend/src\types\works.ts:117:	status?: ConstructionItemStatus;
+apps/frontend/src\components\organisms\works\work-table.tsx:171:		helper.accessor("operationalStatus", {
+apps/frontend/src\types\contracts.ts:1:// ARQUIVADO is accepted from the API for historical contracts.
+apps/frontend/src\types\contracts.ts:3:	| "RASCUNHO"
+apps/frontend/src\types\contracts.ts:8:	| "ARQUIVADO";
+apps/frontend/src\types\contracts.ts:35:	statusReason?: string | null;
+apps/frontend/src\types\contracts.ts:36:	statusChangedAt?: string | null;
+apps/frontend/src\types\contracts.ts:100:> & { statusReason?: string };
+apps/frontend/src\types\contracts.ts:242:	status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+apps/frontend/src\types\contracts.ts:243:	statusReason?: string | null;
+apps/frontend/src\types\contracts.ts:244:	approvalStatus?: "APPROVED" | "PENDING_APPROVAL";
+apps/frontend/src\types\suppliers.ts:3:	| "PENDING_APPROVAL"
+apps/frontend/src\types\suppliers.ts:110:export type WorkSupplierStatus = "PENDING_APPROVAL" | "ACTIVE" | "REVOKED";
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:14:import type { ConstructionItemStatus } from "@/types/shared";
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:17:const options: Array<{ value: ConstructionItemStatus; label: string }> = [
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:23:	{ value: "IGNORED", label: "Arquivada" },
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:36:	currentStatus: ConstructionItemStatus | null | undefined;
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:39:	const [status, setStatus] = useState<ConstructionItemStatus>(
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:52:				operationalStatus: status,
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:53:				statusReason: reason.trim() || undefined,
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:80:							setStatus(event.target.value as ConstructionItemStatus)
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:90:				{status === "SUSPENDED" || status === "IGNORED" ? (
+apps/frontend/src\components\organisms\works\work-operational-status-modal.tsx:108:							(status === "SUSPENDED" || status === "IGNORED") &&
+apps/backend/src\modules\governance\routes.ts:19:	t.Literal("RASCUNHO"),
+apps/backend/src\modules\governance\routes.ts:21:	t.Literal("ACEITO"),
+apps/backend/src\modules\governance\routes.ts:27:	status: "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "ACCEPT" | "TRAVADO",
+apps/backend/src\modules\governance\routes.ts:29:	return status === "ACCEPT" ? "ACEITO" : status;
+apps/frontend/src\types\shared.ts:61:	"IGNORED",
+apps/frontend/src\types\shared.ts:66:export type ConstructionItemStatus = z.infer<
+apps/frontend/src\types\shared.ts:72:export type MeasurementLifecycleStatus = "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+apps/frontend/src\types\budget.ts:80:	operationalStatus: string;
+apps/frontend/src\types\budget.ts:137:	| "PENDING_APPROVAL"
+apps/frontend/src\types\schedule.ts:88:	status: "RASCUNHO" | "VIGENTE";
+apps/frontend/src\types\measurements.ts:10:export type MeasurementApprovalStatus = "APPROVED" | "PENDING_APPROVAL";
+apps/frontend/src\types\measurements.ts:11:export type MeasurementLifecycleStatus = "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+apps/frontend/src\types\measurements.ts:33:	statusReason?: string | null;
+apps/frontend/src\types\measurements.ts:60:	impactStatus?: "APPROVED" | "PENDING_APPROVAL" | null;
+apps/backend/prisma\migrations\0001_init.sql:45:    "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+apps/backend/prisma\migrations\0001_init.sql:158:    "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+apps/backend/prisma\migrations\0001_init.sql:463:    "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+apps/backend/prisma\migrations\0001_init.sql:855:    "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+apps/backend/prisma\migrations\0001_init.sql:1161:    "status" TEXT NOT NULL DEFAULT 'RASCUNHO',
+apps/backend/prisma\migrations\0001_init.sql:1204:    "operationalStatus" TEXT,
+apps/backend/src\modules\governance\governance.service.ts:94:			status: "RASCUNHO",
+apps/backend/src\modules\governance\governance.service.ts:166:			value?.status === "ACEITO" || value?.status === "TRAVADO";
+apps/backend/src\modules\governance\governance.service.ts:192:		return record?.status === "ACEITO" || record?.status === "TRAVADO";
+apps/backend/src\modules\governance\governance.service.ts:220:			const currentStatus = (current?.status ?? "RASCUNHO") as GovernanceStatus;
+apps/frontend/src\types\bi.ts:326:	status: "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "TRAVADO";
+apps/frontend/src\types\bi.ts:348:	| "IGNORED";
+apps/backend/src\modules\governance\governance-target.ts:17:	"WORK_MEASUREMENT_STATUS",
+apps/backend/src\modules\governance\governance-target.ts:18:	"CONTRACT_MEASUREMENT_STATUS",
+apps/backend/src\modules\governance\governance-target.ts:71:			case "WORK_MEASUREMENT_STATUS":
+apps/backend/src\modules\governance\governance-target.ts:90:			case "CONTRACT_MEASUREMENT_STATUS":
+apps/frontend/src\components\organisms\works\work-form.tsx:73:			operationalStatus: "DRAFT",
+apps/frontend/src\components\organisms\works\work-form.tsx:257:						name="operationalStatus"
+apps/frontend/src\components\organisms\works\work-form.tsx:271:									{ id: "IGNORED", value: "IGNORED", label: "Arquivada" },
+apps/frontend/src\components\organisms\works\work-form.tsx:277:						name="statusReason"
+apps/backend/src\modules\governance\approval-effect-handlers.ts:144:			data: { status: "ACEITO", statusReason: "Aprovado pela governança", statusChangedAt: new Date() },
+apps/backend/src\modules\governance\approval-effect-handlers.ts:182:			data: { status: "ACEITO", statusReason: "Aprovado pela governança", statusChangedAt: new Date() },
+apps/backend/src\modules\governance\approval-effect-handlers.ts:518:					| "RASCUNHO"
+apps/backend/src\modules\governance\approval-effect-handlers.ts:523:					| "ARQUIVADO";
+apps/backend/src\modules\governance\approval-effect-handlers.ts:524:				statusReason?: string;
+apps/backend/src\modules\governance\approval-effect-handlers.ts:548:			data.statusChangedAt = new Date();
+apps/backend/src\modules\governance\approval-effect-handlers.ts:549:			data.statusChangedBy = decision.approverId ?? request.actorId;
+apps/backend/src\modules\governance\approval-effect-handlers.ts:551:		if (payload.input.statusReason !== undefined) {
+apps/backend/src\modules\governance\approval-effect-handlers.ts:552:			data.statusReason = payload.input.statusReason.trim() || null;
+apps/backend/src\modules\governance\approval-effect-handlers.ts:553:			data.statusChangedAt = new Date();
+apps/backend/src\modules\governance\approval-effect-handlers.ts:554:			data.statusChangedBy = decision.approverId ?? request.actorId;
+apps/backend/src\modules\governance\approval-effect-handlers.ts:801:				status: "RASCUNHO",
+apps/backend/src\lib\budget-version-adapter.ts:30:	| "PENDING_APPROVAL"
+apps/backend/src\lib\budget-version-adapter.ts:367:// Aditivo: cria uma nova versao em RASCUNHO (nao ativa) a partir da versao
+apps/backend/src\lib\budget-version-adapter.ts:522:					status: "RASCUNHO",
+apps/backend/src\lib\budget-version-adapter.ts:752:					status: "RASCUNHO",
+apps/backend/src\lib\budget-version-adapter.ts:849:	if (status === "ARQUIVADO") return "ARCHIVED";
+apps/backend/src\lib\budget-version-adapter.ts:851:	if (approvalRequestId) return "PENDING_APPROVAL";
+apps/backend/src\lib\budget-version-adapter.ts:1017:	if (version.status === "ARQUIVADO") {
+apps/backend/src\lib\budget-version-adapter.ts:1110:			"BUDGET_VERSION_PENDING_APPROVAL",
+apps/backend/src\lib\budget-version-adapter.ts:1115:	if (version.status === "ARQUIVADO") return serializeVersion(version);
+apps/backend/src\lib\budget-version-adapter.ts:1119:			status: "ARQUIVADO",
+apps/frontend/src\routes\app\obras\new.tsx:52:		operationalStatus: values.operationalStatus,
+apps/backend/src\modules\construction-planning\budget.repository.ts:214:			operationalStatus: work.operationalStatus,
+apps/backend/src\modules\construction-planning\budget-control\overflow-approval.ts:16:				allocation.status === "PENDING_APPROVAL" && allocation.impactId,
+apps/backend/src\modules\construction-planning\budget-control\budget-control.calculator.ts:235:	const status = amount.lte(available) ? "APPROVED" : "PENDING_APPROVAL";
+apps/backend/src\modules\construction-planning\budget-control\budget-control.types.ts:76:	status: "APPROVED" | "PENDING_APPROVAL";
+apps/backend/src\modules\construction-planning\budget-control\budget-control.types.ts:109:	status: "APPROVED" | "PENDING_APPROVAL" | "REJECTED";
+apps/backend/src\modules\construction-planning\budget-control\budget-control.types.ts:116:	status: "APPROVED" | "PENDING_APPROVAL";
+apps/backend/src\modules\construction-planning\budget-control\budget-control.types.ts:144:	| "BUDGET_OPERATION_PENDING_APPROVAL"
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:109:			if (plan.status === "PENDING_APPROVAL") requiresApproval = true;
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:194:					plan.status === "PENDING_APPROVAL" &&
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:273:								: "PENDING_APPROVAL",
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:285:				status: requiresApproval ? "PENDING_APPROVAL" : "APPROVED",
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:695:				effective.status === STATUS_APPROVED ? "APPROVED" : "PENDING_APPROVAL",
+apps/backend/src\modules\construction-planning\budget-control\budget-control.service.ts:709:								: "PENDING_APPROVAL",
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:259:			const work = await prisma.constructionWork.findFirst({ where: { id: linkedWork.workId, ownerId }, select: { operationalStatus: true } });
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:260:			const status = normalizeWorkOperationalStatus(work?.operationalStatus);
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:261:			if (status === "SUSPENDED" || status === "DONE" || status === "IGNORED") {
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:353:						status: ctx.role === "SUPERVISOR" ? "RASCUNHO" : "ACEITO",
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:421:							allocation.status === "PENDING_APPROVAL" &&
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:479:		let approvalStatus: "APPROVED" | "PENDING_APPROVAL" =
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:481:				? "PENDING_APPROVAL"
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:484:			approvalStatus === "PENDING_APPROVAL"
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:498:			approvalStatus = request.status === "PENDING" ? "PENDING_APPROVAL" : "APPROVED";
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:662:		status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO",
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:670:		const currentStatus = (current as { status?: string }).status ?? "RASCUNHO";
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:672:		if ((status === "RECUSADO" || status === "ARQUIVADO") && !reason?.trim()) throw new ConstructionError("STATUS_REASON_REQUIRED", "Motivo obrigatorio para recusar ou arquivar", 422);
+apps/backend/src\modules\construction-planning\contract-measurement.service.ts:673:		if (currentStatus === "ACEITO" && status === "ARQUIVADO") throw new ConstructionError("MEASUREMENT_REQUIRES_REVERSAL", "Estorne a medicao aceita antes de arquivar", 422);
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:381:				status: (input as CreateContractMeasurementInput & { status?: string }).status ?? "RASCUNHO",
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:522:	statusReason?: string | null,
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:528:			statusReason: statusReason ?? null,
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:529:			statusChangedAt: new Date(),
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:530:			archivedAt: status === "ARQUIVADO" ? new Date() : null,
+apps/backend/src\modules\construction-planning\contract-measurement.repository.ts:545:				where: { status: "ACEITO" },
+apps/backend/src\modules\construction-planning\contract-status.ts:7:export const CONTRACT_STATUS_VALUES = [
+apps/backend/src\modules\construction-planning\contract-status.ts:8:	"RASCUNHO",
+apps/backend/src\modules\construction-planning\contract-status.ts:13:	"ARQUIVADO",
+apps/backend/src\modules\construction-planning\contract-status.ts:17:	RASCUNHO: ["A_INICIAR", "ARQUIVADO"],
+apps/backend/src\modules\construction-planning\contract-status.ts:18:	A_INICIAR: ["EM_ANDAMENTO", "PARALISADO", "ARQUIVADO"],
+apps/backend/src\modules\construction-planning\contract-status.ts:19:	EM_ANDAMENTO: ["PARALISADO", "FINALIZADO", "ARQUIVADO"],
+apps/backend/src\modules\construction-planning\contract-status.ts:20:	PARALISADO: ["EM_ANDAMENTO", "FINALIZADO", "ARQUIVADO"],
+apps/backend/src\modules\construction-planning\contract-status.ts:21:	FINALIZADO: ["ARQUIVADO"],
+apps/backend/src\modules\construction-planning\contract-status.ts:22:	ARQUIVADO: ["A_INICIAR", "EM_ANDAMENTO"],
+apps/backend/src\modules\construction-planning\bi\calculations.ts:100:	operationalStatus?: string | null;
+apps/backend/src\modules\construction-planning\bi\calculations.ts:127:		operationalStatus: work.operationalStatus ?? null,
+apps/backend/src\modules\construction-planning\contract-request.service.ts:1123:				status: "RASCUNHO",
+apps/backend/src\modules\construction-planning\contract-request.service.ts:1174:				status: "RASCUNHO",
+apps/backend/src\modules\construction-planning\contract-request.service.ts:1216:		// solicitação defasado, apesar de já apontarem para um contrato RASCUNHO.
+apps/backend/src\modules\construction-planning\contract-request.service.ts:1254:			contract.status !== "RASCUNHO" ||
+apps/backend/src\modules\construction-planning\contract-request-state.ts:4:	"RASCUNHO",
+apps/backend/src\modules\construction-planning\contract-request-state.ts:28:	RASCUNHO: ["CRIADA", "CANCELADA"],
+apps/backend/src\modules\construction-planning\contract-request-state.ts:44:	return legacyContractRequestPhaseMap[status] ?? "RASCUNHO";
+apps/backend/src\modules\construction-planning\contract.repository.ts:378:			status: input.status ?? "RASCUNHO",
+apps/backend/src\modules\construction-planning\contract.repository.ts:391:	statusReason?: string;
+apps/backend/src\modules\construction-planning\contract.repository.ts:414:		"statusReason",
+apps/backend/src\modules\construction-planning\contract.repository.ts:425:	if (input.status !== undefined || input.statusReason !== undefined)
+apps/backend/src\modules\construction-planning\contract.repository.ts:426:		(updateData as Record<string, unknown>).statusChangedAt = new Date();
+apps/backend/src\modules\construction-planning\contract.repository.ts:452:				where: { status: "ACEITO" },
+apps/backend/src\modules\construction-planning\contract.repository.ts:468:		(contract) => contract.status === "RASCUNHO",
+apps/backend/src\modules\construction-planning\contract.repository.ts:606:		status: "ACEITO",
+apps/backend/src\modules\construction-planning\contract.repository.ts:892:			status: "ACEITO",
+apps/backend/src\modules\construction-planning\contract.service.ts:339:				(input.status === "PARALISADO" || input.status === "ARQUIVADO") &&
+apps/backend/src\modules\construction-planning\contract.service.ts:340:				!input.statusReason?.trim()
+apps/backend/src\modules\construction-planning\contract.service.ts:707:							status: "PENDING_APPROVAL" as const,
+apps/backend/src\modules\construction-planning\dashboard-summary.service.ts:42:		IGNORED: 0,
+apps/backend/src\modules\construction-planning\dashboard-summary.service.ts:59:		const status = normalizeWorkOperationalStatus(work.operationalStatus);
+apps/backend/src\modules\construction-planning\contracts\contract-creation.service.ts:206:	const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+apps/backend/src\modules\construction-planning\contracts\contract-creation.service.ts:207:	if (workStatus === "SUSPENDED" || workStatus === "DONE" || workStatus === "IGNORED") {
+apps/backend/src\modules\construction-planning\contracts\contract-creation.service.ts:234:			status: input.contract.status ?? "RASCUNHO",
+apps/backend/src\modules\construction-planning\dto\financial-dto.ts:52:	status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+apps/backend/src\modules\construction-planning\dto\financial-dto.ts:53:	statusReason: string | null;
+apps/backend/src\modules\construction-planning\dto\financial-dto.ts:79:		status: (row.status as WorkMeasurementDto["status"] | undefined) ?? "RASCUNHO",
+apps/backend/src\modules\construction-planning\dto\financial-dto.ts:80:		statusReason: (row.statusReason as string | null) ?? null,
+apps/frontend/src\components\organisms\governance\governance-status-modal.tsx:45:	const [target, setTarget] = useState<GovernanceStatus>("RASCUNHO");
+apps/frontend/src\components\organisms\governance\governance-status-modal.tsx:47:	const status = current?.status ?? "RASCUNHO";
+apps/frontend/src\components\organisms\governance\governance-status-modal.tsx:153:	const status = record?.status ?? "RASCUNHO";
+apps/frontend/src\components\organisms\contracts\contract-form.tsx:145:						name="statusReason"
+apps/backend/src\lib\status-machine.ts:4:	RASCUNHO: ["A_INICIAR", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:5:	A_INICIAR: ["EM_ANDAMENTO", "PARALISADO", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:6:	EM_ANDAMENTO: ["PARALISADO", "FINALIZADO", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:7:	PARALISADO: ["EM_ANDAMENTO", "FINALIZADO", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:8:	FINALIZADO: ["ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:9:	ARQUIVADO: ["A_INICIAR", "EM_ANDAMENTO"],
+apps/backend/src\lib\status-machine.ts:13:	DRAFT: ["NOT_STARTED", "IGNORED"],
+apps/backend/src\lib\status-machine.ts:14:	NOT_STARTED: ["IN_PROGRESS", "SUSPENDED", "IGNORED"],
+apps/backend/src\lib\status-machine.ts:15:	IN_PROGRESS: ["SUSPENDED", "DONE", "IGNORED"],
+apps/backend/src\lib\status-machine.ts:16:	SUSPENDED: ["IN_PROGRESS", "DONE", "IGNORED"],
+apps/backend/src\lib\status-machine.ts:17:	DONE: ["IGNORED"],
+apps/backend/src\lib\status-machine.ts:18:	IGNORED: ["NOT_STARTED", "IN_PROGRESS"],
+apps/backend/src\lib\status-machine.ts:22:	RASCUNHO: ["ACEITO", "RECUSADO", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:23:	ACEITO: ["ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:24:	RECUSADO: ["RASCUNHO", "ARQUIVADO"],
+apps/backend/src\lib\status-machine.ts:25:	ARQUIVADO: ["RASCUNHO"],
+apps/backend/src\lib\status-machine.ts:28:export const BUDGET_VERSION_TRANSITIONS: Record<string, string[]> = {
+apps/backend/src\lib\status-machine.ts:29:	DRAFT: ["PENDING_APPROVAL", "REJECTED", "ARCHIVED"],
+apps/backend/src\lib\status-machine.ts:30:	PENDING_APPROVAL: ["ACTIVE", "REJECTED"],
+apps/backend/src\lib\status-machine.ts:42:export type GovernanceStatus = "RASCUNHO" | "EM_REVISAO" | "ACEITO" | "TRAVADO";
+apps/backend/src\lib\status-machine.ts:50:	RASCUNHO: ["EM_REVISAO"],
+apps/backend/src\lib\status-machine.ts:51:	EM_REVISAO: ["RASCUNHO", "ACEITO"],
+apps/backend/src\lib\status-machine.ts:52:	ACEITO: ["EM_REVISAO", "TRAVADO"],
+apps/backend/src\lib\status-machine.ts:98:		(currentStatus === "ACEITO" || currentStatus === "TRAVADO") &&
+apps/backend/src\modules\construction-planning\bi\metrics-core.ts:46:	operationalStatus?: string | null;
+apps/backend/src\modules\construction-planning\bi\metrics-budget.ts:41:	const isIgnored = item.computedStatus === "IGNORED";
+apps/backend/src\modules\construction-planning\entries\manual-entry-service.ts:168:		const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+apps/backend/src\modules\construction-planning\entries\manual-entry-service.ts:169:		if (workStatus === "SUSPENDED" || workStatus === "DONE" || workStatus === "IGNORED") {
+apps/backend/src\modules\construction-planning\entries\manual-entry-service.ts:198:			"WORK_MEASUREMENT_STATUS",
+apps/backend/src\modules\construction-planning\management.repository.ts:226:			operationalStatus: true,
+apps/backend/src\modules\construction-planning\management.repository.ts:309:			status: work.operationalStatus,
+apps/frontend/src\components\organisms\contracts\contract-request-comparison.tsx:573:								Essa ação criará o contrato RASCUNHO. Confirme somente se o
+apps/backend/src\modules\construction-planning\bi\multiworks-aggregator.ts:85:				normalizeWorkOperationalStatus(work.operationalStatus),
+apps/backend/src\modules\construction-planning\bi\multiworks-aggregator.ts:91:				(work.operationalStatus
+apps/backend/src\modules\construction-planning\bi\multiworks-aggregator.ts:92:					? normalizeWorkOperationalStatus(work.operationalStatus)
+apps/backend/src\modules\construction-planning\bi\monthly-fact.service.ts:138:			status: "RASCUNHO",
+apps/frontend/src\components\organisms\modals\contract-modal.tsx:133:			statusReason: data.statusReason,
+apps/frontend/src\components\organisms\modals\contract-modal.tsx:147:					statusReason: undefined,
+apps/frontend/src\components\organisms\dashboard\dashboard-page.tsx:368:									<SelectItem value="IGNORED">Ignorada</SelectItem>
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:31:	operationalStatus?: string | null;
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:68:		computedStatus: normalizeWorkOperationalStatus(overrides.operationalStatus),
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:69:		operationalStatus: normalizeWorkOperationalStatus(overrides.operationalStatus),
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:82:	operationalStatus?: string | null;
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:103:			operationalStatus: w.operationalStatus,
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:154:	const operationalStatus = normalizeWorkOperationalStatus(w.operationalStatus);
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:157:		operationalStatus,
+apps/backend/src\modules\construction-planning\bi\work-summary.ts:158:		computedStatus: operationalStatus,
+apps/frontend/src\components\organisms\contracts\measurements-tab.tsx:16:import { StatusBadge, MEASUREMENT_STATUS_MAP } from "@/components/atoms/status-badge";
+apps/frontend/src\components\organisms\contracts\measurements-tab.tsx:281:											<StatusBadge status={m.status ?? "RASCUNHO"} map={MEASUREMENT_STATUS_MAP} />
+apps/frontend/src\components\organisms\contracts\measurements-tab.tsx:282:											{m.approvalStatus === "PENDING_APPROVAL" ? (
+apps/frontend/src\components\organisms\contracts\measurements-tab.tsx:283:												<StatusBadge status="PENDING_APPROVAL" />
+apps/backend/src\modules\construction-planning\governance-guard.ts:15:// (ACEITO/TRAVADO bloqueia mutacao). A decisao de efeito (aprovacao de
+apps/backend/src\modules\construction-planning\quotation.service.ts:701:				contract.status !== "RASCUNHO" ||
+apps/backend/src\modules\construction-planning\quotation.service.ts:822:					status: "RASCUNHO",
+apps/backend/src\modules\construction-planning\schema.ts:56:	"IGNORED",
+apps/backend/src\modules\construction-planning\schema.ts:108:export type ConstructionItemStatus = z.infer<typeof constructionItemStatusEnum>;
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\index.tsx:20:import { MEASUREMENT_STATUS_MAP, StatusBadge } from "@/components/atoms/status-badge";
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\index.tsx:81:		queryKey: governanceKeys.detail("WORK_MEASUREMENT_STATUS", measurementId),
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\index.tsx:83:			getGovernanceRecord("WORK_MEASUREMENT_STATUS", measurementId),
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\index.tsx:104:						<StatusBadge status={measurement.status ?? "RASCUNHO"} map={MEASUREMENT_STATUS_MAP} />
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\index.tsx:143:				entityType="WORK_MEASUREMENT_STATUS"
+apps/backend/src\modules\construction-planning\schemas\contract.schema.ts:4:	"RASCUNHO",
+apps/backend/src\modules\construction-planning\schemas\contract.schema.ts:9:	"ARQUIVADO",
+apps/backend/src\modules\construction-planning\schemas\contract.schema.ts:49:		status: contractStatusEnum.optional().default("RASCUNHO"),
+apps/backend/src\modules\construction-planning\schemas\contract.schema.ts:99:	statusReason: z.string().max(1000).optional(),
+apps/backend/src\modules\construction-planning\schedule\schedule-version.service.ts:9:	status: "RASCUNHO" | "VIGENTE";
+apps/backend/src\modules\construction-planning\schedule\schedule-version.service.ts:117:		status: version.status as "RASCUNHO" | "VIGENTE",
+apps/frontend/src\routes\app\obras\$workId\medicoes\$measurementId\edit.tsx:111:								result.approvalStatus === "PENDING_APPROVAL"
+apps/frontend/src\routes\app\obras\$workId\index.tsx:217:							status={work.operationalStatus ?? "NOT_STARTED"}
+apps/frontend/src\routes\app\obras\$workId\index.tsx:243:				currentStatus={work.operationalStatus}
+apps/backend/src\modules\construction-planning\types.ts:28:	operationalStatus: string | null;
+apps/frontend/src\components\organisms\measurements\work-measurement-list-tab.tsx:13:import { StatusBadge, MEASUREMENT_STATUS_MAP } from "@/components/atoms/status-badge";
+apps/frontend/src\components\organisms\measurements\work-measurement-list-tab.tsx:126:				const status = info.row.original.status ?? "RASCUNHO";
+apps/frontend/src\components\organisms\measurements\work-measurement-list-tab.tsx:129:						<StatusBadge status={status} map={MEASUREMENT_STATUS_MAP} />
+apps/frontend/src\components\organisms\measurements\work-measurement-list-tab.tsx:130:						{info.row.original.approvalStatus === "PENDING_APPROVAL" ? (
+apps/frontend/src\components\organisms\measurements\work-measurement-list-tab.tsx:131:							<StatusBadge status="PENDING_APPROVAL" />
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:301:			status: input.status ?? "RASCUNHO",
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:466:	statusReason?: string | null,
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:472:			statusReason: statusReason ?? null,
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:473:			statusChangedAt: new Date(),
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:474:			archivedAt: status === "ARQUIVADO" ? new Date() : null,
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:810:				where: { measurement: { ownerId, workId, status: "ACEITO" } },
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:1040:			where: { ownerId, workId, status: "ACEITO" },
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:1359:			where: { ownerId, workId, status: "ACEITO" },
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:1405:		where: { ownerId, workId, status: "ACEITO" },
+apps/backend/src\modules\construction-planning\work-measurement.repository.ts:1427:		where: { ownerId, workId: { in: workIds }, status: "ACEITO" },
+apps/backend/src\modules\construction-planning\imports\normalized-types.ts:8:	| "IGNORED"
+apps/backend/src\modules\construction-planning\imports\normalized-types.ts:50:	operationalStatus: string | null;
+apps/backend/src\modules\construction-planning\imports\normalized-types.ts:105:	| "RASCUNHO"
+apps/backend/src\modules\construction-planning\imports\normalizers.ts:330:			return "IGNORED";
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:401:				status: "ACEITO",
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:402:				statusReason: "Importado e validado",
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:403:				statusChangedAt: new Date(),
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:415:	"workspaceId" | "statusReason" | "statusChangedAt" | "statusChangedBy"
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:751:				operationalStatus: work.operationalStatus ?? null,
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:867:	if (work.operationalStatus !== null)
+apps/backend/src\modules\construction-planning\imports\import-repository.ts:868:		workData.operationalStatus = work.operationalStatus;
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:1:import type { ConstructionItemStatus } from "../schema";
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:3:const aliases: Record<string, ConstructionItemStatus> = {
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:5:	RASCUNHO: "DRAFT",
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:25:	IGNORED: "IGNORED",
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:26:	ARQUIVADO: "IGNORED",
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:27:	ARQUIVADA: "IGNORED",
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:32:): ConstructionItemStatus {
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:38:	status: ConstructionItemStatus,
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:44:	ConstructionItemStatus,
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:45:	ConstructionItemStatus[]
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:47:	DRAFT: ["NOT_STARTED", "IGNORED"],
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:48:	NOT_STARTED: ["IN_PROGRESS", "SUSPENDED", "IGNORED"],
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:49:	IN_PROGRESS: ["SUSPENDED", "DONE", "IGNORED"],
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:50:	SUSPENDED: ["IN_PROGRESS", "DONE", "IGNORED"],
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:51:	DONE: ["IGNORED"],
+apps/backend/src\modules\construction-planning\works\work-operational-status.ts:52:	IGNORED: ["NOT_STARTED", "IN_PROGRESS"],
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:348:						status: ctx.role === "SUPERVISOR" ? "RASCUNHO" : "ACEITO",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:362:					status: "PENDING_APPROVAL",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:370:						status: "PENDING_APPROVAL",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:478:		const workStatus = normalizeWorkOperationalStatus(work.operationalStatus);
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:479:		if (workStatus === "SUSPENDED" || workStatus === "DONE" || workStatus === "IGNORED") {
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:489:			"WORK_MEASUREMENT_STATUS",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:630:			"WORK_MEASUREMENT_STATUS",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:648:		status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO",
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:661:			"RASCUNHO";
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:663:		if ((status === "RECUSADO" || status === "ARQUIVADO") && !reason?.trim()) {
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:666:		if (currentStatus === "ACEITO" && status === "ARQUIVADO") {
+apps/backend/src\modules\construction-planning\work-measurement.service.ts:669:		await this.governance.assertWritable(ownerId, "WORK_MEASUREMENT_STATUS", measurementId);
+apps/backend/src\modules\construction-planning\imports\parser.ts:161:		operationalStatus: textValue(
+apps/backend/src\modules\construction-planning\imports\parser.ts:603:		operationalStatus: null,
+apps/backend/src\modules\construction-planning\works\work-service.ts:49:	operationalStatus?: string;
+apps/backend/src\modules\construction-planning\works\work-service.ts:50:	statusReason?: string;
+apps/backend/src\modules\construction-planning\works\work-service.ts:65:	operationalStatus?: string;
+apps/backend/src\modules\construction-planning\works\work-service.ts:66:	statusReason?: string;
+apps/backend/src\modules\construction-planning\works\work-service.ts:131:			operationalStatus: "DRAFT",
+apps/backend/src\modules\construction-planning\works\work-service.ts:132:			statusReason: null,
+apps/backend/src\modules\construction-planning\works\work-service.ts:161:			&& input.operationalStatus === undefined
+apps/backend/src\modules\construction-planning\works\work-service.ts:169:		if (input.operationalStatus !== undefined) {
+apps/backend/src\modules\construction-planning\works\work-service.ts:182:				(current as { operationalStatus?: string | null }).operationalStatus,
+apps/backend/src\modules\construction-planning\works\work-service.ts:188:				input.operationalStatus,
+apps/backend/src\modules\construction-planning\works\work-service.ts:191:				(input.operationalStatus === "SUSPENDED" ||
+apps/backend/src\modules\construction-planning\works\work-service.ts:192:					input.operationalStatus === "IGNORED") &&
+apps/backend/src\modules\construction-planning\works\work-service.ts:193:				!input.statusReason?.trim()
+apps/backend/src\modules\construction-planning\works\work-service.ts:205:			statusChangedBy: ctx?.userId,
+apps/backend/src\modules\construction-planning\works\works.repository.ts:138:			operationalStatus: w.operationalStatus,
+apps/backend/src\modules\construction-planning\works\works.repository.ts:395:		operationalStatus?: string;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:396:		statusReason?: string | null;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:397:		statusChangedAt?: Date | null;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:398:		statusChangedBy?: string | null;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:429:			operationalStatus: data.operationalStatus ?? "DRAFT",
+apps/backend/src\modules\construction-planning\works\works.repository.ts:525:	// explícito de status=IGNORED continua permitindo consultá-las.
+apps/backend/src\modules\construction-planning\works\works.repository.ts:526:	if (status !== "IGNORED") where.operationalStatus = { not: "IGNORED" };
+apps/backend/src\modules\construction-planning\works\works.repository.ts:721:		operationalStatus: work.operationalStatus,
+apps/backend/src\modules\construction-planning\works\works.repository.ts:753:		operationalStatus?: string;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:754:		statusReason?: string;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:755:		statusChangedBy?: string;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:783:	if (data.statusReason !== undefined)
+apps/backend/src\modules\construction-planning\works\works.repository.ts:784:		updateData.statusReason = data.statusReason?.trim() || null;
+apps/backend/src\modules\construction-planning\works\works.repository.ts:785:	if (data.operationalStatus !== undefined) {
+apps/backend/src\modules\construction-planning\works\works.repository.ts:786:		updateData.statusChangedAt = new Date();
+apps/backend/src\modules\construction-planning\works\works.repository.ts:787:		updateData.statusChangedBy = data.statusChangedBy ?? null;
+apps/backend/src\modules\construction-planning\imports\validator.ts:111:		operationalStatus: workbook.work?.operationalStatus ?? null,
+apps/backend/src\modules\construction-planning\imports\validator.ts:434:		operationalStatus: workbook.work?.operationalStatus ?? null,
+apps/backend/src\modules\construction-planning\routes\contract.routes.ts:198:				statusReason: t.Optional(t.String({ maxLength: 1000 })),
+apps/backend/src\modules\construction-planning\routes\contract.routes.ts:236:				statusReason: t.Optional(t.String({ maxLength: 1000 })),
+apps/frontend/src\routes\app\obras\$workId\configuracoes\index.tsx:155:			operationalStatus: formData.operationalStatus,
+apps/frontend/src\routes\app\obras\$workId\configuracoes\index.tsx:198:							operationalStatus: work.operationalStatus ?? "NOT_STARTED",
+apps/backend/src\modules\construction-planning\routes\contract-measurement.routes.ts:240:				status: t.Union([t.Literal("RASCUNHO"), t.Literal("ACEITO"), t.Literal("RECUSADO"), t.Literal("ARQUIVADO")]),
+apps/backend/src\modules\construction-planning\routes\contract-measurement.routes.ts:565:							status: "ACEITO",
+apps/backend/src\modules\construction-planning\routes\contract-measurement.routes.ts:566:							statusReason: "Importado e validado",
+apps/backend/src\modules\construction-planning\routes\contract-measurement.routes.ts:567:							statusChangedAt: new Date(),
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\index.tsx:532:					result.approvalStatus === "PENDING_APPROVAL"
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\index.tsx:687:						contract.status === "RASCUNHO" ? (
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\index.tsx:895:				description="O contrato RASCUNHO será removido e a cotação voltará para comparação e negociação. Essa ação só é permitida enquanto não houver medições, pagamentos, documentos ou aditivos cadastrados."
+apps/backend/src\modules\construction-planning\imports\validators\contract-measurement.validator.ts:52:	if (!value) return "RASCUNHO";
+apps/backend/src\modules\construction-planning\imports\validators\contract-measurement.validator.ts:76:	return "RASCUNHO";
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\medicoes\$measurementId\index.tsx:19:import { MEASUREMENT_STATUS_MAP, StatusBadge } from "@/components/atoms/status-badge";
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\medicoes\$measurementId\index.tsx:83:			"CONTRACT_MEASUREMENT_STATUS",
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\medicoes\$measurementId\index.tsx:87:			getGovernanceRecord("CONTRACT_MEASUREMENT_STATUS", measurementId),
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\medicoes\$measurementId\index.tsx:155:						<StatusBadge status={measurement.status ?? "RASCUNHO"} map={MEASUREMENT_STATUS_MAP} />
+apps/frontend/src\routes\app\obras\$workId\contratos\$contractId\medicoes\$measurementId\index.tsx:194:				entityType="CONTRACT_MEASUREMENT_STATUS"
+apps/backend/src\modules\construction-planning\routes\work-measurement.routes.ts:192:			const status = body.status as "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+apps/backend/src\modules\construction-planning\routes\work-measurement.routes.ts:204:				status: t.Union([t.Literal("RASCUNHO"), t.Literal("ACEITO"), t.Literal("RECUSADO"), t.Literal("ARQUIVADO")]),
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:231:					operationalStatus: body.operationalStatus,
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:232:					statusReason: body.statusReason,
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:278:				operationalStatus: t.Optional(
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:285:						t.Literal("IGNORED"),
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:288:				statusReason: t.Optional(t.String({ maxLength: 1000 })),
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:328:				operationalStatus: body.operationalStatus,
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:329:				statusReason: body.statusReason,
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:404:				operationalStatus: t.Optional(
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:411:						t.Literal("IGNORED"),
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:414:				statusReason: t.Optional(t.String({ maxLength: 1000 })),
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:439:				&& body.operationalStatus === undefined
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:494:				operationalStatus: t.Optional(
+apps/backend/src\modules\construction-planning\routes\work.routes.ts:501:						t.Literal("IGNORED"),

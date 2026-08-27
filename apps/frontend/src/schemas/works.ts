@@ -25,6 +25,17 @@ export const workFormSchema = z.object({
 	plannedEnd: z.string().optional(),
 	areaM2: z.string().optional(),
 	responsibleName: z.string().optional(),
+	operationalStatus: z
+		.enum([
+			"DRAFT",
+			"NOT_STARTED",
+			"IN_PROGRESS",
+			"DONE",
+			"SUSPENDED",
+			"IGNORED",
+		])
+		.optional(),
+	statusReason: z.string().max(1000).optional(),
 	structuredAddress: structuredAddressSchema,
 });
 

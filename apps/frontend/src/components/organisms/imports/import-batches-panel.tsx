@@ -2,6 +2,10 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { FolderOpen } from "lucide-react";
 import { DataTable } from "@/components/atoms/data-table";
 import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import {
+	IMPORT_BATCH_STATUS_MAP,
+	StatusBadge,
+} from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { Button } from "@/components/ui/button";
 import type { ImportBatchRecord } from "@/types/import";
@@ -13,15 +17,6 @@ type ImportBatchesPanelProps = {
 	pageSize: number;
 	onPageChange: (page: number) => void;
 	onOpenDetail: (batch: ImportBatchRecord) => void;
-};
-
-const STATUS_LABELS: Record<string, string> = {
-	PARSING: "Analisando",
-	READY: "Aguardando confirmação",
-	PENDING_CONFIRM: "Aguardando aprovação",
-	CONFIRMED: "Confirmada",
-	EXPIRED: "Expirada",
-	FAILED: "Falhou",
 };
 
 const batchColumnHelper = createColumnHelper<ImportBatchRecord>();
@@ -57,7 +52,12 @@ export function ImportBatchesPanel({
 						}),
 						batchColumnHelper.accessor("status", {
 							header: "Status",
-							cell: ({ getValue }) => STATUS_LABELS[getValue()] ?? getValue(),
+							cell: ({ getValue }) => (
+								<StatusBadge
+									status={getValue()}
+									map={IMPORT_BATCH_STATUS_MAP}
+								/>
+							),
 							meta: { mobileLabel: "Status" },
 						}),
 						batchColumnHelper.accessor("rowCount", {

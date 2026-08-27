@@ -149,24 +149,34 @@ export function WorkTable({
 					string,
 					{
 						label: string;
-						variant: "default" | "secondary" | "destructive" | "outline";
+						tone: "neutral" | "info" | "success" | "warning" | "danger";
 					}
 				> = {
-					AHEAD: { label: "Adiantada", variant: "default" },
-					BEHIND: { label: "Atrasada", variant: "destructive" },
-					ON_TRACK: { label: "No prazo", variant: "secondary" },
+					AHEAD: { label: "Adiantada", tone: "success" },
+					BEHIND: { label: "Atrasada", tone: "danger" },
+					ON_TRACK: { label: "No prazo", tone: "success" },
 				};
 				const config = riskConfig[risk] ?? {
 					label: "—",
-					variant: "outline" as const,
+					tone: "neutral" as const,
 				};
-				return <Badge variant={config.variant}>{config.label}</Badge>;
+				return (
+					<Badge variant="tag" tone={config.tone}>
+						{config.label}
+					</Badge>
+				);
 			},
 			meta: { mobileLabel: "Prazo" },
 		}),
-		helper.accessor("computedStatus", {
+		helper.accessor("operationalStatus", {
 			header: "Status",
-			cell: (info) => <StatusBadge status={info.getValue()} />,
+			cell: (info) => (
+				<StatusBadge
+					status={
+						info.getValue() ?? info.row.original.computedStatus ?? "NOT_STARTED"
+					}
+				/>
+			),
 			meta: { mobileLabel: "Status" },
 		}),
 		helper.display({

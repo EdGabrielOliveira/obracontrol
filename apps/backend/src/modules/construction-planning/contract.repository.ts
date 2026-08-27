@@ -375,7 +375,8 @@ export async function createContract(
 			title: input.title ?? null,
 			startDate: input.startDate ? new Date(input.startDate) : null,
 			endDate: input.endDate ? new Date(input.endDate) : null,
-			status: input.status ?? "RASCUNHO",
+			// O contrato só pode ser ativado por uma transição de status posterior.
+			status: "RASCUNHO",
 			createdBy: input.createdBy ?? null,
 			notes: input.notes ?? null,
 		},
@@ -388,6 +389,7 @@ type LegacyContractUpdateInput = UpdateContractInput & {
 	supplierId?: string | null;
 	contractValue?: number;
 	status?: string;
+	statusReason?: string;
 	notes?: string;
 };
 
@@ -410,6 +412,7 @@ export async function updateContract(
 		"supplierName",
 		"contractValue",
 		"status",
+		"statusReason",
 		"notes",
 	] as (keyof typeof input)[]);
 	if (input.startDate !== undefined)
@@ -420,6 +423,8 @@ export async function updateContract(
 		(updateData as Record<string, unknown>).endDate = input.endDate
 			? new Date(input.endDate)
 			: null;
+	if (input.status !== undefined || input.statusReason !== undefined)
+		(updateData as Record<string, unknown>).statusChangedAt = new Date();
 
 	return prisma.contract.update({
 		where: { id: contractId, ownerId },
@@ -445,6 +450,7 @@ export async function getContractsSummary(ownerId: string, workId: string) {
 		where: { ownerId, workId },
 		include: {
 			measurements: {
+				where: { status: "ACEITO" },
 				include: { items: true },
 			},
 			services: true,
@@ -598,6 +604,7 @@ export async function listCrossContractMeasurements(
 	const where: Prisma.ContractMeasurementWhereInput = {
 		ownerId,
 		contract: { workId },
+		status: "ACEITO",
 	};
 
 	return prisma.contractMeasurement.findMany({
@@ -883,6 +890,7 @@ export async function createAmendment(
 			id: { in: measurementIds },
 			ownerId,
 			contractId,
+			status: "ACEITO",
 		},
 		select: { id: true },
 	});
@@ -945,7 +953,12 @@ export async function updateAmendment(
 			const measurementIds = [...new Set(input.measurementIds)];
 			resolvedMeasurementIds = measurementIds;
 			const measurements = await db.contractMeasurement.findMany({
-				where: { id: { in: measurementIds }, ownerId, contractId },
+				where: {
+					id: { in: measurementIds },
+					ownerId,
+					contractId,
+					status: "ACEITO",
+				},
 				select: { id: true },
 			});
 			if (measurements.length !== measurementIds.length) {

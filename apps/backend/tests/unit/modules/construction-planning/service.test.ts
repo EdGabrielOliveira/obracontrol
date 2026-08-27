@@ -943,7 +943,7 @@ describe("construction import orchestrator", () => {
 		});
 		const hasBudget = spyOn(
 			importRepository,
-			"existingBudgetIndexes",
+			"existingActiveBudgetIndexes",
 		).mockResolvedValue(new Set(["1.1"]));
 
 		const result = await importWorkbook(
@@ -1070,7 +1070,7 @@ describe("construction import orchestrator", () => {
 		});
 		const hasBudget = spyOn(
 			importRepository,
-			"existingBudgetIndexes",
+			"existingActiveBudgetIndexes",
 		).mockResolvedValue(new Set(["1.1"]));
 
 		const result = await importWorkbook(
@@ -1244,8 +1244,13 @@ describe("construction service read DTOs", () => {
 
 	it("filters multiworks BI by selected work ids without pagination", async () => {
 		spyOn(repository, "getAllWorksWithItems").mockResolvedValue([
-			makeStoredUnifiedWork(),
-			{ ...makeStoredUnifiedWork(), id: "work-2", code: "OBRA-002" },
+			{ ...makeStoredUnifiedWork(), operationalStatus: "IN_PROGRESS" },
+			{
+				...makeStoredUnifiedWork(),
+				id: "work-2",
+				code: "OBRA-002",
+				operationalStatus: "IN_PROGRESS",
+			},
 		] as never);
 
 		const result = await getMultiworksBI("owner-1", { workIds: ["work-2"] });
@@ -1297,6 +1302,7 @@ describe("construction works and manual entries services", () => {
 			plannedEnd: "2026-12-31",
 			areaM2: 120,
 			responsibleName: " Engenheira ",
+			operationalStatus: "IN_PROGRESS",
 		});
 
 		expect(result as unknown).toEqual({ id: "work-created", code: "OBRA-NEW" });
@@ -1309,6 +1315,8 @@ describe("construction works and manual entries services", () => {
 			expect.objectContaining({
 				code: "OBRA-NEW",
 				name: "Obra Nova",
+				operationalStatus: "DRAFT",
+				statusReason: null,
 				clientName: "Cliente",
 				baseDate: new Date("2026-01-15"),
 				plannedStart: new Date("2026-01-01"),

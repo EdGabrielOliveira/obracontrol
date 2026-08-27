@@ -75,6 +75,7 @@ export type NormalizedScheduleRevision = {
 export type NormalizedMeasurement = {
 	rowNumber: number;
 	index: string;
+	itemName?: string | null;
 	measurementDate: Date;
 	measuredPercentageAccumulated: number;
 	measuredQuantityAccumulated: number | null;

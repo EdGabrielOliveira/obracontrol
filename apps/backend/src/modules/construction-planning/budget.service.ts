@@ -349,7 +349,10 @@ export class BudgetService {
 			allocatedAggregate,
 		] = await Promise.all([
 			prisma.workMeasurementItem.aggregate({
-				where: { budgetItemId: itemId },
+				where: {
+					budgetItemId: itemId,
+					measurement: { ownerId: _ownerId, workId: _workId, status: "ACEITO" },
+				},
 				_sum: { accumulatedValue: true },
 			}),
 			prisma.contractService.aggregate({

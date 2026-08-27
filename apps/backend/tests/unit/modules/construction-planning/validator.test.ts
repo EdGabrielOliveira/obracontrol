@@ -1568,6 +1568,23 @@ describe("validateWorkbook", () => {
 			expect(result.measurements.length).toBeGreaterThan(0);
 		});
 
+		it("validates medicao-obra indexes against the work budget when provided", () => {
+			const result = validateWorkbookByKind(
+				makeParsedUnifiedWorkbook(),
+				"medicao-obra",
+				{ measurementBudgetIndexes: new Set(["9.9"]) },
+			);
+
+			expect(result.valid).toBe(false);
+			expect(result.measurements).toHaveLength(0);
+			expect(result.errors).toContainEqual(
+				expect.objectContaining({
+					code: "UNKNOWN_BUDGET_INDEX",
+					field: "Indice",
+				}),
+			);
+		});
+
 		it("custos kind only validates actual cost-related checks", () => {
 			const result = validateWorkbookByKind(
 				makeParsedUnifiedWorkbook(),

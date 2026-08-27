@@ -1,9 +1,11 @@
+// ARQUIVADO is accepted from the API for historical contracts.
 export type ContractStatus =
 	| "RASCUNHO"
 	| "A_INICIAR"
 	| "EM_ANDAMENTO"
 	| "PARALISADO"
-	| "FINALIZADO";
+	| "FINALIZADO"
+	| "ARQUIVADO";
 
 export type PaymentStatus = "EM_ABERTO" | "PAGO";
 
@@ -30,6 +32,8 @@ export type Contract = {
 	startDate: string | null;
 	endDate: string | null;
 	status: ContractStatus;
+	statusReason?: string | null;
+	statusChangedAt?: string | null;
 	notes: string | null;
 	createdAt: string;
 };
@@ -78,6 +82,11 @@ export type ContractCreateInput = {
 	endDate?: string;
 	status?: ContractStatus;
 	notes?: string;
+	services?: Array<{
+		budgetItemId: string;
+		quantity: number;
+		unitCost: number;
+	}>;
 };
 
 export type ContractEditInput = Pick<
@@ -88,9 +97,9 @@ export type ContractEditInput = Pick<
 	| "startDate"
 	| "endDate"
 	| "status"
->;
+> & { statusReason?: string };
 
-export type ContractUpdateInput = ContractEditInput;
+export type ContractUpdateInput = Partial<ContractEditInput>;
 
 export type ContractDetail = Contract & {
 	totalValue: number;
@@ -230,6 +239,8 @@ export type ContractMeasurement = {
 	retentionValue: number | null;
 	taxValue: number | null;
 	notes: string | null;
+	status: "RASCUNHO" | "ACEITO" | "RECUSADO" | "ARQUIVADO";
+	statusReason?: string | null;
 	approvalStatus?: "APPROVED" | "PENDING_APPROVAL";
 	approvalRequestId?: string | null;
 	warnings?: Array<{
@@ -256,40 +267,25 @@ export type ContractMeasurementItem = {
 
 export type CreateContractMeasurementInput = {
 	date: string;
-	title?: string;
+	title: string;
 	number?: number;
-	discountValue?: number;
-	retentionValue?: number;
-	taxValue?: number;
 	notes?: string;
 	items: Array<{
 		serviceId: string;
-		measuredQuantity?: number;
-		measuredValue?: number;
-		measuredPercentage?: number;
-		accumulatedQuantity?: number;
-		accumulatedValue?: number;
-		accumulatedPercentage?: number;
+		measuredQuantity: number;
 	}>;
 };
 
 export type UpdateContractMeasurementMetadataInput = {
 	title?: string;
 	date?: string;
-	discountValue?: number;
-	retentionValue?: number;
 	notes?: string;
 };
 
 export type UpdateContractMeasurementItemInput = {
 	id?: string;
 	serviceId: string;
-	measuredQuantity?: number | null;
-	measuredValue?: number | null;
-	measuredPercentage?: number | null;
-	accumulatedQuantity?: number | null;
-	accumulatedValue?: number | null;
-	accumulatedPercentage?: number | null;
+	measuredQuantity: number;
 };
 
 export type UpdateContractMeasurementItemsInput = {
