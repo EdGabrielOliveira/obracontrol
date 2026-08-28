@@ -693,9 +693,36 @@ export async function getAllWorksWithItems(ownerId: string) {
 	return mergeWorksWithChildren(ownerId, works);
 }
 
-export async function getWorkById(ownerId: string, workId: string) {
-	const accessibleIds = await getAccessibleWorkIds(ownerId);
-	if (!accessibleIds.includes(workId)) return null;
+export async function getWorkById(
+	ownerId: string,
+	workId: string,
+	workspaceId?: string | null,
+) {
+	if (workspaceId) {
+		const scopedWork = await prisma.constructionWork.findFirst({
+			where: {
+				id: workId,
+				OR: [
+					{ ownerId },
+					{ workspaceId },
+					{
+						workspaceId: null,
+						costCenter: {
+							OR: [
+								{ workspaceId },
+								{ organization: { workspaceId } },
+							],
+						},
+					},
+				],
+			},
+			select: { id: true },
+		});
+		if (!scopedWork) return null;
+	} else {
+		const accessibleIds = await getAccessibleWorkIds(ownerId);
+		if (!accessibleIds.includes(workId)) return null;
+	}
 
 	const work = await prisma.constructionWork.findFirst({
 		where: { id: workId },
@@ -763,6 +790,7 @@ export async function updateWork(
 	ownerId: string,
 	workId: string,
 	data: {
+		workspaceId?: string | null;
 		code?: string;
 		name?: string;
 		costCenterId?: string;
@@ -779,18 +807,22 @@ export async function updateWork(
 		structuredAddress?: StructuredAddressInput | null;
 	},
 ) {
-	const workspaceId = await getWorkspaceIdForUser(ownerId);
+	const workspaceId = data.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
+	const { workspaceId: _scopeWorkspaceId, ...updateInput } = data;
+	const workScope = workspaceId
+		? { OR: [{ ownerId }, { workspaceId }] }
+		: { ownerId };
 	const work = await prisma.constructionWork.findFirst({
 		where: {
 			id: workId,
-			OR: [{ ownerId }, ...(workspaceId ? [{ workspaceId }] : [])],
+			...workScope,
 		},
 	});
 
 	if (!work) return null;
 
 	const updateData: Record<string, unknown> = {};
-	for (const [key, value] of Object.entries(data)) {
+	for (const [key, value] of Object.entries(updateInput)) {
 		if (
 			value !== undefined &&
 			key !== "plannedStart" &&
@@ -827,6 +859,7 @@ export async function updateWork(
 		const updated = await prisma.constructionWork.updateMany({
 			where: {
 				id: workId,
+				...workScope,
 				operationalStatus: data.expectedOperationalStatus,
 			},
 			data: updateData,
@@ -835,10 +868,19 @@ export async function updateWork(
 		return prisma.constructionWork.findUnique({ where: { id: workId } });
 	}
 
-	return prisma.constructionWork.update({
-		where: { id: workId },
+	if (!workspaceId) {
+		return prisma.constructionWork.update({
+			where: { id: workId, ownerId },
+			data: updateData,
+		});
+	}
+
+	const updated = await prisma.constructionWork.updateMany({
+		where: { id: workId, ...workScope },
 		data: updateData,
 	});
+	if (updated.count === 0) return null;
+	return prisma.constructionWork.findUnique({ where: { id: workId } });
 }
 
 type WorkDeleteClient = Prisma.TransactionClient | typeof prisma;

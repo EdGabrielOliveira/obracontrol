@@ -8,7 +8,6 @@ import {
 	InputFormField,
 	SelectFormField,
 } from "@/components/molecules/FormField";
-import { OverrideFields } from "@/components/molecules/override-fields";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -17,7 +16,6 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { PAYMENT_STATUS_OPTIONS } from "@/constants/status-options";
-import { useAuth } from "@/lib/auth-context";
 import {
 	optionsForStatus,
 	PAYMENT_STATUS_TRANSITIONS,
@@ -52,9 +50,6 @@ export function ContractPaymentEditModal({
 	measurements = [],
 }: ContractPaymentEditModalProps) {
 	const queryClient = useQueryClient();
-	const { role } = useAuth();
-	const isAdmin = role === "ADMIN";
-
 	const measurementOptions = [
 		{ id: "", value: "", label: "Pagamento geral do contrato" },
 		...[...measurements]
@@ -82,8 +77,6 @@ export function ContractPaymentEditModal({
 			discountValue: payment.discountValue?.toString() ?? "",
 			measurementId: payment.measurementId ?? "",
 			status: payment.status ?? "",
-			balanceOverride: payment.balanceOverride ?? false,
-			reason: "",
 		},
 	});
 
@@ -102,10 +95,6 @@ export function ContractPaymentEditModal({
 					? (parseCurrencyToNumber(values.discountValue) ?? 0)
 					: undefined,
 				status: values.status || undefined,
-				balanceOverride: values.balanceOverride,
-				reason: values.balanceOverride
-					? values.reason?.trim() || undefined
-					: undefined,
 			}),
 		onSuccess: () => {
 			toast.success("Pagamento atualizado!");
@@ -256,33 +245,6 @@ export function ContractPaymentEditModal({
 							/>
 						)}
 					/>
-					{isAdmin && (
-						<Controller
-							name="balanceOverride"
-							control={control}
-							render={({ field }) => (
-								<Controller
-									name="reason"
-									control={control}
-									render={({ field: reasonField, fieldState }) => (
-										<OverrideFields
-											checked={field.value ?? false}
-											onCheckedChange={(checked) => {
-												field.onChange(checked);
-												if (!checked) reasonField.onChange("");
-											}}
-											noteValue={reasonField.value ?? ""}
-											onNoteValueChange={reasonField.onChange}
-											noteLabel="Motivo"
-											notePlaceholder="Descreva o motivo do override..."
-											invalid={fieldState.invalid}
-											error={fieldState.error}
-										/>
-									)}
-								/>
-							)}
-						/>
-					)}
 					<div className="flex justify-end gap-2 pt-2">
 						<Button
 							type="button"

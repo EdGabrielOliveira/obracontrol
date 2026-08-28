@@ -84,6 +84,21 @@ export async function listPendingApprovals(workId?: string) {
 	return data;
 }
 
+export async function listMyApprovalRequests(workId?: string) {
+	const { data } = await api.get<ApprovalRequestView[]>(
+		"/governance/approvals/mine",
+		{ params: workId ? { workId } : undefined },
+	);
+	return data;
+}
+
+export async function getApprovalRequest(requestId: string) {
+	const { data } = await api.get<ApprovalRequestView>(
+		`/governance/approvals/${encodeURIComponent(requestId)}`,
+	);
+	return data;
+}
+
 export async function decideApproval(input: {
 	requestId: string;
 	decision: "APPROVE" | "REJECT";

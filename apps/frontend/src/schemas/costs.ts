@@ -35,7 +35,15 @@ export const actualCostSchema = z
 		category: actualCostCategorySchema,
 		categoryDetail: z.string().trim().optional(),
 		description: z.string().trim().min(1, "Descrição obrigatória"),
-		amount: z.string().min(1, "Valor obrigatório"),
+		amount: z
+			.string()
+			.trim()
+			.min(1, "Valor obrigatório")
+			.refine((value) => {
+				const normalized = value.replace(/\./g, "").replace(",", ".");
+				const amount = Number(normalized);
+				return Number.isFinite(amount) && amount > 0;
+			}, "O valor deve ser maior que zero"),
 		costType: actualCostTypeSchema,
 		supplierId: z.string().optional(),
 		paymentStatus: z.enum(["PAID", "OPEN"], "Status obrigatório"),

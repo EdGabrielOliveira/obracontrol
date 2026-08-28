@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import { apiKeyService } from "./api-key.service";
 import type { Session } from "./auth";
 import { getSessionUser } from "./auth-middleware";
-import { isAuthorizationRole } from "./authorization";
+import { isAuthorizationRole, normalizeRole } from "./authorization";
 import { ConstructionError } from "./errors";
 import { prisma } from "./prisma";
 import { requestContext } from "./request-context";
@@ -48,7 +48,8 @@ export async function resolveAuthenticatedUser(
 		if (!user || user.banned) {
 			throw new ConstructionError("UNAUTHORIZED", "Usuario desativado", 401);
 		}
-		assertAuthorizedRole(user.role);
+		const role = normalizeRole(user.role);
+		assertAuthorizedRole(role);
 		const pathname = requestPath(request);
 		if (!isTenantApiRouteAllowed(request.method, pathname)) {
 			throw new ConstructionError(
@@ -71,7 +72,7 @@ export async function resolveAuthenticatedUser(
 				emailVerified: true,
 				image: null,
 				banned: false,
-				role: user.role,
+				role,
 				workspaceId: user.workspaceId,
 				createdAt: new Date(),
 				updatedAt: new Date(),
@@ -89,7 +90,7 @@ export async function resolveAuthenticatedUser(
 	}
 	// O papel persistido é a fonte de verdade. O papel no payload da sessão
 	// pode estar desatualizado depois de uma alteração administrativa.
-	const role = user.role;
+	const role = normalizeRole(user.role);
 	assertAuthorizedRole(role);
 	requestContext.setUserId(sessionUser.id);
 	return {

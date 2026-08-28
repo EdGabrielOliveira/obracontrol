@@ -32,11 +32,15 @@ mock.module(
 	}),
 );
 
-mock.module("../suppliers/supplier.repository", () => ({
-	getSupplierById: mock(async () => null),
+mock.module(
+	"../../../../src/modules/construction-planning/suppliers/supplier.repository",
+	() => ({
+	getSupplierById: mock(async () => ({ id: "sup-1", name: "Fornecedor" })),
 	findSupplierByDocument: mock(async () => null),
-	findWorkSupplier: mock(async () => null),
-}));
+	findSupplierByDocumentOrName: mock(async () => ({ id: "sup-1", name: "Fornecedor" })),
+	findWorkSupplier: mock(async () => ({ supplierId: "sup-1" })),
+	}),
+);
 
 mock.module("../../lib/governance", () => ({
 	assertNoPendingEffect: mock(async () => undefined),
@@ -71,6 +75,7 @@ describe("createContract deferido (USR-002/DEC-005)", () => {
 			{
 				code: "CT-PEND-1",
 				supplierName: "Fornecedor",
+				supplierId: "sup-1",
 				contractValue: 1000,
 				objectDescription: "Servicos de fundacao",
 				status: "RASCUNHO",
@@ -111,6 +116,7 @@ describe("createContract deferido (USR-002/DEC-005)", () => {
 			{
 				code: "CT-EXEC-1",
 				supplierName: "Fornecedor",
+				supplierId: "sup-1",
 				contractValue: 1000,
 				objectDescription: "Servicos de fundacao",
 				status: "RASCUNHO",
@@ -137,6 +143,7 @@ describe("createContract deferido (USR-002/DEC-005)", () => {
 			{
 				code: "CT-ADMIN-1",
 				supplierName: "Fornecedor",
+				supplierId: "sup-1",
 				contractValue: 1000,
 				objectDescription: "Servicos de fundacao",
 				status: "RASCUNHO",

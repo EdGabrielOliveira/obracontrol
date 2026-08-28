@@ -45,6 +45,7 @@ interface ContractCreateFormProps extends ContractFormBaseProps {
 	defaultValues?: Partial<ContractFormValues>;
 	onSubmit: (data: ContractFormValues) => void;
 	suppliers?: Supplier[];
+	linkedSupplierIds?: string[];
 	disableContractValue?: boolean;
 	workId?: string;
 	effectiveBudgetItems?: CostBudgetItemSelectorResponse;
@@ -226,6 +227,7 @@ function ContractCreateForm({
 	onSubmit,
 	loading,
 	suppliers = [],
+	linkedSupplierIds,
 	disableContractValue,
 	workId,
 	effectiveBudgetItems,
@@ -236,9 +238,8 @@ function ContractCreateForm({
 	const { handleSubmit, control, register, setValue } =
 		useForm<ContractFormValues>({
 			resolver: zodResolver(contractFormSchema) as Resolver<ContractFormValues>,
-			defaultValues: {
-				supplierId: null,
-				status: DEFAULT_CONTRACT_STATUS,
+		defaultValues: {
+			status: DEFAULT_CONTRACT_STATUS,
 				...defaultValues,
 			},
 		});
@@ -307,7 +308,13 @@ function ContractCreateForm({
 								onValueChange={(name) => {
 									field.onChange(name);
 									const supplier = suppliers.find((s) => s.name === name);
-									setValue("supplierId", supplier ? supplier.id : null);
+									const isLinked =
+										linkedSupplierIds === undefined ||
+										(supplier ? linkedSupplierIds.includes(supplier.id) : false);
+									setValue(
+										"supplierId",
+										isLinked && supplier ? supplier.id : "",
+									);
 								}}
 								disabled={field.disabled}
 								invalid={fieldState.invalid}

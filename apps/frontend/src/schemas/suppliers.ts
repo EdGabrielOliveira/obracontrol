@@ -16,7 +16,7 @@ const optionalEnum = <T extends readonly [string, ...string[]]>(values: T) =>
 		.optional();
 
 export const supplierFormSchema = z.object({
-	name: z.string().min(1, "Nome obrigatório"),
+	name: z.string().trim().min(1, "Nome obrigatório"),
 	document: optionalText,
 	responsibleName: optionalText,
 	responsibleDocument: optionalText,

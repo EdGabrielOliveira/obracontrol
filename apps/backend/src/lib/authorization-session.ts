@@ -15,6 +15,7 @@ export type AuthorizationSession = {
 		canManageScopedCompanies?: boolean;
 		canManageStructure?: boolean;
 		canManageApiKeys: boolean;
+		canViewAudit?: boolean;
 		canDecideSupervisorRequests: boolean;
 		canReviewExecutedSupervisorRequests: boolean;
 		canRequestSupervisorDecisionReversal: boolean;
@@ -148,6 +149,7 @@ export async function buildAuthorizationSession(
 			canManageScopedCompanies: role === "ADMIN" || role === "GERENTE",
 			canManageStructure: role !== "SUPERVISOR",
 			canManageApiKeys: role === "ADMIN",
+			canViewAudit: role === "ADMIN" || role === "GERENTE",
 			canDecideSupervisorRequests:
 				role === "ADMIN" || role === "GERENTE" || role === "GESTOR",
 			canReviewExecutedSupervisorRequests:

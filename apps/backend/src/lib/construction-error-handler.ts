@@ -152,11 +152,15 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 		metrics.increment(`db.error.route.${normalizeMetricRoute(path)}`);
 		if (error.code === "P2002") {
 			const target = (error.meta?.target as string[]) ?? [];
-			const field = target.includes("code") ? "codigo" : target.join(", ");
+			const field = target.includes("code")
+				? "código"
+				: target.length > 0
+					? target.join(", ")
+					: "dados informados";
 			logger.warn("db.conflict", { prismaCode: "P2002", field, path });
 			return new Response(
 				JSON.stringify({
-					message: `Ja existe um registro com este ${field}.`,
+					message: `Já existe um registro com estes ${field}.`,
 				}),
 				{ status: 409, headers: { "Content-Type": "application/json" } },
 			);

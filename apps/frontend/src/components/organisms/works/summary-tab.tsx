@@ -104,12 +104,16 @@ export function SummaryTab({
 		);
 
 	const { summary, sCurve, costByStage } = bi;
+	const noInformation = "Sem informações";
+	const completeness = summary.dataCompleteness;
 
-	const safeFormat = (v: number | null | undefined) =>
-		v != null && Number.isFinite(v) ? formatCurrency(v) : "-";
+	const safeFormat = (v: number | null | undefined, available = true) =>
+		available && v != null && Number.isFinite(v)
+			? formatCurrency(v)
+			: noInformation;
 
-	const formatIndex = (v: number | null | undefined) =>
-		v != null && Number.isFinite(v) ? v.toFixed(3) : "-";
+	const formatIndex = (v: number | null | undefined, available = true) =>
+		available && v != null && Number.isFinite(v) ? v.toFixed(3) : noInformation;
 
 	const spIndex = summary.schedulePerformanceIndex ?? summary.idp;
 	const cpIndex = summary.costPerformanceIndex ?? summary.idc;
@@ -131,30 +135,45 @@ export function SummaryTab({
 	return (
 		<div className="space-y-6 pt-4">
 			<KpiGrid>
-				<KpiCard title="Orçado" value={formatCurrency(mgmt?.budgeted ?? 0)} />
-				<KpiCard title="Gasto" value={formatCurrency(summary.actualCost)} />
+				<KpiCard
+					title="Orçado"
+					value={safeFormat(summary.activeBudget, completeness.hasBudget)}
+				/>
+				<KpiCard
+					title="Gasto"
+					value={safeFormat(summary.actualCost, completeness.hasActualCosts)}
+				/>
 				<KpiCard
 					title="Saldo"
-					value={formatCurrency(summary.currentBudgetBalance)}
+					value={safeFormat(
+						summary.currentBudgetBalance,
+						completeness.hasBudget,
+					)}
 					tone={summary.currentBudgetBalance >= 0 ? "success" : "danger"}
 				/>
 				<KpiCard
 					title="Execução (%)"
 					value={
-						summary.activeBudget > 0
-							? formatPercentage(
-									(summary.actualCost / summary.activeBudget) * 100,
-								)
-							: "-"
+							completeness.hasBudget && completeness.hasActualCosts
+								? formatPercentage(
+										(summary.actualCost / summary.activeBudget) * 100,
+									)
+								: noInformation
 					}
 				/>
 				<KpiCard
 					title="Valor agregado (EV)"
-					value={safeFormat(summary.earnedValue)}
+					value={safeFormat(
+						summary.earnedValue,
+						completeness.hasBudget && completeness.hasMeasurements,
+					)}
 				/>
 				<KpiCard
 					title="IDC (CPI)"
-					value={formatIndex(cpIndex)}
+					value={formatIndex(
+						cpIndex,
+						completeness.hasMeasurements && completeness.hasActualCosts,
+					)}
 					tone={
 						cpIndex != null
 							? classifyIndex(cpIndex) === "good"
@@ -167,7 +186,10 @@ export function SummaryTab({
 				/>
 				<KpiCard
 					title="IDP (SPI)"
-					value={formatIndex(spIndex)}
+					value={formatIndex(
+						spIndex,
+						completeness.hasBaselineSchedule && completeness.hasMeasurements,
+					)}
 					tone={
 						spIndex != null
 							? classifyIndex(spIndex) === "good"
@@ -180,12 +202,15 @@ export function SummaryTab({
 				/>
 				<KpiCard
 					title="Custos futuros"
-					value={formatCurrency(summary.futureCost)}
+					value={safeFormat(summary.futureCost, completeness.hasFutureCosts)}
 					tone="warning"
 				/>
 				<KpiCard
 					title="Saldo projetado"
-					value={formatCurrency(summary.projectedBudgetBalance)}
+					value={safeFormat(
+						summary.projectedBudgetBalance,
+						completeness.hasBudget,
+					)}
 					tone={summary.projectedBudgetBalance >= 0 ? "success" : "danger"}
 				/>
 				{bi.financial?.budgetCostPerM2 != null && (
@@ -205,7 +230,9 @@ export function SummaryTab({
 				<div className="flex items-center justify-between text-sm">
 					<span className="font-medium text-foreground">Progresso</span>
 					<span className="text-muted-foreground">
-						{formatRatioAsPercentage(summary.measuredPercentage)}
+						{completeness.hasMeasurements
+							? formatRatioAsPercentage(summary.measuredPercentage)
+							: noInformation}
 					</span>
 				</div>
 				<Progress value={progressWidth} className="mt-1 h-2" />

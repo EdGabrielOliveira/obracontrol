@@ -133,12 +133,21 @@ function buildUnappropriatedCosts(
 	totalActual: number,
 	totalFuture: number,
 ): UnappropriatedCosts {
+	const categoryLabels: Record<string, string> = {
+		MAO_DE_OBRA: "Mão de obra",
+		MATERIAL: "Material",
+		EQUIPAMENTO: "Equipamento",
+		SERVICO: "Serviço",
+		OUTROS: "Outros",
+	};
 	const items = actualCosts.filter(isUnappropriatedCost).map((cost) => {
 		const amount = toNum(cost.amount);
 		return {
 			description:
-				(cost.supplierName ?? "Custo nao apropriado") +
-				(cost.category ? ` (${cost.category})` : ""),
+				(cost.supplierName ?? "Custo não apropriado") +
+				(cost.category
+					? ` (${categoryLabels[cost.category] ?? cost.category})`
+					: ""),
 			amount,
 			costDate: cost.costDate?.toISOString() ?? null,
 			supplierName: cost.supplierName ?? null,

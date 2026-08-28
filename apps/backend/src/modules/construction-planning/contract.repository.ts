@@ -111,6 +111,15 @@ export async function listContracts(
 			contains: filters.supplierName,
 		};
 	if (filters?.q) {
+		const exactCode = await prisma.contract.findFirst({
+			where: { ...where, code: filters.q },
+			orderBy: { createdAt: "desc" },
+		});
+		if (exactCode) {
+			const page = filters.page ?? 1;
+			const limit = filters.limit ?? 10;
+			return buildPaginatedResponse([exactCode], 1, page, limit);
+		}
 		where.OR = [
 			{ code: { contains: filters.q } },
 			{ supplierName: { contains: filters.q } },
@@ -890,7 +899,6 @@ export async function createAmendment(
 			id: { in: measurementIds },
 			ownerId,
 			contractId,
-			status: "ACEITO",
 		},
 		select: { id: true },
 	});
@@ -957,7 +965,6 @@ export async function updateAmendment(
 					id: { in: measurementIds },
 					ownerId,
 					contractId,
-					status: "ACEITO",
 				},
 				select: { id: true },
 			});

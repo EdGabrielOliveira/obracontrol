@@ -68,6 +68,7 @@ export interface AuditInput {
 
 export interface AuditFilter {
 	ownerId: string;
+	workspaceId?: string | null;
 	entityType?: string;
 	entityTypes?: string;
 	entityId?: string;
@@ -95,12 +96,17 @@ class AuditService {
 		const page = filters.page ?? 1;
 		const limit = Math.min(filters.limit ?? 50, 100);
 		const skip = (page - 1) * limit;
+		const ownerIds = await this.resolveOwnerIds(filters);
+		if (ownerIds.length === 0) {
+			return buildPaginatedResponse([], 0, page, limit);
+		}
+		const ownerIdFilter = ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds };
 
 		const entityTypeValues =
 			filters.entityTypes?.split(",").filter(Boolean) ?? [];
 		const actionValues = filters.actions?.split(",").filter(Boolean) ?? [];
-		const where: Prisma.AuditLogWhereInput = { ownerId: filters.ownerId };
-		const scopedEntityIds = await this.resolveScopeEntityIds(filters);
+		const where: Prisma.AuditLogWhereInput = { ownerId: ownerIdFilter };
+		const scopedEntityIds = await this.resolveScopeEntityIds(filters, ownerIds);
 		if (scopedEntityIds) {
 			if (scopedEntityIds.length === 0) {
 				return buildPaginatedResponse([], 0, page, limit);
@@ -160,7 +166,16 @@ class AuditService {
 		);
 	}
 
-	private async resolveScopeEntityIds(filters: AuditFilter) {
+	private async resolveOwnerIds(filters: AuditFilter): Promise<string[]> {
+		if (!filters.workspaceId) return [filters.ownerId];
+		const users = await prisma.user.findMany({
+			where: { workspaceId: filters.workspaceId },
+			select: { id: true },
+		});
+		return [...new Set([filters.ownerId, ...users.map((user) => user.id)])];
+	}
+
+	private async resolveScopeEntityIds(filters: AuditFilter, ownerIds: string[]) {
 		if (
 			!filters.companyId &&
 			!filters.organizationId &&
@@ -172,7 +187,7 @@ class AuditService {
 
 		const organizations = await prisma.organization.findMany({
 			where: {
-				ownerId: filters.ownerId,
+				ownerId: ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds },
 				...(filters.companyId ? { companyId: filters.companyId } : {}),
 				...(filters.organizationId ? { id: filters.organizationId } : {}),
 				...(filters.costCenterId || filters.workId
@@ -199,7 +214,7 @@ class AuditService {
 		}
 		const costCenters = await prisma.costCenter.findMany({
 			where: {
-				ownerId: filters.ownerId,
+				ownerId: ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds },
 				...(filters.costCenterId ? { id: filters.costCenterId } : {}),
 				...(filters.workId ? { works: { some: { id: filters.workId } } } : {}),
 				...(organizationIds.length
@@ -211,18 +226,18 @@ class AuditService {
 		const costCenterIds = costCenters.map((row) => row.id);
 		const works = await prisma.constructionWork.findMany({
 			where: {
-				ownerId: filters.ownerId,
+				ownerId: ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds },
 				...(filters.workId ? { id: filters.workId } : {}),
 				...(costCenterIds.length
 					? { costCenterId: { in: costCenterIds } }
 					: {}),
 			},
-			select: { id: true },
+			select: { id: true, ownerId: true },
 		});
 
 		const entityIds = new Set<string>([...organizationIds, ...costCenterIds]);
 		for (const work of works) {
-			for (const id of await resolveWorkEntityIds(filters.ownerId, work.id)) {
+			for (const id of await resolveWorkEntityIds(work.ownerId, work.id)) {
 				entityIds.add(id);
 			}
 		}

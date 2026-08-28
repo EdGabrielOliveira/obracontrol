@@ -187,7 +187,7 @@ export const contractRoutes = new Elysia({
 			body: t.Object({
 				code: t.String(),
 				supplierName: t.Optional(t.String()),
-				supplierId: t.Optional(t.Nullable(t.String())),
+				supplierId: t.String({ minLength: 1 }),
 				contractValue: t.Number(),
 				serviceType: t.Optional(t.String()),
 				objectDescription: t.String({ minLength: 1 }),
@@ -412,7 +412,7 @@ export const contractRoutes = new Elysia({
 				params.workId,
 				params.contractId,
 				parsed,
-				{ userId: user.id },
+				{ userId: user.id, role: normalizeRole(user.role) ?? "" },
 			);
 		},
 		{
@@ -459,7 +459,11 @@ export const contractRoutes = new Elysia({
 				params.contractId,
 				params.amendmentId,
 				body.decision,
-				{ userId: user.id, role: user.role ?? "", reason: body.reason },
+				{
+					userId: user.id,
+					role: normalizeRole(user.role) ?? "",
+					reason: body.reason,
+				},
 			),
 		{
 			body: t.Object({

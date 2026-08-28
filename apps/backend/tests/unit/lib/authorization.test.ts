@@ -69,19 +69,21 @@ describe("authorization", () => {
 			canWrite: true,
 			canApprove: true,
 			canAdmin: false,
-			canAudit: true,
+			canAudit: false,
 		});
 		expect(roleToScopeAccess("SUPERVISOR")).toMatchObject({
 			canRead: true,
 			canWrite: true,
 			canApprove: false,
 			canAdmin: false,
+			canAudit: false,
 		});
 		expect(roleToScopeAccess("OPERADOR")).toMatchObject({
 			canRead: true,
 			canWrite: true,
 			canApprove: false,
 			canAdmin: false,
+			canAudit: false,
 		});
 	});
 

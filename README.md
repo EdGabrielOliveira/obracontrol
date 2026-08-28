@@ -62,17 +62,14 @@ docker compose up -d --build
 
 ### Desenvolvimento com hot reload
 
-O Compose principal representa produção e serve o build estático pelo Nginx.
-Para desenvolver o frontend no Docker com Vite e atualização automática, use o
-override local:
+O Compose principal inicia o Vite, monta `apps/frontend` no container e ativa
+polling para o Docker Desktop/Windows. Alterações em `src/`, configurações e
+estilos atualizam o navegador via HMR.
 
 ```bash
-bun run dev:docker
+docker compose up -d --build
+# ou: bun run dev:docker
 ```
-
-O código de `apps/frontend` é montado no container; alterações em `src/`,
-configs e estilos atualizam o navegador via HMR. O polling fica ativo somente
-nesse override para detectar mudanças em bind mounts no Docker Desktop/Windows.
 
 SQLite é um banco embutido em arquivo e não escuta uma porta TCP; por isso não
 há um mapeamento `7711:7711` no Compose atual. Essa porta fica reservada para

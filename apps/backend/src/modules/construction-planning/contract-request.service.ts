@@ -190,11 +190,13 @@ export async function listContractRequests(actorId: string, workId: string) {
 	const scope = await resolveResourceScope(actorId, { workId });
 	if (!scope.canRead)
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
-	return prisma.contractRequest.findMany({
+	const requests = await prisma.contractRequest.findMany({
 		where: {
 			ownerId: scope.resourceOwnerId,
 			workId,
-			status: "EM_ESPERA",
+			status: {
+				in: ["EM_ESPERA", "AGUARDANDO_APROVACAO_FINAL", "EM_NEGOCIACAO"],
+			},
 			confirmedBatchId: { not: null },
 		},
 		orderBy: { createdAt: "desc" },
@@ -207,6 +209,49 @@ export async function listContractRequests(actorId: string, workId: string) {
 			contractId: true,
 		},
 	});
+	const approvals = await findContractRequestApprovals(
+		scope.resourceOwnerId,
+		requests.map((request) => request.id),
+	);
+	return requests.map((request) => ({
+		...request,
+		approvalRequestId: approvals.get(request.id)?.id ?? null,
+		approvalStatus: approvals.get(request.id)?.status ?? null,
+		approvalReason: approvals.get(request.id)?.reason ?? null,
+	}));
+}
+
+type ContractRequestApproval = {
+	id: string;
+	status: string;
+	reason: string | null;
+};
+
+async function findContractRequestApprovals(
+	ownerId: string,
+	requestIds: string[],
+): Promise<Map<string, ContractRequestApproval>> {
+	if (requestIds.length === 0) return new Map();
+	const rows = await prisma.approvalRequest.findMany({
+		where: {
+			ownerId,
+			resourceType: "CONTRACT_REQUEST",
+			resourceId: { in: requestIds },
+			effectAction: "CONTRACT_REQUEST_FINALIZE",
+		},
+		include: { decisions: { select: { reason: true }, take: 1 } },
+		orderBy: { createdAt: "desc" },
+	});
+	const latest = new Map<string, ContractRequestApproval>();
+	for (const row of rows) {
+		if (!row.resourceId || latest.has(row.resourceId)) continue;
+		latest.set(row.resourceId, {
+			id: row.id,
+			status: row.status,
+			reason: row.decisions[0]?.reason ?? null,
+		});
+	}
+	return latest;
 }
 
 export async function negotiateContractRequestProposal(
@@ -314,7 +359,10 @@ export async function selectContractRequestWinner(
 	if (!request) {
 		throw new ConstructionError("NOT_FOUND", "Solicitação não encontrada", 404);
 	}
-	if (request.status !== "EM_ESPERA" || !request.confirmedBatchId) {
+	if (
+		!["EM_ESPERA", "EM_NEGOCIACAO"].includes(request.status) ||
+		!request.confirmedBatchId
+	) {
 		throw new ConstructionError(
 			"CONTRACT_REQUEST_CONFLICT",
 			"Solicitação não está aguardando seleção",
@@ -342,7 +390,7 @@ export async function selectContractRequestWinner(
 			id: request.id,
 			ownerId: scope.resourceOwnerId,
 			workId,
-			status: "EM_ESPERA",
+			status: { in: ["EM_ESPERA", "EM_NEGOCIACAO"] },
 		},
 		data: {
 			status: "AGUARDANDO_APROVACAO_FINAL",
@@ -517,6 +565,10 @@ export type ContractRequestComparison = {
 		endDate: string | null;
 		status: string;
 	};
+	approval: {
+		status: string;
+		reason: string | null;
+	} | null;
 	selectedItems: Array<{
 		budgetItemId: string;
 		index: string | null;
@@ -637,6 +689,9 @@ export async function getContractRequestComparison(
 			404,
 		);
 	}
+	const approval = (
+		await findContractRequestApprovals(scope.resourceOwnerId, [request.id])
+	).get(request.id);
 
 	const references = await getBudgetItemReferences(
 		scope.resourceOwnerId,
@@ -936,6 +991,7 @@ export async function getContractRequestComparison(
 			endDate: request.endDate?.toISOString() ?? null,
 			status: request.status,
 		},
+		approval: approval ?? null,
 		selectedItems,
 		budget: { total: budgetTotalNumber },
 		statistics: {
@@ -979,7 +1035,7 @@ export async function getContractRequestComparison(
 		permissions: {
 			canAccept:
 				scope.canWrite &&
-				request.status === "EM_ESPERA" &&
+				["EM_ESPERA", "EM_NEGOCIACAO"].includes(request.status) &&
 				proposals.length > 0,
 		},
 	};

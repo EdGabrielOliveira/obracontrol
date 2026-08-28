@@ -40,7 +40,15 @@ export type AuditEntityType =
 	| "GOVERNANCE_RECORD"
 	| "ORGANIZATION"
 	| "COST_CENTER"
-	| "WORK_MEMBERSHIP";
+	| "WORK_MEMBERSHIP"
+	| "CONTRACT_REQUEST_PROPOSAL"
+	| "CONTRACT_SERVICE"
+	| "QUOTATION_PROPOSAL"
+	| "QUOTATION"
+	| "SUPPLIER"
+	| "SCHEDULE_BASELINE"
+	| "USER_SCOPE"
+	| "USER";
 
 export type AuditLogEntry = {
 	id: string;

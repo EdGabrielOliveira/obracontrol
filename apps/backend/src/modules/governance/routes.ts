@@ -5,6 +5,8 @@ import { resolveAuth } from "../../lib/resolve-auth";
 import { resolveResourceScope } from "../../lib/resource-scope";
 import {
 	decideApproval,
+	getApprovalRequest,
+	listMyApprovalRequests,
 	listPendingApprovals,
 	requestReversal,
 } from "./approval.service";
@@ -59,8 +61,14 @@ function approvalDescription(payloadJson: unknown): string | null {
 	const payload = payloadJson as {
 		description?: unknown;
 		title?: unknown;
+		contract?: { objectDescription?: unknown; title?: unknown; supplierName?: unknown };
 	} | null;
-	const description = payload?.description ?? payload?.title;
+	const description =
+		payload?.description ??
+		payload?.title ??
+		payload?.contract?.title ??
+		payload?.contract?.objectDescription ??
+		payload?.contract?.supplierName;
 	return typeof description === "string" && description.trim()
 		? description.trim()
 		: null;
@@ -94,6 +102,18 @@ function approvalTarget(row: ApprovalRequestViewRow) {
 			path: `/app/obras/${encodedWorkId}/custos/${encodedResourceId}`,
 		};
 	}
+	if (row.effectAction === "CONTRACT_REQUEST_FINALIZE" && encodedWorkId && encodedResourceId) {
+		return {
+			label: "Comparativo do contrato",
+			path: `/app/obras/${encodedWorkId}/contratos/${encodedResourceId}/comparativo`,
+		};
+	}
+	if (row.effectAction === "CONTRACT_CREATE" && encodedWorkId) {
+		return {
+			label: "Criação de contrato",
+			path: `/app/obras/${encodedWorkId}/contratos/aprovacoes/${encodeURIComponent(row.id)}`,
+		};
+	}
 	return {
 		label: "Solicitação da obra",
 		path: encodedWorkId ? `/app/obras/${encodedWorkId}/aprovacoes` : null,
@@ -122,6 +142,7 @@ function toApprovalRequestView(row: ApprovalRequestViewRow) {
 		requiredApproverRole: row.requiredApproverRole,
 		createdAt: row.createdAt.toISOString(),
 		decisionReason: row.decisionReason,
+		payload: row.payloadJson,
 	};
 }
 
@@ -284,6 +305,65 @@ export const governanceRoutes = new Elysia({
 				summary: "Listar solicitações de aprovação pendentes",
 				description:
 					"Lista as solicitações de aprovação pendentes visíveis ao ator, com destino interno para acompanhamento.",
+			},
+		},
+	)
+	.get(
+		"/approvals/mine",
+		async ({ query, user }) => {
+			const rows = await listMyApprovalRequests(user.id, query.workId);
+			return rows.map((row) =>
+				toApprovalRequestView({
+					id: row.id,
+					status: row.status,
+					effectAction: row.effectAction,
+					actorId: row.actorId,
+					actorRole: row.actorRole,
+					organizationId: row.organizationId,
+					costCenterId: row.costCenterId,
+					resourceType: row.resourceType,
+					resourceId: row.resourceId,
+					requiredApproverRole: row.requiredApproverRole,
+					createdAt: row.createdAt,
+					decisionReason: row.decisions?.[0]?.reason ?? null,
+					actorName: row.actor?.name ?? null,
+					payloadJson: row.payloadJson,
+				}),
+			);
+		},
+		{
+			query: t.Object({ workId: t.Optional(t.String({ minLength: 1 })) }),
+			detail: {
+				tags: ["Governance"],
+				summary: "Listar solicitações de aprovação do usuário",
+			},
+		},
+	)
+	.get(
+		"/approvals/:requestId",
+		async ({ params, user }) => {
+			const row = await getApprovalRequest(user.id, params.requestId);
+			return toApprovalRequestView({
+				id: row.id,
+				status: row.status,
+				effectAction: row.effectAction,
+				actorId: row.actorId,
+				actorRole: row.actorRole,
+				organizationId: row.organizationId,
+				costCenterId: row.costCenterId,
+				resourceType: row.resourceType,
+				resourceId: row.resourceId,
+				requiredApproverRole: row.requiredApproverRole,
+				createdAt: row.createdAt,
+				decisionReason: row.decisions?.[0]?.reason ?? null,
+				actorName: row.actor?.name ?? null,
+				payloadJson: row.payloadJson,
+			});
+		},
+		{
+			detail: {
+				tags: ["Governance"],
+				summary: "Consultar solicitação de aprovação",
 			},
 		},
 	)

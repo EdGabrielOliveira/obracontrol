@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { apiErrorStatus } from "@/lib/api-error";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { paginationSchema } from "@/schemas/pagination";
 import type { PaginationMeta } from "@/types/shared";
 import { getErrorMessage } from "@/utils/api-error";
@@ -44,6 +45,7 @@ const userColumnHelper =
 
 type UsuariosFilter = z.infer<typeof usuariosFilterSchema>;
 export const Route = createFileRoute("/app/usuarios/")({
+	beforeLoad: () => requireAuthorizationCapability("canManageUsers"),
 	validateSearch: usuariosFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
 	component: RouteComponent,
@@ -70,6 +72,7 @@ function RouteComponent() {
 	const { data, isLoading, error } = useQuery({
 		queryKey: adminUserKeys.list(searchParams as Record<string, unknown>),
 		queryFn: () => listAdminUsers(searchParams as AdminUserFilter),
+		enabled: capabilities?.canManageUsers === true,
 
 		refetchOnMount: "always",
 	});

@@ -19,7 +19,11 @@ type WorkRepository = Omit<
 		ownerId: string,
 		code: string,
 	) => Promise<WorkResult | null>;
-	getWorkById: (ownerId: string, workId: string) => Promise<WorkResult | null>;
+	getWorkById: (
+		ownerId: string,
+		workId: string,
+		workspaceId?: string | null,
+	) => Promise<WorkResult | null>;
 };
 
 export type StructuredAddressInput = {
@@ -101,6 +105,21 @@ export class ConstructionWorkService {
 				400,
 			);
 		}
+		if (input.plannedStart && input.plannedEnd) {
+			const start = new Date(input.plannedStart);
+			const end = new Date(input.plannedEnd);
+			if (
+				Number.isNaN(start.getTime()) ||
+				Number.isNaN(end.getTime()) ||
+				end < start
+			) {
+				throw new ConstructionError(
+					"INVALID_DATE_RANGE",
+					"A data final deve ser igual ou posterior à data inicial",
+					422,
+				);
+			}
+		}
 
 		const existing = await this.repository.findWorkByOwnerAndCode(
 			ownerId,
@@ -138,8 +157,10 @@ export class ConstructionWorkService {
 		return this.repository.listWorks(ownerId, filter);
 	}
 
-	async get(ownerId: string, workId: string) {
-		const work = await this.repository.getWorkById(ownerId, workId);
+	async get(ownerId: string, workId: string, ctx?: { workspaceId?: string | null }) {
+		const work = ctx?.workspaceId
+			? await this.repository.getWorkById(ownerId, workId, ctx.workspaceId)
+			: await this.repository.getWorkById(ownerId, workId);
 		if (!work) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}
@@ -150,8 +171,22 @@ export class ConstructionWorkService {
 		ownerId: string,
 		workId: string,
 		input: UpdateManualWorkInput,
-		ctx?: { userId: string; role?: string | null },
+		ctx?: { userId: string; role?: string | null; workspaceId?: string | null },
 	) {
+		if (input.name !== undefined && !input.name.trim()) {
+			throw new ConstructionError("MISSING_FIELDS", "Nome é obrigatório", 422);
+		}
+		if (input.plannedStart && input.plannedEnd) {
+			const start = new Date(input.plannedStart);
+			const end = new Date(input.plannedEnd);
+			if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+				throw new ConstructionError(
+					"INVALID_DATE_RANGE",
+					"A data final deve ser igual ou posterior à data inicial",
+					422,
+				);
+			}
+		}
 		if (
 			!input.code &&
 			!input.name &&
@@ -180,7 +215,9 @@ export class ConstructionWorkService {
 					403,
 				);
 			}
-			const current = await this.repository.getWorkById(ownerId, workId);
+			const current = ctx?.workspaceId
+				? await this.repository.getWorkById(ownerId, workId, ctx.workspaceId)
+				: await this.repository.getWorkById(ownerId, workId);
 			if (!current) {
 				throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 			}
@@ -212,6 +249,7 @@ export class ConstructionWorkService {
 		const result = await this.repository.updateWork(ownerId, workId, {
 			...input,
 			statusChangedBy: ctx?.userId,
+			workspaceId: ctx?.workspaceId,
 			expectedOperationalStatus,
 		});
 		if (!result) {

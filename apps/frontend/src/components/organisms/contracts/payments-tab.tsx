@@ -15,7 +15,6 @@ import {
 	InputFormField,
 	SelectFormField,
 } from "@/components/molecules/FormField";
-import { OverrideFields } from "@/components/molecules/override-fields";
 import { ContractPaymentEditModal } from "@/components/organisms/modals/contract-payment-edit-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,7 +25,6 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { PAYMENT_STATUS_OPTIONS } from "@/constants/status-options";
-import { useAuth } from "@/lib/auth-context";
 import type { ContractPaymentCreateValues } from "@/schemas/contracts";
 import { contractPaymentCreateSchema } from "@/schemas/contracts";
 import type { ContractMeasurement, ContractPayment } from "@/types/contracts";
@@ -41,6 +39,8 @@ interface PaymentsTabProps {
 	isCreatingPayment?: boolean;
 	onCreatePayment?: (values: ContractPaymentCreateValues) => void;
 	onDeletePayment?: (id: string) => void;
+	searchValue?: string;
+	onSearchChange?: (value: string) => void;
 }
 
 function measurementLabel(measurement: ContractMeasurement) {
@@ -56,12 +56,12 @@ export function PaymentsTab({
 	isCreatingPayment,
 	onCreatePayment,
 	onDeletePayment,
+	searchValue,
+	onSearchChange,
 }: PaymentsTabProps) {
 	const [showAdd, setShowAdd] = useState(false);
 	const [editPaymentId, setEditPaymentId] = useState<string | null>(null);
 	const [deleteId, setDeleteId] = useState<string | null>(null);
-	const { role } = useAuth();
-	const isAdmin = role === "ADMIN";
 	const prevCreating = useRef(isCreatingPayment);
 
 	const { control, handleSubmit, reset } = useForm<ContractPaymentCreateValues>(
@@ -76,8 +76,6 @@ export function PaymentsTab({
 				discountValue: "",
 				measurementId: "",
 				status: "EM_ABERTO",
-				balanceOverride: false,
-				reason: "",
 			},
 		},
 	);
@@ -195,9 +193,7 @@ export function PaymentsTab({
 				icon={CreditCard}
 				title="Pagamentos do Contrato"
 				description="Registre e acompanhe os pagamentos do contrato."
-			/>
-			<CardContent>
-				<div className="mb-4">
+				actions={
 					<Button
 						variant="default"
 						size="sm"
@@ -209,12 +205,15 @@ export function PaymentsTab({
 						<Plus className="mr-2 h-4 w-4" />
 						Novo pagamento
 					</Button>
-				</div>
-
+				}
+			/>
+			<CardContent>
 				<DataTable
 					columns={paymentColumns}
 					data={payments}
 					searchPlaceholder="Buscar pagamentos..."
+					searchValue={searchValue}
+					onSearchChange={onSearchChange}
 					emptyMessage="Nenhum pagamento cadastrado."
 				/>
 
@@ -330,33 +329,7 @@ export function PaymentsTab({
 									/>
 								)}
 							/>
-							{isAdmin && (
-								<Controller
-									name="balanceOverride"
-									control={control}
-									render={({ field }) => (
-										<Controller
-											name="reason"
-											control={control}
-											render={({ field: reasonField, fieldState }) => (
-												<OverrideFields
-													checked={field.value ?? false}
-													onCheckedChange={(checked) => {
-														field.onChange(checked);
-														if (!checked) reasonField.onChange("");
-													}}
-													noteValue={reasonField.value ?? ""}
-													onNoteValueChange={reasonField.onChange}
-													noteLabel="Motivo"
-													notePlaceholder="Descreva o motivo do override..."
-													invalid={fieldState.invalid}
-													error={fieldState.error}
-												/>
-											)}
-										/>
-									)}
-								/>
-							)}
+
 							<div className="flex justify-end gap-2 pt-2">
 								<Button
 									type="button"

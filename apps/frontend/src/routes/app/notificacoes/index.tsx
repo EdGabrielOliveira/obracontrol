@@ -50,6 +50,7 @@ const notificationEventLabels: Record<string, string> = {
 	APPROVAL_REQUESTED: "Nova aprovação necessária",
 	APPROVAL_DECISION_REQUIRED: "Aprovação necessária",
 	APPROVAL_MANAGER_REVIEW_REQUIRED: "Revisão gerencial necessária",
+	CONTRACT_AMENDMENT_APPROVAL_REQUIRED: "Aditivo aguardando aprovação",
 };
 
 function notificationLabel(notification: NotificationView) {
@@ -176,6 +177,13 @@ function NotificationsPage() {
 			await markNotificationRead(notification.id);
 			queryClient.invalidateQueries({ queryKey: notificationKeys.all });
 			queryClient.invalidateQueries({ queryKey: notificationKeys.count });
+		}
+		const detailPath = notification.body?.match(
+			/\/app\/obras\/[^\s]+\/contratos\/[^\s]+/,
+		)?.[0];
+		if (detailPath) {
+			navigate({ to: detailPath as never });
+			return;
 		}
 		const workPath = notification.body?.match(/\/app\/obras\/([^\s/]+)/)?.[0];
 		if (workPath) {

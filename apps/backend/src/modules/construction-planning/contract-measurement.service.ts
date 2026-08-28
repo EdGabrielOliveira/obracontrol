@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
-import { writeAudit } from "../../lib/audit-writer";
 import { ConstructionError } from "../../lib/errors";
 import { toFiniteNumber } from "../../lib/number-utils";
 import { prisma } from "../../lib/prisma";
@@ -76,31 +75,69 @@ export class ContractMeasurementService {
 	private async findExceedingItems(
 		ownerId: string,
 		contractId: string,
-		items: Array<{ serviceId: string; accumulatedValue?: number | null }>,
+		items: Array<{
+			serviceId: string;
+			measuredQuantity?: number | null;
+			accumulatedQuantity?: number | null;
+		}>,
+		excludeMeasurementId?: string,
 		db: Prisma.TransactionClient | typeof prisma = prisma,
 	): Promise<ExceedingItem[]> {
 		if (items.length === 0) return [];
 		const serviceIds = [...new Set(items.map((i) => i.serviceId))];
-		const [totals, servicesById] = await Promise.all([
-			cmRepository.getServiceTotals(ownerId, contractId, serviceIds, db),
+		const [servicesById, previousMeasurements] = await Promise.all([
 			cmRepository.getContractServicesById(db, ownerId, contractId, serviceIds),
+			db.contractMeasurement.findMany({
+				where: {
+					ownerId,
+					contractId,
+					status: { notIn: ["RECUSADO", "ARQUIVADO"] },
+					...(excludeMeasurementId
+						? { id: { not: excludeMeasurementId } }
+						: {}),
+				},
+				select: {
+					items: {
+						select: {
+							serviceId: true,
+							measuredQuantity: true,
+							accumulatedQuantity: true,
+						},
+					},
+				},
+			}),
 		]);
-		const exceeding: ExceedingItem[] = [];
+		const previousQuantityByService = new Map<string, number>();
+		for (const measurement of previousMeasurements) {
+			for (const item of measurement.items) {
+				const quantity = toFiniteNumber(
+					item.measuredQuantity ?? item.accumulatedQuantity,
+				);
+				previousQuantityByService.set(
+					item.serviceId,
+					(previousQuantityByService.get(item.serviceId) ?? 0) + quantity,
+				);
+			}
+		}
+		const currentQuantityByService = new Map<string, number>();
 		for (const item of items) {
-			const totalCost = totals[item.serviceId];
-			if (totalCost === undefined) continue;
-			const hydrated = cmRepository.buildMeasurementItemData(
-				item,
-				servicesById.get(item.serviceId),
+			currentQuantityByService.set(
+				item.serviceId,
+				(currentQuantityByService.get(item.serviceId) ?? 0) +
+					toFiniteNumber(item.measuredQuantity ?? item.accumulatedQuantity),
 			);
-			const accumulatedValue = toFiniteNumber(
-				hydrated.accumulatedValue ?? hydrated.measuredValue,
-			);
-			if (accumulatedValue > totalCost) {
+		}
+		const exceeding: ExceedingItem[] = [];
+		for (const [serviceId, currentQuantity] of currentQuantityByService) {
+			const service = servicesById.get(serviceId);
+			if (!service) continue;
+			const accumulatedQuantity =
+				(previousQuantityByService.get(serviceId) ?? 0) + currentQuantity;
+			if (accumulatedQuantity > service.quantity) {
 				exceeding.push({
-					serviceId: item.serviceId,
-					accumulatedValue,
-					totalCost,
+					serviceId,
+					accumulatedValue: accumulatedQuantity * service.unitCost,
+					totalCost: service.quantity * service.unitCost,
 				});
 			}
 		}
@@ -124,26 +161,6 @@ export class ContractMeasurementService {
 			throw new ConstructionError(
 				"INVALID_MEASUREMENT_ITEM",
 				`Item de medicao sem quantidade contratada ou quantidade medida valida (servicos: ${invalid.map((item) => item.serviceId).join(", ")})`,
-				422,
-			);
-		}
-	}
-
-	private assertPaymentOverrideAllowed(
-		role: MeasurementActorRole,
-		reason: string | null | undefined,
-	) {
-		if (role !== "ADMIN") {
-			throw new ConstructionError(
-				"GOVERNANCE_OVERRIDE_REQUIRED",
-				"Somente ADMIN pode executar override administrativo",
-				403,
-			);
-		}
-		if (!reason?.trim()) {
-			throw new ConstructionError(
-				"OVERRIDE_REASON_REQUIRED",
-				"Motivo do override e obrigatorio",
 				422,
 			);
 		}
@@ -247,6 +264,7 @@ export class ContractMeasurementService {
 				ownerId,
 				contractId,
 				input.items,
+				undefined,
 				tx,
 			);
 			if (exceedingItems.length > 0) {
@@ -345,21 +363,14 @@ export class ContractMeasurementService {
 				ownerId,
 				contractId,
 				input.items,
+				measurementId,
 			);
 			if (exceedingItems.length > 0) {
-				if (ctx.role === "SUPERVISOR") {
-					throw new ConstructionError(
-						"MEASUREMENT_EXCEEDS_BALANCE",
-						"Medicao acima do saldo do servico do contrato — ajuste os valores ou crie uma nova medicao",
-						422,
-					);
-				}
-				warnings.push({
-					code: "MEASUREMENT_EXCEEDS_BALANCE",
-					severity: "warning",
-					message:
-						"Medição acima do saldo do serviço do contrato — concluída com aviso",
-				});
+				throw new ConstructionError(
+					"MEASUREMENT_EXCEEDS_BALANCE",
+					"Medicao acima do saldo do servico do contrato — ajuste os valores ou crie uma nova medicao",
+					422,
+				);
 			}
 		}
 
@@ -536,7 +547,7 @@ export class ContractMeasurementService {
 	async listPayments(
 		ownerId: string,
 		contractId: string,
-		filters?: { page?: number; limit?: number },
+		filters?: { q?: string; page?: number; limit?: number },
 	) {
 		return cmRepository.listPayments(ownerId, contractId, filters);
 	}
@@ -557,7 +568,6 @@ export class ContractMeasurementService {
 		ownerId: string,
 		contractId: string,
 		input: CreateContractPaymentInput,
-		ctx: { userId: string; role: MeasurementActorRole },
 	) {
 		await this.assertWritable(ownerId, contractId);
 
@@ -608,15 +618,11 @@ export class ContractMeasurementService {
 				effectiveStatus === "PAGO" &&
 				input.paidValue > balance.derivedTotal - balance.totalPaid;
 			if (exceeds) {
-				if (input.balanceOverride) {
-					this.assertPaymentOverrideAllowed(ctx.role, input.reason);
-				} else {
-					throw new ConstructionError(
-						"PAYMENT_EXCEEDS_BALANCE",
-						"Pagamento acima do saldo do contrato",
-						422,
-					);
-				}
+				throw new ConstructionError(
+					"PAYMENT_EXCEEDS_BALANCE",
+					"Pagamento acima do saldo do contrato",
+					422,
+				);
 			}
 
 			const created = await cmRepository.createPayment(
@@ -653,23 +659,6 @@ export class ContractMeasurementService {
 				);
 			}
 
-			if (exceeds && input.balanceOverride) {
-				await writeAudit(tx, {
-					userId: ctx.userId,
-					ownerId,
-					action: "CREATE",
-					entityType: "CONTRACT_PAYMENT",
-					entityId: created.id,
-					entityDescription:
-						created.description ?? `Pagamento - ${created.date}`,
-					newState: {
-						balanceOverride: true,
-						reason: input.reason ?? null,
-						paidValue: input.paidValue,
-						availableBalance: balance.derivedTotal - balance.totalPaid,
-					},
-				});
-			}
 			return created;
 		});
 
@@ -681,7 +670,7 @@ export class ContractMeasurementService {
 		contractId: string,
 		paymentId: string,
 		input: UpdateContractPaymentInput,
-		ctx: { userId: string; role: MeasurementActorRole },
+		ctx: { userId: string },
 	) {
 		await this.assertWritable(ownerId, contractId);
 		const existing = await cmRepository.getPaymentById(
@@ -707,15 +696,11 @@ export class ContractMeasurementService {
 		const exceeds =
 			effectiveStatus === "PAGO" && effectivePaidValue > availableBalance;
 		if (exceeds) {
-			if (input.balanceOverride) {
-				this.assertPaymentOverrideAllowed(ctx.role, input.reason);
-			} else {
-				throw new ConstructionError(
-					"PAYMENT_EXCEEDS_BALANCE",
-					"Pagamento acima do saldo do contrato",
-					422,
-				);
-			}
+			throw new ConstructionError(
+				"PAYMENT_EXCEEDS_BALANCE",
+				"Pagamento acima do saldo do contrato",
+				422,
+			);
 		}
 
 		const result = await cmRepository.updatePayment(
@@ -744,30 +729,6 @@ export class ContractMeasurementService {
 					fromStatus: existing.status,
 					toStatus: result.status,
 					contractId,
-					reason: input.reason?.trim() || null,
-				},
-			});
-		}
-
-		if (exceeds && input.balanceOverride) {
-			await auditService.log({
-				userId: ctx.userId,
-				ownerId,
-				action: "UPDATE",
-				entityType: "CONTRACT_PAYMENT",
-				entityId: paymentId,
-				entityDescription:
-					existing.description ?? `Pagamento - ${existing.date}`,
-				previousState: {
-					paidValue: toFiniteNumber(existing.paidValue),
-					status: existing.status,
-				},
-				newState: {
-					balanceOverride: true,
-					reason: input.reason ?? null,
-					paidValue: effectivePaidValue,
-					status: effectiveStatus,
-					availableBalance,
 				},
 			});
 		}

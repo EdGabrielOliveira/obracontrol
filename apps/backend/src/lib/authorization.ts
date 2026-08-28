@@ -25,8 +25,8 @@ const ROLE_PERMISSIONS: Record<AuthorizationRole, readonly RoleAction[]> = {
 
 	GERENTE: ["read", "write", "approve", "manage", "audit"],
 
-	GESTOR: ["read", "write", "approve", "audit"],
-	SUPERVISOR: ["read", "write", "audit"],
+	GESTOR: ["read", "write", "approve"],
+	SUPERVISOR: ["read", "write"],
 };
 
 export type ScopeAccessFlags = {

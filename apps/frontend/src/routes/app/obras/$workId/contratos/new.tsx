@@ -20,9 +20,12 @@ import {
 import { createContract } from "@/api/contracts";
 import {
 	contractRequestKeys,
+	governanceKeys,
+	supplierKeys,
 	workKeys,
 	workSupplierKeys,
 } from "@/api/query-keys";
+import { listSuppliers } from "@/api/suppliers";
 import { listWorkSuppliers } from "@/api/work-suppliers";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
@@ -63,6 +66,10 @@ export const Route = createFileRoute("/app/obras/$workId/contratos/new")({
 			queryClient.prefetchQuery({
 				queryKey: workSupplierKeys.list(params.workId),
 				queryFn: () => listWorkSuppliers(params.workId),
+			}),
+			queryClient.prefetchQuery({
+				queryKey: supplierKeys.list({ pageSize: 100 }),
+				queryFn: () => listSuppliers({ pageSize: 100 }),
 			}),
 		]),
 	head: () => ({
@@ -112,9 +119,14 @@ function RouteComponent() {
 		queryFn: () => getCurrentCostBudgetItems(workId),
 		enabled: flow !== "choice",
 	});
-	const suppliersQuery = useQuery({
+	const linkedSuppliersQuery = useQuery({
 		queryKey: workSupplierKeys.list(workId),
 		queryFn: () => listWorkSuppliers(workId),
+		enabled: flow === "manual",
+	});
+	const suppliersQuery = useQuery({
+		queryKey: supplierKeys.list({ pageSize: 100 }),
+		queryFn: () => listSuppliers({ pageSize: 100 }),
 		enabled: flow === "manual",
 	});
 
@@ -168,11 +180,14 @@ function RouteComponent() {
 					result.approvalRequest.requiredApproverRole === "GESTOR"
 						? "Gestor"
 						: "Gerente";
-				toast.success(
+				 toast.success(
 					`Solicitação de criação enviada para aprovação do ${approver}.`,
 				);
 				routeQueryClient.invalidateQueries({
-					queryKey: ["pending-approvals", workId],
+					queryKey: governanceKeys.mine(workId),
+				});
+				routeQueryClient.invalidateQueries({
+					queryKey: workKeys.contracts(workId),
 				});
 				navigate({
 					to: "/app/obras/$workId/contratos",
@@ -324,11 +339,21 @@ function RouteComponent() {
 		);
 	}
 
-	if (flow === "manual" && suppliersQuery.isLoading) {
+	if (
+		flow === "manual" &&
+		(suppliersQuery.isLoading || linkedSuppliersQuery.isLoading)
+	) {
 		return <LoadingSpinner title="Carregando fornecedores..." />;
 	}
-	if (flow === "manual" && suppliersQuery.error) {
-		return <ErrorFeedback onRetry={() => void suppliersQuery.refetch()} />;
+	if (flow === "manual" && (suppliersQuery.error || linkedSuppliersQuery.error)) {
+		return (
+			<ErrorFeedback
+				onRetry={() => {
+					void suppliersQuery.refetch();
+					void linkedSuppliersQuery.refetch();
+				}}
+			/>
+		);
 	}
 
 	if (flow === "manual") {
@@ -347,7 +372,10 @@ function RouteComponent() {
 					showServices
 					submitLabel="Criar contrato"
 					contractValueLabel="Valor do fornecedor"
-					suppliers={suppliersQuery.data?.map((link) => link.supplier)}
+					suppliers={linkedSuppliersQuery.data?.map((link) => link.supplier) ?? []}
+					linkedSupplierIds={linkedSuppliersQuery.data?.map(
+						(link) => link.supplierId,
+					)}
 					loading={directCreateMutation.isPending}
 					onCancel={() => setFlow("choice")}
 					onSubmit={(values) =>

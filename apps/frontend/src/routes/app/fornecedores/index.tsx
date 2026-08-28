@@ -43,6 +43,10 @@ type SupplierFilterSchema = z.infer<typeof supplierFilterSchema>;
 
 const supplierColumnHelper = createColumnHelper<Supplier>();
 
+function displayUnformattedDocument(document: string | null) {
+	return document?.replace(/\D/g, "") || "—";
+}
+
 export const Route = createFileRoute("/app/fornecedores/")({
 	validateSearch: supplierFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
@@ -111,7 +115,9 @@ function RouteComponent() {
 		supplierColumnHelper.accessor("document", {
 			header: "Documento",
 			cell: (info) => (
-				<span className="font-mono text-xs">{info.getValue() ?? "—"}</span>
+				<span className="font-mono text-xs">
+					{displayUnformattedDocument(info.getValue())}
+				</span>
 			),
 			meta: { mobileLabel: "Documento" },
 		}),

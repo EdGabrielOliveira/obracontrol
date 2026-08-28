@@ -43,4 +43,5 @@ export type ApprovalRequestView = {
 	requiredApproverRole: "GESTOR" | "GERENTE";
 	createdAt: string;
 	decisionReason: string | null;
+	payload: unknown;
 };

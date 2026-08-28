@@ -8,6 +8,7 @@ import type { BackendPaginated } from "./api";
 import { api, normalizePagination } from "./api";
 
 export type ContractPaymentFilter = {
+	q?: string;
 	page?: number;
 	limit?: number;
 };

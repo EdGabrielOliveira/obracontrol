@@ -23,12 +23,14 @@ import { useCreationConfirmation } from "@/components/providers/creation-confirm
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import type { AdminUserFormValues } from "@/schemas/admin-users";
 import { adminUserFormSchema } from "@/schemas/admin-users";
 import type { UserScopeInput } from "@/types/admin-users";
 import type { Role } from "@/types/authorization";
 
 export const Route = createFileRoute("/app/usuarios/new")({
+	beforeLoad: () => requireAuthorizationCapability("canManageUsers"),
 	loader: () => {
 		void Promise.all([
 			queryClient.prefetchQuery({

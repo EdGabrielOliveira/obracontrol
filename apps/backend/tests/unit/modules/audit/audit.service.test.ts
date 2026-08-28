@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { prisma } from "../../../../src/lib/prisma";
 
+const userFindMany = mock(async () => [] as Array<{ id: string }>);
+
 mock.module("../../../../src/lib/prisma", () => {
 	const auditLog = {
 		create: mock(),
 		findMany: mock(),
 		count: mock(),
 	};
-	return { prisma: { auditLog } };
+	return {
+		prisma: {
+			auditLog,
+			user: { findMany: userFindMany },
+		},
+	};
 });
 
 const { auditService } = await import(
@@ -17,6 +24,8 @@ const { auditService } = await import(
 describe("audit service", () => {
 	beforeEach(() => {
 		mock.restore();
+		userFindMany.mockClear();
+		userFindMany.mockResolvedValue([]);
 	});
 
 	it("filters by entityDescriptionPrefix using startsWith", async () => {
@@ -126,5 +135,26 @@ describe("audit service", () => {
 			expect.objectContaining({ skip: 0, take: 100 }),
 		);
 		expect(findMany.mock.calls[0][0].where).toEqual({ ownerId: "owner-1" });
+	});
+
+	it("lists audit events from every owner in the authenticated workspace", async () => {
+		(prisma.auditLog.findMany as ReturnType<typeof mock>).mockResolvedValue([]);
+		(prisma.auditLog.count as ReturnType<typeof mock>).mockResolvedValue(0);
+		userFindMany.mockResolvedValue([{ id: "owner-1" }, { id: "owner-2" }]);
+
+		await auditService.list({
+			ownerId: "admin-1",
+			workspaceId: "workspace-1",
+		});
+
+		expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { ownerId: { in: ["admin-1", "owner-1", "owner-2"] } },
+			}),
+		);
+		expect(userFindMany).toHaveBeenCalledWith({
+			where: { workspaceId: "workspace-1" },
+			select: { id: true },
+		});
 	});
 });

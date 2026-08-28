@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
 	contractEditFormSchema,
+	contractPaymentCreateSchema,
 	contractFormSchema,
 } from "@/schemas/contracts";
 
@@ -11,7 +12,7 @@ const validBase = {
 };
 
 describe("contractFormSchema", () => {
-	it("aceita contrato com supplierId ou supplierName", () => {
+	it("aceita contrato somente com fornecedor cadastrado", () => {
 		expect(
 			contractFormSchema.safeParse({ ...validBase, supplierId: "sup-1" })
 				.success,
@@ -21,7 +22,7 @@ describe("contractFormSchema", () => {
 				...validBase,
 				supplierName: "Fornecedor A",
 			}).success,
-		).toBe(true);
+		).toBe(false);
 	});
 
 	it("rejeita contrato sem fornecedor e valor nao positivo", () => {
@@ -31,6 +32,7 @@ describe("contractFormSchema", () => {
 				contractFormSchema.safeParse({
 					...validBase,
 					supplierName: "Fornecedor A",
+					supplierId: "sup-1",
 					contractValue: value,
 				}).success,
 			).toBe(false);
@@ -41,6 +43,7 @@ describe("contractFormSchema", () => {
 		const parsed = contractFormSchema.safeParse({
 			...validBase,
 			supplierName: "Fornecedor A",
+			supplierId: "sup-1",
 			contractValue: "50000",
 			status: "EM_ANDAMENTO",
 		});
@@ -50,6 +53,7 @@ describe("contractFormSchema", () => {
 			contractFormSchema.safeParse({
 				...validBase,
 				supplierName: "Fornecedor A",
+				supplierId: "sup-1",
 				status: "INVALIDO",
 			}).success,
 		).toBe(false);
@@ -79,5 +83,24 @@ describe("contractEditFormSchema", () => {
 		expect(
 			contractEditFormSchema.safeParse({ objectDescription: "   " }).success,
 		).toBe(false);
+	});
+});
+
+describe("contractPaymentCreateSchema", () => {
+	it("não expõe override no cadastro de pagamentos", () => {
+		const result = contractPaymentCreateSchema.safeParse({
+			date: "2026-08-28",
+			value: "1000",
+			paidValue: "1000",
+			status: "PAGO",
+			balanceOverride: true,
+			reason: "não deveria ser aceito",
+		});
+
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.data).not.toHaveProperty("balanceOverride");
+			expect(result.data).not.toHaveProperty("reason");
+		}
 	});
 });

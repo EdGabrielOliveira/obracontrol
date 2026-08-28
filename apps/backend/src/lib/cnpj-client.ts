@@ -22,12 +22,38 @@ export type CnpjClientDeps = {
 export const CNPJ_TIMEOUT_MS = 5_000;
 const CNPJ_DIGITS_ONLY = /^\d{14}$/;
 
+export function isValidCnpj(raw: string): boolean {
+	const digits = raw.replace(/\D/g, "");
+	if (!CNPJ_DIGITS_ONLY.test(digits) || /^(\d)\1+$/.test(digits)) return false;
+	const calculateDigit = (length: number) => {
+		let sum = 0;
+		let factor = length - 7;
+		for (let index = 0; index < length; index += 1) {
+			sum += Number(digits[index]) * factor;
+			factor = factor === 2 ? 9 : factor - 1;
+		}
+		const remainder = sum % 11;
+		return remainder < 2 ? 0 : 11 - remainder;
+	};
+	return (
+		calculateDigit(12) === Number(digits[12]) &&
+		calculateDigit(13) === Number(digits[13])
+	);
+}
+
 function normalizeCnpj(raw: string): string {
 	const digits = raw.replace(/\D/g, "");
 	if (!CNPJ_DIGITS_ONLY.test(digits)) {
 		throw new ConstructionError(
 			"INVALID_CNPJ",
-			"CNPJ deve conter 14 digitos",
+			"CNPJ deve conter 14 dígitos",
+			400,
+		);
+	}
+	if (!isValidCnpj(digits)) {
+		throw new ConstructionError(
+			"INVALID_CNPJ",
+			"CNPJ inválido. Confira os 14 dígitos informados",
 			400,
 		);
 	}

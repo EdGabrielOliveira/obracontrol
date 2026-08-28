@@ -15,7 +15,6 @@ import {
 } from "@/utils/evm-health";
 import {
 	formatCurrency,
-	formatNullableCurrency,
 	formatRatioAsPercentage,
 } from "@/utils/format";
 
@@ -31,6 +30,20 @@ interface KPIItem {
 }
 
 export function buildKPIs(summary: WorkBIResponse["summary"]): KPIItem[] {
+	const noInformation = "Sem informações";
+	const completeness = summary.dataCompleteness;
+	const hasProjectionData =
+		completeness.hasBudget &&
+		completeness.hasMeasurements &&
+		completeness.hasActualCosts;
+	const valueOrPlaceholder = (
+		available: boolean,
+		value: number | null | undefined,
+		format: (value: number) => string,
+	) =>
+		available && value != null && Number.isFinite(value)
+			? format(value)
+			: noInformation;
 	const spiTone = classifyIndex(summary.schedulePerformanceIndex);
 	const cpiTone = classifyIndex(summary.costPerformanceIndex);
 	const balanceTone = classifyBalance(summary.balance);
@@ -38,43 +51,67 @@ export function buildKPIs(summary: WorkBIResponse["summary"]): KPIItem[] {
 	return [
 		{
 			label: "SPI (Prazo)",
-			value: summary.schedulePerformanceIndex?.toFixed(2) ?? "N/A",
+			value: valueOrPlaceholder(
+				completeness.hasBaselineSchedule && completeness.hasMeasurements,
+				summary.schedulePerformanceIndex,
+				(value) => value.toFixed(2),
+			),
 			icon: CalendarClock,
 			tone: spiTone,
 		},
 		{
 			label: "CPI (Custo)",
-			value: summary.costPerformanceIndex?.toFixed(2) ?? "N/A",
+			value: valueOrPlaceholder(
+				completeness.hasMeasurements && completeness.hasActualCosts,
+				summary.costPerformanceIndex,
+				(value) => value.toFixed(2),
+			),
 			icon: Wallet,
 			tone: cpiTone,
 		},
 		{
 			label: "SV (Variação Prazo)",
-			value: formatNullableCurrency(summary.scheduleVariance),
+			value: valueOrPlaceholder(
+				completeness.hasBaselineSchedule && completeness.hasMeasurements,
+				summary.scheduleVariance,
+				formatCurrency,
+			),
 			icon: TrendingUp,
 			tone: spiTone,
 		},
 		{
 			label: "CV (Variação Custo)",
-			value: formatNullableCurrency(summary.costVariance),
+			value: valueOrPlaceholder(
+				completeness.hasMeasurements && completeness.hasActualCosts,
+				summary.costVariance,
+				formatCurrency,
+			),
 			icon: TrendingDown,
 			tone: cpiTone,
 		},
 		{
 			label: "% Conclusão",
-			value: formatRatioAsPercentage(summary.measuredPercentage),
+			value: completeness.hasMeasurements
+				? formatRatioAsPercentage(summary.measuredPercentage)
+				: noInformation,
 			icon: Ruler,
 			tone: spiTone,
 		},
 		{
 			label: "Saldo",
-			value: formatCurrency(summary.balance),
+			value: completeness.hasBudget
+				? formatCurrency(summary.balance)
+				: noInformation,
 			icon: PiggyBank,
 			tone: balanceTone,
 		},
 		{
 			label: "EAC (Projeção)",
-			value: formatNullableCurrency(summary.selectedEac),
+			value: valueOrPlaceholder(
+				hasProjectionData,
+				summary.selectedEac,
+				formatCurrency,
+			),
 			icon: Wallet,
 			tone:
 				summary.selectedEac != null && summary.selectedEac > summary.bac
@@ -83,19 +120,23 @@ export function buildKPIs(summary: WorkBIResponse["summary"]): KPIItem[] {
 		},
 		{
 			label: "ETC (Faltam)",
-			value: formatNullableCurrency(summary.etc),
+			value: valueOrPlaceholder(hasProjectionData, summary.etc, formatCurrency),
 			icon: TrendingDown,
 			tone: "unknown",
 		},
 		{
 			label: "VAC (Projeção)",
-			value: formatNullableCurrency(summary.vac),
+			value: valueOrPlaceholder(hasProjectionData, summary.vac, formatCurrency),
 			icon: TrendingUp,
 			tone: summary.vac != null && summary.vac < 0 ? "critical" : "good",
 		},
 		{
 			label: "TCPI (Necessário)",
-			value: summary.tcpi?.toFixed(2) ?? "N/A",
+			value: valueOrPlaceholder(
+				hasProjectionData,
+				summary.tcpi,
+				(value) => value.toFixed(2),
+			),
 			icon: Ruler,
 			tone: summary.tcpi != null && summary.tcpi > 1 ? "critical" : "good",
 		},

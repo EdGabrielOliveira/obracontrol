@@ -40,6 +40,8 @@ export interface BudgetItemSelectorProps {
 	quantityLabel?: string;
 	showMeasurementPercentage?: boolean;
 	percentageLabel?: string;
+	title?: string;
+	description?: string;
 }
 
 export function effectiveItemsToTree(
@@ -213,6 +215,8 @@ export function BudgetItemSelector({
 	quantityLabel = "Quantidade",
 	showMeasurementPercentage = false,
 	percentageLabel = "% medido",
+	title = "Atividades do orçamento",
+	description = "Escolha as atividades que farão parte deste lançamento.",
 }: BudgetItemSelectorProps) {
 	const [search, setSearch] = useState("");
 	const [expandedIds, setExpandedIds] = useState<Set<string> | null>(new Set());
@@ -297,10 +301,8 @@ export function BudgetItemSelector({
 			<div className="space-y-3 border-b border-border bg-muted/20 p-3">
 				<div className="flex flex-wrap items-center justify-between gap-2">
 					<div>
-						<p className="text-sm font-semibold">Atividades do orçamento</p>
-						<p className="text-xs text-muted-foreground">
-							Escolha as atividades que farão parte deste lançamento.
-						</p>
+						<p className="text-sm font-semibold">{title}</p>
+						<p className="text-xs text-muted-foreground">{description}</p>
 					</div>
 					<div className="flex items-center gap-2">
 						<span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
@@ -383,6 +385,11 @@ export function BudgetItemSelector({
 							disabled || disabledItemIds?.has(item.id) === true;
 						const selection = selectionById.get(item.id);
 						const available = availableQuantities?.[item.id] ?? null;
+						const maxQuantity = available ?? item.quantity ?? undefined;
+						const maxPercentage =
+							available != null && item.quantity && item.quantity > 0
+								? Math.min(100, (available / item.quantity) * 100)
+								: 100;
 						const toggle = () => {
 							if (itemDisabled) return;
 							const next = toggleBudgetItemSelection(
@@ -468,11 +475,15 @@ export function BudgetItemSelector({
 												className="h-9 bg-background text-sm"
 												type="number"
 												min="0"
+												max={maxQuantity}
 												step="any"
 												value={selection?.quantity ?? 1}
 												disabled={itemDisabled}
 												onChange={(event) => {
-													const quantity = Number(event.target.value);
+													const quantity = Math.min(
+														maxQuantity ?? Number.POSITIVE_INFINITY,
+														Math.max(0, Number(event.target.value)),
+													);
 													let next = updateSelectionQuantity(
 														selectedItems,
 														item.id,
@@ -505,7 +516,7 @@ export function BudgetItemSelector({
 													className="h-9 bg-background text-sm"
 													type="number"
 													min="0"
-													max="100"
+													max={maxPercentage}
 													step="0.01"
 													value={
 														selection?.percentage ??
@@ -516,7 +527,10 @@ export function BudgetItemSelector({
 													}
 													disabled={itemDisabled}
 													onChange={(event) => {
-														const percentage = Number(event.target.value);
+														const percentage = Math.min(
+															maxPercentage,
+															Math.max(0, Number(event.target.value)),
+														);
 														const next = updateSelectionPercentage(
 															selectedItems,
 															item.id,

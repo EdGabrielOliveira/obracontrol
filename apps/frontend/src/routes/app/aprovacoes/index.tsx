@@ -7,8 +7,10 @@ import { PageHeader } from "@/components/atoms/page-header";
 import { ApprovalsTab } from "@/components/organisms/works/approvals-tab";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 
 export const Route = createFileRoute("/app/aprovacoes/")({
+	beforeLoad: () => requireAuthorizationCapability("canDecideSupervisorRequests"),
 	loader: () => {
 		void queryClient.prefetchQuery({
 			queryKey: governanceKeys.pendingApprovals(),

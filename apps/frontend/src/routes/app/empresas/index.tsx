@@ -22,6 +22,10 @@ import { getErrorMessage } from "@/utils/api-error";
 
 const columnHelper = createColumnHelper<Company>();
 
+function displayUnformattedDocument(document: string | null) {
+	return document?.replace(/\D/g, "") || "—";
+}
+
 export const Route = createFileRoute("/app/empresas/")({
 	beforeLoad: () => requireAuthorizationCapability("canManageScopedCompanies"),
 	loader: () => {
@@ -87,7 +91,7 @@ function RouteComponent() {
 		}),
 		columnHelper.accessor("document", {
 			header: "CNPJ",
-			cell: (info) => info.getValue() ?? "—",
+			cell: (info) => displayUnformattedDocument(info.getValue()),
 			meta: { mobileLabel: "CNPJ" },
 		}),
 		columnHelper.accessor("managerName", {

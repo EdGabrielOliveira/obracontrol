@@ -82,6 +82,9 @@ export function StatisticsTab({
 		);
 	}
 
+	const noInformation = "Sem informações";
+	const completeness = bi.summary.dataCompleteness;
+
 	const summary = bi.summary;
 	const suppliers = mgmt.supplierBreakdown;
 	const chartData = suppliers.map((supplier) => ({
@@ -125,19 +128,35 @@ export function StatisticsTab({
 						<KpiGrid>
 							<KpiCard
 								title="Orçamento ativo"
-								value={formatCurrency(summary.activeBudget)}
+								value={
+									completeness.hasBudget
+										? formatCurrency(summary.activeBudget)
+										: noInformation
+								}
 							/>
 							<KpiCard
 								title="Gasto realizado"
-								value={formatCurrency(summary.actualCost)}
+								value={
+									completeness.hasActualCosts
+										? formatCurrency(summary.actualCost)
+										: noInformation
+								}
 							/>
 							<KpiCard
 								title="Saldo atual"
-								value={formatCurrency(summary.currentBudgetBalance)}
+								value={
+									completeness.hasBudget
+										? formatCurrency(summary.currentBudgetBalance)
+										: noInformation
+								}
 							/>
 							<KpiCard
 								title="Medição acumulada"
-								value={formatPercentage(summary.measuredPercentage * 100)}
+								value={
+									completeness.hasMeasurements
+										? formatPercentage(summary.measuredPercentage * 100)
+										: noInformation
+								}
 							/>
 						</KpiGrid>
 					</CardContent>

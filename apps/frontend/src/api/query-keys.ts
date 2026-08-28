@@ -217,6 +217,10 @@ export const governanceKeys = {
 		["governance", entityType, entityId] as const,
 	pendingApprovals: (workId?: string) =>
 		["governance", "approvals", "pending", workId ?? "global"] as const,
+	mine: (workId?: string) =>
+		["governance", "approvals", "mine", workId ?? "global"] as const,
+	approvalDetail: (requestId: string) =>
+		["governance", "approval", requestId] as const,
 };
 
 export const notificationKeys = {

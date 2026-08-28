@@ -211,7 +211,7 @@ export const createActualCostSchema = z
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
 				path: ["description"],
-				message: "Descricao do custo obrigatoria",
+				message: "Descrição do custo obrigatória",
 			});
 		}
 		if (

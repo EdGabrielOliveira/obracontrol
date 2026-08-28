@@ -49,7 +49,7 @@ type ContractReportTabProps = {
 };
 
 function serviceValue(service: ContractAggregateService): number {
-	return service.contractValue ?? service.totalCost ?? 0;
+	return service.totalCost ?? service.contractValue ?? 0;
 }
 
 function renderServiceRow(service: ContractAggregateService) {
@@ -62,6 +62,15 @@ function renderServiceRow(service: ContractAggregateService) {
 			<TableCell>{service.description}</TableCell>
 			<TableCell className="text-right font-medium">
 				{formatCurrency(contractValue)}
+			</TableCell>
+			<TableCell className="text-right">
+				{formatCurrency(service.measuredAccumulated ?? 0)}
+			</TableCell>
+			<TableCell className="text-right">
+				{formatCurrency(service.remainingValue ?? 0)}
+			</TableCell>
+			<TableCell className="text-right">
+				{formatRatioAsPercentage(service.measuredPercentage ?? 0)}
 			</TableCell>
 		</TableRow>
 	);
@@ -232,14 +241,17 @@ export function ContractReportTab({ aggregate }: ContractReportTabProps) {
 								<TableRow>
 									<TableHead>Tipo</TableHead>
 									<TableHead>Descrição</TableHead>
-									<TableHead className="text-right">Valor</TableHead>
+									<TableHead className="text-right">Contratado</TableHead>
+									<TableHead className="text-right">Medido</TableHead>
+									<TableHead className="text-right">Saldo</TableHead>
+									<TableHead className="text-right">% medido</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{aggregate.services.length === 0 ? (
 									<TableRow>
 										<TableCell
-											colSpan={3}
+											colSpan={7}
 											className="py-8 text-center text-muted-foreground"
 										>
 											Nenhum serviço cadastrado.

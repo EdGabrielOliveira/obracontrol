@@ -757,7 +757,8 @@ export const userService = {
 			where: { id: actorId },
 			select: { role: true },
 		});
-		if (!isAuthorizationRole(actor?.role)) {
+		const actorRole = normalizeRole(actor?.role);
+		if (!isAuthorizationRole(actorRole)) {
 			throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 		}
 		const adminScope = await resolveAdminScope(actorId);
@@ -767,25 +768,18 @@ export const userService = {
 		if (!target) throw notFoundUser();
 		assertAdminWorkspace(adminScope, target.workspaceId);
 
-		const nextRole = (input.role ?? target.role) as AuthorizationRole;
-		const scope = input.scope ? normalizeScope(input.scope) : undefined;
-		if (scope) {
-			await assertValidScope(nextRole, scope);
-		}
-		if (input.role) {
-			const targetScope = await getCurrentScope(id);
+		const nextRole = normalizeRole(input.role ?? target.role) as AuthorizationRole;
+		const requestedScope = input.scope ? normalizeScope(input.scope) : undefined;
+		const effectiveScope = input.role
+			? (requestedScope ?? (await getCurrentScope(id, target.workspaceId)))
+			: requestedScope;
+		if (effectiveScope) {
+			await assertValidScope(nextRole, effectiveScope);
 			assertActorCanManage(
-				actor?.role as AuthorizationRole,
-				adminScope.organizationIds,
-				input.role,
-				await resolveScopeOrganizationIds(targetScope),
-			);
-		} else if (scope) {
-			assertActorCanManage(
-				actor?.role as AuthorizationRole,
+				actorRole,
 				adminScope.organizationIds,
 				nextRole,
-				await resolveScopeOrganizationIds(scope),
+				await resolveScopeOrganizationIds(effectiveScope),
 			);
 		}
 
@@ -796,8 +790,8 @@ export const userService = {
 			if (Object.keys(data).length > 0) {
 				await tx.user.update({ where: { id }, data });
 			}
-			if (scope) {
-				await applyScope(tx, id, scope, nextRole);
+			if (effectiveScope) {
+				await applyScope(tx, id, effectiveScope, nextRole);
 			}
 			if (input.role || input.scope) {
 				await writeAudit(tx, {
@@ -832,7 +826,8 @@ export const userService = {
 			where: { id: actorId },
 			select: { role: true },
 		});
-		if (!isAuthorizationRole(actor?.role)) {
+		const actorRole = normalizeRole(actor?.role);
+		if (!isAuthorizationRole(actorRole)) {
 			throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 		}
 
@@ -845,7 +840,8 @@ export const userService = {
 		});
 		if (!target) throw notFoundUser();
 		assertAdminWorkspace(adminScope, target.workspaceId);
-		if (target.role === "ADMIN") {
+		const targetRole = normalizeRole(target.role) as AuthorizationRole;
+		if (targetRole === "ADMIN") {
 			const activeAdmins = await prisma.user.count({
 				where: {
 					role: "ADMIN",
@@ -862,11 +858,11 @@ export const userService = {
 			}
 		}
 
-		const targetScope = await getCurrentScope(id);
+		const targetScope = await getCurrentScope(id, target.workspaceId);
 		assertActorCanManage(
-			actor.role as AuthorizationRole,
+			actorRole,
 			adminScope.organizationIds,
-			target.role as AuthorizationRole,
+			targetRole,
 			targetScope.organizationIds,
 		);
 
@@ -893,7 +889,8 @@ export const userService = {
 			where: { id: actorId },
 			select: { role: true },
 		});
-		if (!isAuthorizationRole(actor?.role)) {
+		const actorRole = normalizeRole(actor?.role);
+		if (!isAuthorizationRole(actorRole)) {
 			throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 		}
 		const adminScope = await resolveAdminScope(actorId);
@@ -903,11 +900,11 @@ export const userService = {
 		if (!target) throw notFoundUser();
 		assertAdminWorkspace(adminScope, target.workspaceId);
 
-		const targetRole = target.role as AuthorizationRole;
+		const targetRole = normalizeRole(target.role) as AuthorizationRole;
 		const scope = normalizeScope(input);
 		await assertValidScope(targetRole, scope);
 		assertActorCanManage(
-			actor?.role as AuthorizationRole,
+			actorRole,
 			adminScope.organizationIds,
 			targetRole,
 			await resolveScopeOrganizationIds(scope),
@@ -932,22 +929,26 @@ export const userService = {
 	},
 };
 
-async function getCurrentScope(userId: string): Promise<UserScopeInput> {
+async function getCurrentScope(
+	userId: string,
+	workspaceId?: string | null,
+): Promise<UserScopeInput> {
+	const workspaceFilter = workspaceId ? { workspaceId } : {};
 	const [companies, organizations, costCenters, works] = await Promise.all([
 		prisma.companyMembership.findMany({
-			where: { userId, revokedAt: null },
+			where: { userId, revokedAt: null, company: workspaceFilter },
 			select: { companyId: true },
 		}),
 		prisma.organizationMembership.findMany({
-			where: { userId, revokedAt: null },
+			where: { userId, revokedAt: null, organization: workspaceFilter },
 			select: { organizationId: true },
 		}),
 		prisma.costCenterMembership.findMany({
-			where: { userId, revokedAt: null },
+			where: { userId, revokedAt: null, costCenter: workspaceFilter },
 			select: { costCenterId: true },
 		}),
 		prisma.workMembership.findMany({
-			where: { userId, revokedAt: null },
+			where: { userId, revokedAt: null, work: workspaceFilter },
 			select: { workId: true },
 		}),
 	]);

@@ -17,9 +17,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { auditEntityLabel } from "@/lib/audit-labels";
+import {
+	auditDescription,
+	auditEntityLabel,
+	auditUserName,
+} from "@/lib/audit-labels";
 import type { AuditLogEntry } from "@/types/audit";
-import { formatDate } from "@/utils/format";
+import { formatDateTime } from "@/utils/format";
 
 export type AuditFilters = {
 	entityType?: string;
@@ -124,9 +128,11 @@ export function AuditLogTable({
 	const columnHelper = createColumnHelper<AuditLogEntry>();
 	const columns = [
 		columnHelper.accessor("createdAt", {
-			header: "Data",
+			header: "Data/Hora",
 			cell: (info) => (
-				<span className="whitespace-nowrap">{formatDate(info.getValue())}</span>
+				<span className="whitespace-nowrap">
+					{formatDateTime(info.getValue())}
+				</span>
 			),
 		}),
 		columnHelper.accessor("action", {
@@ -145,15 +151,14 @@ export function AuditLogTable({
 		}),
 		columnHelper.accessor("entityDescription", {
 			header: "Descrição",
-			cell: (info) => info.getValue() ?? "—",
+			cell: (info) =>
+				auditDescription(info.getValue(), info.row.original.action),
 		}),
 		columnHelper.display({
 			id: "user",
 			header: "Usuário",
 			cell: (info) =>
-				info.row.original.user?.name ||
-				info.row.original.user?.email ||
-				info.row.original.userId,
+				auditUserName(info.row.original),
 		}),
 		columnHelper.display({
 			id: "actions",

@@ -6,6 +6,7 @@ import { getWorkAudit } from "@/api/audit";
 import { decideApproval, listPendingApprovals } from "@/api/governance";
 import { auditKeys, governanceKeys, workKeys } from "@/api/query-keys";
 import { getWork } from "@/api/works";
+import { AccessDenied } from "@/atoms/access-denied";
 import { ErrorFeedback } from "@/components/atoms/error-feedback";
 import { LoadingSpinner } from "@/components/atoms/loading-spinner";
 import { PageContainer } from "@/components/atoms/page-container";
@@ -85,6 +86,7 @@ export function WorkGovernancePage({ mode }: WorkGovernancePageProps) {
 	if (workQuery.error || !workQuery.data) {
 		return <ErrorFeedback onRetry={() => workQuery.refetch()} />;
 	}
+	if (mode === "aprovacoes" && !canApprove) return <AccessDenied />;
 
 	const work = workQuery.data;
 	const parentContext = [work.organizationName, work.costCenterName]

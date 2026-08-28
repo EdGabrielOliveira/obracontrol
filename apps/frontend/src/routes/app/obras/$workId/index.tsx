@@ -89,8 +89,9 @@ function RouteComponent() {
 	const search = useSearch({ from: Route.id });
 	const navigate = useNavigate({ from: Route.id });
 	const { user, role, capabilities } = useAuth();
-	const canAccessGovernance =
+	const canViewHistory =
 		capabilities?.canReviewExecutedSupervisorRequests ?? role === "GERENTE";
+	const canAccessGovernance = canViewHistory || role === "GESTOR";
 	const canApprove = canDecideSupervisorRequests(capabilities);
 
 	const tab = search.tab;
@@ -143,7 +144,7 @@ function RouteComponent() {
 		}),
 		queryFn: () =>
 			getWorkAudit(workId, { ...auditFilters, page: auditPage, limit: 50 }),
-		enabled: canAccessGovernance && tab === "historico",
+		enabled: canViewHistory && tab === "historico",
 	});
 
 	const approvalsQuery = useQuery({
@@ -249,6 +250,7 @@ function RouteComponent() {
 			<WorkDetailHeader work={work} />
 			<WorkHub
 				workId={workId}
+				canViewHistory={canViewHistory}
 				canAccessGovernance={canAccessGovernance}
 				activeTab={tab}
 				bi={biQuery.data}

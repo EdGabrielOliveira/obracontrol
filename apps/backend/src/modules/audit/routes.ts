@@ -18,6 +18,7 @@ export const auditRoutes = new Elysia({
 		async ({ query, user }) =>
 			auditService.list({
 				ownerId: user.id,
+				workspaceId: user.workspaceId,
 				entityType: query.entityType,
 				entityTypes: query.entityTypes,
 				entityId: query.entityId,

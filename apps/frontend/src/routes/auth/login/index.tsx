@@ -51,7 +51,7 @@ function RouteComponent() {
 
 			if (error) {
 				setSubmitError("Não foi possível entrar. Confira seu e-mail e senha.");
-				toast.error("Credenciais invalidas");
+				 toast.error("Credenciais inválidas");
 				return;
 			}
 			await queryClient.cancelQueries({ queryKey: authQueryKeys.all });

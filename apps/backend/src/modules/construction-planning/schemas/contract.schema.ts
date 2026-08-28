@@ -22,8 +22,12 @@ export const contractServiceTypeEnum = z.enum([
 export const createContractSchema = z
 	.object({
 		code: z.string().min(1),
-		supplierName: z.string().min(1).optional(),
-		supplierId: z.string().min(1).nullable().optional(),
+		supplierName: z.string().trim().min(1).optional(),
+		supplierId: z
+			.string()
+			.trim()
+			.min(1, "Selecione um fornecedor cadastrado")
+			.optional(),
 		contractValue: z.number().positive(),
 		serviceType: z.string().optional(),
 		objectDescription: z
@@ -67,11 +71,11 @@ export const createContractSchema = z
 				message: "Descricao do contrato obrigatoria",
 			});
 		}
-		if (data.supplierName === undefined && data.supplierId == null) {
+		if (!data.supplierId?.trim()) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				path: ["supplierName"],
-				message: "Informe supplierId ou supplierName.",
+				path: ["supplierId"],
+				message: "Selecione um fornecedor cadastrado",
 			});
 		}
 	});
@@ -237,8 +241,6 @@ export const createContractPaymentSchema = z.object({
 	retentionValue: z.number().optional(),
 	discountValue: z.number().optional(),
 	status: paymentStatusEnum.optional().default("EM_ABERTO"),
-	balanceOverride: z.boolean().optional(),
-	reason: z.string().max(1000).optional().nullable(),
 });
 
 export const updateContractPaymentSchema = z.object({
@@ -250,8 +252,6 @@ export const updateContractPaymentSchema = z.object({
 	retentionValue: z.number().optional(),
 	discountValue: z.number().optional(),
 	status: paymentStatusEnum.optional(),
-	balanceOverride: z.boolean().optional(),
-	reason: z.string().max(1000).optional().nullable(),
 });
 
 export const contractAmendmentKindEnum = z.enum(["ADITIVO", "REDUCAO"]);

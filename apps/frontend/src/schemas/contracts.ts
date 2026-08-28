@@ -23,8 +23,8 @@ export const contractServiceTypeSchema = z.enum([
 export const contractFormSchema = z
 	.object({
 		code: z.string().min(1, "Código obrigatório"),
-		supplierName: z.string().min(1, "Fornecedor obrigatório").optional(),
-		supplierId: z.string().min(1).nullable().optional(),
+		supplierName: z.string().trim().min(1, "Fornecedor obrigatório").optional(),
+		supplierId: z.string().min(1, "Selecione um fornecedor cadastrado"),
 		contractValue: z.preprocess(
 			parseMonetaryPreprocess,
 			z.number().positive("Valor deve ser maior que zero"),
@@ -52,11 +52,11 @@ export const contractFormSchema = z
 			.optional(),
 	})
 	.superRefine((data, ctx) => {
-		if (data.supplierName === undefined && data.supplierId == null) {
+		if (data.startDate && data.endDate && new Date(data.endDate) < new Date(data.startDate)) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				path: ["supplierName"],
-				message: "Informe supplierId ou supplierName.",
+				path: ["endDate"],
+				message: "A data final deve ser igual ou posterior à data inicial",
 			});
 		}
 	});
@@ -64,7 +64,7 @@ export const contractFormSchema = z
 export type ContractFormValues = {
 	code: string;
 	supplierName?: string;
-	supplierId?: string | null;
+	supplierId: string;
 	contractValue: number;
 	serviceType?: string;
 	objectDescription: string;
@@ -149,16 +149,7 @@ export const contractPaymentCreateSchema = z
 		discountValue: z.string().optional(),
 		measurementId: z.string().optional(),
 		status: paymentStatusSchema.optional(),
-		balanceOverride: z.boolean().optional(),
-		reason: z.string().max(1000).optional(),
-	})
-	.refine(
-		(data) => !data.balanceOverride || (data.reason ?? "").trim().length > 0,
-		{
-			message: "Informe o motivo do override",
-			path: ["reason"],
-		},
-	);
+	});
 
 export type ContractPaymentCreateValues = z.infer<
 	typeof contractPaymentCreateSchema

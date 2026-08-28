@@ -399,7 +399,11 @@ export const organizationController = new Elysia({
 	.get(
 		"/:id/reports/pdf",
 		async ({ params, user }) => {
-			return pdfReportService.generateOrganizationPdf(user.id, params.id);
+			const scope = await resolveResourceScope(user.id, { organizationId: params.id });
+			if (!scope.canRead) {
+				throw new ConstructionError("NOT_FOUND", "Organização não encontrada", 404);
+			}
+			return pdfReportService.generateOrganizationPdf(scope.resourceOwnerId, params.id);
 		},
 		{
 			detail: {
@@ -425,7 +429,11 @@ export const organizationController = new Elysia({
 	.get(
 		"/:id/cost-centers/:ccId/reports/pdf",
 		async ({ params, user }) => {
-			return pdfReportService.generateCostCenterPdf(user.id, params.ccId);
+			const scope = await resolveResourceScope(user.id, { costCenterId: params.ccId });
+			if (!scope.canRead) {
+				throw new ConstructionError("NOT_FOUND", "Centro de custo não encontrado", 404);
+			}
+			return pdfReportService.generateCostCenterPdf(scope.resourceOwnerId, params.ccId);
 		},
 		{
 			detail: {

@@ -216,6 +216,8 @@ function RouteComponent() {
 	const measList = listData?.data ?? [];
 	const totalPages = listData ? Math.ceil(listData.total / listData.limit) : 1;
 	const currentPage = listData ? listData.page : 1;
+	const hasMeasurementData = (summaryData?.measurementCount ?? 0) > 0;
+	const noInformation = "Sem informações";
 
 	return (
 		<PageContainer>
@@ -257,19 +259,31 @@ function RouteComponent() {
 				<KpiGrid>
 					<KpiCard
 						title="Total Medido"
-						value={formatCurrency(summaryData?.totalMeasured ?? 0)}
+						value={
+							hasMeasurementData
+								? formatCurrency(summaryData?.totalMeasured ?? 0)
+								: noInformation
+						}
 						tone="success"
 					/>
 					<KpiCard
 						title="% Medido"
-						value={formatRatioAsPercentage(
-							summaryData?.totalMeasuredPercentage ?? 0,
-						)}
+						value={
+							hasMeasurementData
+								? formatRatioAsPercentage(
+										summaryData?.totalMeasuredPercentage ?? 0,
+								)
+								: noInformation
+						}
 						tone="default"
 					/>
 					<KpiCard
 						title="Saldo a Medir"
-						value={formatCurrency(summaryData?.balanceToMeasure ?? 0)}
+						value={
+							hasMeasurementData
+								? formatCurrency(summaryData?.balanceToMeasure ?? 0)
+								: noInformation
+						}
 						tone={
 							(summaryData?.balanceToMeasure ?? 0) <= 0 ? "danger" : "warning"
 						}

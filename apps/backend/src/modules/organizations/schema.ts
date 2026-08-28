@@ -13,7 +13,7 @@ export const structuredAddressSchema = z.object({
 });
 
 export const createOrganizationSchema = z.object({
-	name: z.string().min(1).max(200),
+	name: z.string().trim().min(1).max(200),
 	companyId: z.string().optional(),
 	managerName: z.string().optional(),
 	address: z.string().optional(),
@@ -21,7 +21,7 @@ export const createOrganizationSchema = z.object({
 });
 
 export const updateOrganizationSchema = z.object({
-	name: z.string().min(1).max(200).optional(),
+	name: z.string().trim().min(1).max(200).optional(),
 	companyId: z.string().optional(),
 	managerName: z.string().optional(),
 	address: z.string().optional(),
@@ -29,14 +29,14 @@ export const updateOrganizationSchema = z.object({
 });
 
 export const createCostCenterSchema = z.object({
-	name: z.string().min(1).max(200),
+	name: z.string().trim().min(1).max(200),
 	managerName: z.string().optional(),
 	address: z.string().optional(),
 	structuredAddress: structuredAddressSchema.optional().nullable(),
 });
 
 export const updateCostCenterSchema = z.object({
-	name: z.string().min(1).max(200).optional(),
+	name: z.string().trim().min(1).max(200).optional(),
 	organizationId: z.string().optional(),
 	managerName: z.string().optional(),
 	address: z.string().optional(),

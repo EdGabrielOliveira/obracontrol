@@ -10,6 +10,7 @@ import type { BackendPaginated } from "./api";
 import { api, normalizePagination } from "./api";
 
 export type ContractMeasurementFilter = {
+	q?: string;
 	page?: number;
 	limit?: number;
 };
@@ -119,7 +120,7 @@ export type ContractAggregateResponse = {
 		contractValue: number;
 	};
 	services: ContractAggregateService[];
-	measurements: Array<Record<string, unknown>>;
+	measurements: ContractMeasurement[];
 	payments: ContractAggregatePayment[];
 	totals: {
 		totalContracted: number;
@@ -129,10 +130,16 @@ export type ContractAggregateResponse = {
 		retentionTotal: number;
 		discountTotal: number;
 		balance: number;
+		totalOutstanding: number;
+		totalToMeasure: number;
 		measuredPercentage: number;
+		paidPercentage: number;
 	};
 	measurementsCount: number;
 	paymentsCount: number;
+	serviceCount: number;
+	measuredServiceCount: number;
+	pendingServiceCount: number;
 };
 
 export type ContractAggregateService = {
@@ -142,6 +149,10 @@ export type ContractAggregateService = {
 	contractValue?: number | null;
 	totalCost?: number | null;
 	measuredAccumulated?: number | null;
+	measuredAccumulatedQuantity?: number | null;
+	remainingQuantity?: number | null;
+	remainingValue?: number | null;
+	measuredPercentage?: number | null;
 };
 
 export type ContractAggregatePayment = {

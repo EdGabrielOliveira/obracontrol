@@ -9,6 +9,7 @@ const mockUserFindUnique = mock(
 	async (): Promise<Record<string, unknown> | null> => ({
 		id: "actor-1",
 		role: "ADMIN",
+		workspaceId: "ws-1",
 	}),
 );
 
@@ -40,6 +41,28 @@ const mockInvitationCount = mock(async (): Promise<number> => 0);
 const mockOrgMembershipFindMany = mock(
 	async (): Promise<{ organizationId: string }[]> => [],
 );
+const mockCompanyMembershipFindMany = mock(
+	async (): Promise<{ companyId: string }[]> => [],
+);
+const mockCompanyFindMany = mock(
+	async (args?: { where?: { id?: { in?: string[] } } }) =>
+		(args?.where?.id?.in ?? []).map((id) => ({ id })),
+);
+const mockOrganizationFindMany = mock(
+	async (args?: { where?: { id?: { in?: string[] } } }) =>
+		(args?.where?.id?.in ?? []).map((id) => ({ id })),
+);
+const mockCostCenterFindMany = mock(
+	async (args?: { where?: { id?: { in?: string[] } } }) =>
+		(args?.where?.id?.in ?? []).map((id) => ({
+			id,
+			organizationId: id === "cc-2" ? "org-2" : "org-1",
+		})),
+);
+const mockConstructionWorkFindMany = mock(
+	async (args?: { where?: { id?: { in?: string[] } } }) =>
+		(args?.where?.id?.in ?? []).map((id) => ({ id })),
+);
 const mockOrgMembershipUpsert = mock(async () => ({}));
 const mockOrgMembershipUpdateMany = mock(async () => ({ count: 1 }));
 const mockCcMembershipUpsert = mock(async () => ({}));
@@ -70,6 +93,10 @@ const mockTransaction = mock(
 				upsert: mockWorkMembershipUpsert,
 				updateMany: mockWorkMembershipUpdateMany,
 			},
+			companyMembership: {
+				upsert: mockCompanyMembershipFindMany,
+				updateMany: mockCompanyMembershipFindMany,
+			},
 		}),
 );
 
@@ -89,6 +116,11 @@ mock.module("../../../../src/lib/prisma", () => ({
 			upsert: mockOrgMembershipUpsert,
 			updateMany: mockOrgMembershipUpdateMany,
 		},
+		companyMembership: { findMany: mockCompanyMembershipFindMany },
+		company: { findMany: mockCompanyFindMany },
+		organization: { findMany: mockOrganizationFindMany },
+		costCenter: { findMany: mockCostCenterFindMany },
+		constructionWork: { findMany: mockConstructionWorkFindMany },
 		costCenterMembership: {
 			upsert: mockCcMembershipUpsert,
 			updateMany: mockCcMembershipUpdateMany,
@@ -106,7 +138,7 @@ function makeInvitation(overrides: Record<string, unknown> = {}) {
 		scopeType: "organization",
 		scopeId: "org-1",
 		scopeJson: {
-			organizationIds: ["org-1"],
+			organizationIds: [],
 			costCenterIds: ["cc-1"],
 			workIds: [],
 		},
@@ -116,6 +148,7 @@ function makeInvitation(overrides: Record<string, unknown> = {}) {
 		acceptedAt: null,
 		revokedAt: null,
 		createdAt: new Date(),
+		workspaceId: "ws-1",
 		...overrides,
 	};
 }
@@ -127,7 +160,11 @@ async function importService() {
 describe("invitation service - pacote de escopo (DEC-005)", () => {
 	beforeEach(() => {
 		mock.clearAllMocks();
-		mockUserFindUnique.mockResolvedValue({ id: "actor-1", role: "ADMIN" });
+		mockUserFindUnique.mockResolvedValue({
+			id: "actor-1",
+			role: "ADMIN",
+			workspaceId: "ws-1",
+		});
 		mockOrgMembershipFindMany.mockResolvedValue([]);
 		mockInvitationFindUnique.mockResolvedValue(null);
 		mockInvitationFindMany.mockResolvedValue([]);
@@ -141,7 +178,7 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 			email: "convite@example.com",
 			role: "SUPERVISOR",
 			scope: {
-				organizationIds: ["org-1"],
+				organizationIds: [],
 				costCenterIds: ["cc-1"],
 				workIds: [],
 			},
@@ -149,7 +186,8 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 
 		expect(result.role).toBe("SUPERVISOR");
 		expect(result.scope).toEqual({
-			organizationIds: ["org-1"],
+			companyIds: [],
+			organizationIds: [],
 			costCenterIds: ["cc-1"],
 			workIds: [],
 		});
@@ -157,8 +195,9 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 			expect.objectContaining({
 				data: expect.objectContaining({
 					role: "SUPERVISOR",
-					scopeJson: {
-						organizationIds: ["org-1"],
+						scopeJson: {
+							companyIds: [],
+							organizationIds: [],
 						costCenterIds: ["cc-1"],
 						workIds: [],
 					},
@@ -176,7 +215,7 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 			email: "supervisor@obra.bi",
 			role: "SUPERVISOR",
 			scope: {
-				organizationIds: ["org-1"],
+				organizationIds: [],
 				costCenterIds: ["cc-1"],
 				workIds: [],
 			},
@@ -216,7 +255,7 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 				email: "supervisor@obra.bi",
 				role: "SUPERVISOR",
 				scope: {
-					organizationIds: ["org-2"],
+					organizationIds: [],
 					costCenterIds: ["cc-2"],
 					workIds: [],
 				},
@@ -229,22 +268,14 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 		expect(error?.status).toBe(403);
 	});
 
-	it("convite para GESTOR sem centro de custo e rejeitado", async () => {
+	it("convite para GESTOR com escopo de organizacao e aceito", async () => {
 		const { invitationService } = await importService();
-
-		let error: ConstructionError | undefined;
-		try {
-			await invitationService.createInvitation("actor-1", {
+		const result = await invitationService.createInvitation("actor-1", {
 				email: "gestor@obra.bi",
 				role: "GESTOR",
 				scope: { organizationIds: ["org-1"], costCenterIds: [], workIds: [] },
-			});
-		} catch (e: unknown) {
-			error = e as ConstructionError;
-		}
-
-		expect(error?.code).toBe("COST_CENTER_REQUIRED");
-		expect(error?.status).toBe(422);
+		});
+		expect(result.role).toBe("GESTOR");
 	});
 
 	it("aceitar convite aplica papel, membros e revoga sessoes", async () => {
@@ -261,16 +292,11 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 		expect(result.role).toBe("SUPERVISOR");
 		expect(mockUserUpdate).toHaveBeenCalledWith({
 			where: { id: "user-1" },
-			data: { role: "SUPERVISOR" },
+			data: { role: "SUPERVISOR", workspaceId: "ws-1" },
 		});
-		expect(mockOrgMembershipUpsert).toHaveBeenCalledWith(
-			expect.objectContaining({
-				create: { organizationId: "org-1", userId: "user-1", role: "GERENTE" },
-			}),
-		);
 		expect(mockCcMembershipUpsert).toHaveBeenCalledWith(
 			expect.objectContaining({
-				create: { costCenterId: "cc-1", userId: "user-1", role: "GESTOR" },
+				create: { costCenterId: "cc-1", userId: "user-1", role: "SUPERVISOR" },
 			}),
 		);
 		expect(mockSessionDeleteMany).toHaveBeenCalledWith({
@@ -278,25 +304,17 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 		});
 	});
 
-	it("rejeita convite com papel legado", async () => {
+	it("normaliza convite com papel legado", async () => {
 		mockInvitationFindUnique.mockResolvedValue(
 			makeInvitation({ role: "OPERADOR" }),
 		);
 		const { invitationService } = await importService();
-
-		let error: ConstructionError | undefined;
-		try {
-			await invitationService.acceptInvitation(
-				"user-1",
-				"convite@example.com",
-				{ token: RAW_TOKEN },
-			);
-		} catch (e: unknown) {
-			error = e as ConstructionError;
-		}
-
-		expect(error?.code).toBe("INVITATION_INVALID_ROLE");
-		expect(error?.status).toBe(422);
+		const result = await invitationService.acceptInvitation(
+			"user-1",
+			"convite@example.com",
+			{ token: RAW_TOKEN },
+		);
+		expect(result.role).toBe("SUPERVISOR");
 	});
 
 	it("lista convites restritos ao escopo do Gerente", async () => {

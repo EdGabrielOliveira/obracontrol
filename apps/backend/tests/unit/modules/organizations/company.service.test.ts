@@ -123,11 +123,11 @@ describe("companyService (EMP-003, DEC-013)", () => {
 			document: "12.345.678/0001-95",
 		});
 
-		expect(lookup).toHaveBeenCalledWith("12.345.678/0001-95");
+		expect(lookup).toHaveBeenCalledWith("12345678000195");
 		expect(companyCreate).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
-					document: "12.345.678/0001-95",
+					document: "12345678000195",
 					tradeName: "Alfa Construtora",
 					addressState: "SP",
 				}),

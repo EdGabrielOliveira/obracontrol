@@ -261,9 +261,15 @@ export function ImportBatchModal({
 								uploadMutation.mutate(selectedFile);
 							}}
 						/>
-						{file && (
+						{file && uploadMutation.isPending && (
 							<p className="text-sm text-muted-foreground">
 								{file.name} — analisando a planilha...
+							</p>
+						)}
+						{file && uploadMutation.isError && (
+							<p className="text-sm text-destructive">
+								Não foi possível analisar {file.name}. Corrija o arquivo e
+								tente novamente.
 							</p>
 						)}
 					</div>

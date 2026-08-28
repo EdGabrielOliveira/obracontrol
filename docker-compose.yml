@@ -42,11 +42,23 @@ services:
       context: .
       dockerfile: apps/frontend/Dockerfile
       network: host
-      args:
-        VITE_SERVER_URL: ${VITE_SERVER_URL:-}
-        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+      target: development
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      VITE_BACKEND_TARGET: http://backend:7001
+      VITE_USE_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_HMR_CLIENT_PORT: "${FRONTEND_PORT:-7000}"
     ports:
-      - "${FRONTEND_PORT:-7000}:80"
+      - "${FRONTEND_PORT:-7000}:7000"
+    volumes:
+      - type: bind
+        source: ./apps/frontend
+        target: /app
+        consistency: delegated
+      - type: volume
+        source: frontend_node_modules
+        target: /app/node_modules
     depends_on:
       backend:
         condition: service_healthy
@@ -55,7 +67,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          'wget -qO- http://127.0.0.1/healthz | grep -q ''"status":"ok"''',
+          "node -e \"fetch('http://127.0.0.1:7000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
         ]
       interval: 30s
       timeout: 5s
@@ -68,3 +80,5 @@ services:
 volumes:
   obracontrol_api_data:
     name: obracontrol_api_data
+  frontend_node_modules:
+    name: obracontrol_frontend_node_modules

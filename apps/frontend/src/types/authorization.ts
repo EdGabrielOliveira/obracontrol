@@ -6,6 +6,7 @@ export type AuthorizationCapabilities = {
 	canManageScopedCompanies?: boolean;
 	canManageStructure?: boolean;
 	canManageApiKeys: boolean;
+	canViewAudit?: boolean;
 	canDecideSupervisorRequests: boolean;
 	canReviewExecutedSupervisorRequests: boolean;
 	canRequestSupervisorDecisionReversal: boolean;

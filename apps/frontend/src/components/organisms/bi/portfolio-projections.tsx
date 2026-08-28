@@ -2,6 +2,10 @@ import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatNullableCurrency } from "@/utils/format";
 
+const noInformation = "Sem informações";
+const formatProjection = (value: number | null, available = value != null) =>
+	available && value != null ? formatNullableCurrency(value) : noInformation;
+
 interface PortfolioProjectionsProps {
 	cards: {
 		totalBac: number;
@@ -32,7 +36,7 @@ export function PortfolioProjections({ cards }: PortfolioProjectionsProps) {
 						</span>
 					</div>
 					<span className={`text-lg font-bold ${eacTone}`}>
-						{formatNullableCurrency(cards.totalEacTypical)}
+						{formatProjection(cards.totalEacTypical)}
 					</span>
 				</CardContent>
 			</Card>
@@ -45,7 +49,7 @@ export function PortfolioProjections({ cards }: PortfolioProjectionsProps) {
 						</span>
 					</div>
 					<span className="text-lg font-bold text-muted-foreground">
-						{formatNullableCurrency(cards.totalEtc)}
+						{formatProjection(cards.totalEtc)}
 					</span>
 				</CardContent>
 			</Card>
@@ -58,7 +62,7 @@ export function PortfolioProjections({ cards }: PortfolioProjectionsProps) {
 						</span>
 					</div>
 					<span className={`text-lg font-bold ${vacTone}`}>
-						{formatNullableCurrency(cards.totalVac)}
+						{formatProjection(cards.totalVac)}
 					</span>
 				</CardContent>
 			</Card>
@@ -71,7 +75,7 @@ export function PortfolioProjections({ cards }: PortfolioProjectionsProps) {
 						</span>
 					</div>
 					<span className="text-lg font-bold">
-						{formatNullableCurrency(cards.totalBac)}
+						{formatProjection(cards.totalBac, cards.totalBac > 0)}
 					</span>
 				</CardContent>
 			</Card>

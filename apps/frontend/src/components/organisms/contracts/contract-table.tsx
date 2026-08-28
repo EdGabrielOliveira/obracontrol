@@ -15,13 +15,17 @@ export type PendingContractRow = {
 	contractValue: number;
 	serviceType: string;
 	title: string;
-	startDate: null;
-	endDate: null;
-	status: "PENDENTE";
+	startDate: string | null;
+	endDate: string | null;
+	status: "PENDENTE" | "RECUSADO";
 	notes: null;
 	createdAt: string;
 	isPending: true;
 	requestId: string;
+	approvalRequestId?: string | null;
+	approvalKind?: "comparison" | "approval";
+	approvalStatus?: string | null;
+	approvalReason?: string | null;
 };
 
 export type ContractTableRow =
@@ -37,7 +41,12 @@ interface ContractTableProps {
 	onOpenStatus?: (contract: Contract) => void;
 	isUpdatingStatus?: boolean;
 	onRowClick?: (contract: ContractTableRow) => void;
-	onPendingClick?: (requestId: string) => void;
+	onPendingClick?: (
+		requestId: string,
+		kind: "comparison" | "approval",
+	) => void;
+	searchValue?: string;
+	onSearchChange?: (value: string) => void;
 }
 
 const helper = createColumnHelper<ContractTableRow>();
@@ -52,6 +61,8 @@ export function ContractTable({
 	isUpdatingStatus,
 	onRowClick,
 	onPendingClick,
+	searchValue,
+	onSearchChange,
 }: ContractTableProps) {
 	const columns = [
 		helper.accessor("title", {
@@ -64,7 +75,11 @@ export function ContractTable({
 						className="link-navigation"
 						onClick={(event) => {
 							event.stopPropagation();
-							onPendingClick?.(row.requestId);
+							onPendingClick?.(
+								row.requestId,
+								row.approvalKind ??
+									(row.approvalRequestId ? "approval" : "comparison"),
+							);
 						}}
 					>
 						<span>{info.getValue() || row.supplierName}</span>
@@ -99,9 +114,19 @@ export function ContractTable({
 		}),
 		helper.accessor("status", {
 			header: "Status",
-			cell: (info) => (
-				<StatusBadge status={info.getValue()} map={CONTRACT_STATUS_MAP} />
-			),
+			cell: (info) => {
+				const row = info.row.original;
+				return (
+					<div className="flex flex-col gap-1">
+						<StatusBadge status={info.getValue()} map={CONTRACT_STATUS_MAP} />
+						{row.isPending && row.approvalReason ? (
+							<span className="max-w-xs text-xs text-muted-foreground">
+								{row.approvalReason}
+							</span>
+						) : null}
+					</div>
+				);
+			},
 			meta: { mobileLabel: "Status" },
 		}),
 		helper.accessor("startDate", {
@@ -180,6 +205,8 @@ export function ContractTable({
 			columns={columns}
 			data={contracts}
 			searchPlaceholder="Buscar contratos..."
+			searchValue={searchValue}
+			onSearchChange={onSearchChange}
 			onRowClick={onRowClick}
 		/>
 	);

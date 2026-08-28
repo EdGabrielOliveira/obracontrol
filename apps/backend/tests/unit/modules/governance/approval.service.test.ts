@@ -522,6 +522,8 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 		expect(approvalRequestCreate).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.objectContaining({
+					actorId: "supervisor-1",
+					actorRole: "SUPERVISOR",
 					requiredApproverRole: "GERENTE",
 					status: "PENDING",
 				}),
@@ -848,6 +850,43 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 			.map((call) => (call[0] as { data?: Record<string, unknown> }).data)
 			.filter((data) => data?.eventType === "SUPERVISOR_REQUEST_EXECUTED");
 		expect(notified).toHaveLength(0);
+	});
+
+	it("notifica o Supervisor quando o Gerente recusa a segunda revisao", async () => {
+		approvalRequestFindUnique.mockResolvedValue(
+			pendingRequest({
+				actorId: "supervisor-1",
+				actorRole: "SUPERVISOR",
+				requiredApproverRole: "GERENTE",
+				effectAction: "CONTRACT_CREATE",
+				resourceType: "CONTRACT",
+				resourceId: null,
+				payloadJson: { workId: "work-1", contract: { title: "Contrato A" } },
+			}),
+		);
+		userFindUnique.mockResolvedValue({ role: "GERENTE" });
+		resolveResourceScopeMock.mockResolvedValue(
+			makeScopeMock({ role: "GERENTE" }),
+		);
+		const { decideApproval } = await importService();
+
+		await decideApproval({
+			approverId: "gerente-1",
+			requestId: "req-1",
+			decision: "REJECT",
+			reason: "Valor acima do limite aprovado",
+		});
+
+		const notification = notificationCreate.mock.calls
+			.map((call) => (call[0] as { data?: Record<string, unknown> }).data)
+			.find(
+				(data) =>
+					data?.eventType === "APPROVAL_DECIDED" &&
+					data.recipientId === "supervisor-1",
+			);
+		expect(notification).toBeDefined();
+		expect(notification?.body).toContain("/app/obras/work-1/contratos/aprovacoes/req-1");
+		expect(notification?.body).toContain("Valor acima do limite aprovado");
 	});
 
 	it("rejeita GESTOR de outro centro de custo", async () => {

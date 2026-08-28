@@ -170,6 +170,10 @@ export function DataTable<TData>({
 		getSortedRowModel: getSortedRowModel(),
 		getFilteredRowModel: getFilteredRowModel(),
 		getExpandedRowModel: getExpandedRowModel(),
+		// Controlled searches are already filtered by the server. Do not apply
+		// TanStack's second pass, which can hide matches on non-visible fields
+		// such as a contract code.
+		globalFilterFn: isSearchControlled ? () => true : undefined,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
 		onGlobalFilterChange: handleGlobalFilterChange,

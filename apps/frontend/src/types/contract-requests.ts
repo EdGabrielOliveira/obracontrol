@@ -1,6 +1,9 @@
 export type ContractRequestStatus =
 	| "EM_ESPERA"
 	| "AGUARDANDO_APROVACAO_FINAL"
+	| "EM_NEGOCIACAO"
+	| "CONTRATADA"
+	| "CANCELADA"
 	| "ACEITA";
 
 export type ContractRequestSummary = {
@@ -10,6 +13,9 @@ export type ContractRequestSummary = {
 	status: string;
 	createdAt: string;
 	contractId: string | null;
+	approvalRequestId?: string | null;
+	approvalStatus?: string | null;
+	approvalReason?: string | null;
 };
 
 export type ContractRequestItem = {
@@ -56,6 +62,10 @@ export type ContractRequestComparison = {
 		endDate: string | null;
 		status: ContractRequestStatus;
 	};
+	approval: {
+		status: string;
+		reason: string | null;
+	} | null;
 	selectedItems: Array<{
 		budgetItemId: string;
 		index: string | null;

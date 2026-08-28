@@ -49,7 +49,20 @@ async function getActiveBudgetImportId(ownerId: string, workId: string) {
 		where: { ownerId, id: workId },
 		select: { activeImportId: true },
 	});
-	return work?.activeImportId ?? "__NO_ACTIVE_IMPORT__";
+	if (work?.activeImportId) return work.activeImportId;
+
+	// Obras antigas não tinham activeImportId preenchido. Nesse caso, a
+	// importação mais recente é a versão vigente usada pelo restante do BI.
+	const latestImport = await (
+		prisma.constructionImport as
+			| typeof prisma.constructionImport
+			| undefined
+	)?.findFirst({
+		where: { ownerId, workId },
+		orderBy: { createdAt: "desc" },
+		select: { id: true },
+	});
+	return latestImport?.id ?? "__NO_ACTIVE_IMPORT__";
 }
 
 export async function listWorkMeasurements(

@@ -14,6 +14,8 @@ import {
 } from "@/utils/evm-health";
 import { formatCurrency } from "@/utils/format";
 
+const noInformation = "Sem informações";
+
 interface HealthCardsProps {
 	cards: MultiworksBIResponse["cards"];
 	works: MultiworksBIResponse["works"];
@@ -113,10 +115,17 @@ export function HealthCards({ cards, works }: HealthCardsProps) {
 			<HealthCard
 				icon={PiggyBank}
 				label="Orçamento ativo"
-				value={formatCurrency(cards.totalActiveBudget)}
+				value={
+					cards.totalActiveBudget > 0
+						? formatCurrency(cards.totalActiveBudget)
+						: noInformation
+				}
 				tone="unknown"
 				meta={{
-					text: `Saldo total ${formatCurrency(cards.totalBudgetBalance)}`,
+					text:
+						cards.totalActiveBudget > 0
+							? `Saldo total ${formatCurrency(cards.totalBudgetBalance)}`
+							: noInformation,
 					tone: classifyBalance(cards.totalBudgetBalance),
 				}}
 			/>

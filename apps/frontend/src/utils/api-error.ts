@@ -4,6 +4,8 @@ import type { ApiErrorField, ApiErrorResponse } from "@/types/shared";
 
 export function normalizePortugueseText(value: string): string {
 	const replacements: Array<[string, string]> = [
+		["Invalid input", "Dados inválidos"],
+		["Too small: expected number to be >0", "O valor deve ser maior que zero"],
 		["nao", "não"],
 		["Nao", "Não"],
 		["voce", "você"],
@@ -57,6 +59,8 @@ export function normalizePortugueseText(value: string): string {
 		["Unico", "Único"],
 		["unica", "única"],
 		["Unica", "Única"],
+		["CNPJ deve conter 14 digitos", "CNPJ deve conter 14 dígitos"],
+		["CPF ou CNPJ deve conter 11 ou 14 digitos", "CPF ou CNPJ deve conter 11 ou 14 dígitos"],
 		["versao", "versão"],
 		["Versao", "Versão"],
 		["aprovacao", "aprovação"],

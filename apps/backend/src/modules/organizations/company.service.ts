@@ -1,5 +1,9 @@
 import { env } from "../../env";
-import { type CnpjLookupResult, cnpjClient } from "../../lib/cnpj-client";
+import {
+	isValidCnpj,
+	type CnpjLookupResult,
+	cnpjClient,
+} from "../../lib/cnpj-client";
 import { ConstructionError } from "../../lib/errors";
 import { objectStorage } from "../../lib/object-storage";
 import { prisma } from "../../lib/prisma";
@@ -58,6 +62,41 @@ function mapStructuredAddress(
 		latitude: address.latitude === null ? null : Number(address.latitude),
 		longitude: address.longitude === null ? null : Number(address.longitude),
 	};
+}
+
+async function assertUniqueDocument(
+	workspaceId: string | null | undefined,
+	document: string | null,
+	excludeId?: string,
+) {
+	if (!document) return;
+	const duplicate = await prisma.company.findFirst({
+		where: {
+			document,
+			...(workspaceId ? { workspaceId } : { workspaceId: null }),
+			...(excludeId ? { NOT: { id: excludeId } } : {}),
+		},
+		select: { id: true },
+	});
+	if (duplicate) {
+		throw new ConstructionError(
+			"DUPLICATE_COMPANY_DOCUMENT",
+			"Já existe uma empresa com este CNPJ",
+			409,
+		);
+	}
+}
+
+function normalizeCompanyDocument(raw?: string | null): string | null {
+	const document = raw?.trim().replace(/\D/g, "") || null;
+	if (document && !isValidCnpj(document)) {
+		throw new ConstructionError(
+			"INVALID_CNPJ",
+			"CNPJ inválido. Confira os 14 dígitos informados",
+			400,
+		);
+	}
+	return document;
 }
 
 export type CompanyInput = {
@@ -178,9 +217,11 @@ export const companyService = {
 		}
 		const bytes = new Uint8Array(await file.arrayBuffer());
 		validateDocxTemplate(bytes);
+		const document = normalizeCompanyDocument(input.document);
+		const workspaceId = await getWorkspaceIdForUser(ownerId);
+		await assertUniqueDocument(workspaceId, document);
 		const storageKey = `companies/${ownerId}/${crypto.randomUUID()}/template.docx`;
 		await objectStorage.put(storageKey, bytes, file.type);
-		const document = input.document?.trim() || null;
 		let tradeName = input.tradeName?.trim() || null;
 		let addressState = input.addressState?.trim() || null;
 		if (document) {
@@ -197,7 +238,6 @@ export const companyService = {
 			}
 		}
 		try {
-			const workspaceId = await getWorkspaceIdForUser(ownerId);
 			const row = await prisma.$transaction(async (tx) =>
 				tx.company.create({
 					data: {
@@ -245,7 +285,9 @@ export const companyService = {
 			throw new ConstructionError("INVALID_INPUT", "Nome obrigatorio", 400);
 		}
 
-		const document = input.document?.trim() || null;
+		const document = normalizeCompanyDocument(input.document);
+		const workspaceId = await getWorkspaceIdForUser(ownerId);
+		await assertUniqueDocument(workspaceId, document);
 		let tradeName = input.tradeName?.trim() || null;
 		let addressCity = input.addressCity?.trim() || null;
 		let addressState = input.addressState?.trim() || null;
@@ -268,7 +310,6 @@ export const companyService = {
 			}
 		}
 
-		const workspaceId = await getWorkspaceIdForUser(ownerId);
 		const created = await prisma.company.create({
 			data: {
 				ownerId,
@@ -339,12 +380,17 @@ export const companyService = {
 		if (!existing) {
 			throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
 		}
+		const document =
+			input.document !== undefined
+				? normalizeCompanyDocument(input.document)
+				: existing.document;
+		await assertUniqueDocument(existing.workspaceId, document, companyId);
 		const updated = await prisma.company.update({
 			where: { id: companyId },
 			data: {
 				...(input.name !== undefined ? { name: input.name.trim() } : {}),
 				...(input.document !== undefined
-					? { document: input.document?.trim() || null }
+					? { document }
 					: {}),
 				...(input.tradeName !== undefined
 					? { tradeName: input.tradeName?.trim() || null }
@@ -414,7 +460,11 @@ export const companyService = {
 		const result = await prisma.organization.updateMany({
 			where: {
 				id: organizationId,
-				workspaceId: company.workspaceId,
+				...(company.workspaceId
+					? { workspaceId: company.workspaceId }
+					: access?.canAccessAllCompanies
+						? {}
+						: { ownerId }),
 			},
 			data: { companyId },
 		});

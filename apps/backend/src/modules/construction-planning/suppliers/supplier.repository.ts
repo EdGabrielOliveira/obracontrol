@@ -179,9 +179,18 @@ export async function createWorkSupplier(
 	});
 }
 
-export async function listWorkSuppliers(ownerId: string, workId: string) {
+export async function listWorkSuppliers(
+	ownerId: string,
+	workId: string,
+	workspaceId?: string | null,
+) {
 	return prisma.constructionWorkSupplier.findMany({
-		where: { ownerId, workId },
+		where: workspaceId
+			? {
+					workId,
+					OR: [{ ownerId }, { work: { workspaceId } }],
+				}
+			: { ownerId, workId },
 		include: { supplier: true },
 		orderBy: { supplier: { name: "asc" } },
 	});

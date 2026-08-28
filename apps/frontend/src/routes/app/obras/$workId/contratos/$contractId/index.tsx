@@ -67,6 +67,8 @@ import { linkSupplierToWork } from "@/api/work-suppliers";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
+import { KpiCard } from "@/components/atoms/kpi-card";
+import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import {
@@ -211,6 +213,8 @@ function RouteComponent() {
 	const [artifactError, setArtifactError] = useState<string | null>(null);
 	const [measPage, setMeasPage] = useState(1);
 	const [payPage, setPayPage] = useState(1);
+	const [measSearch, setMeasSearch] = useState("");
+	const [paySearch, setPaySearch] = useState("");
 	const [measurementWarnings, setMeasurementWarnings] = useState<
 		Array<{
 			code: string;
@@ -221,10 +225,18 @@ function RouteComponent() {
 			periodEnd?: string | null;
 		}>
 	>([]);
-	const measFilter = { page: measPage, limit: 10 };
-	const payFilter = { page: payPage, limit: 10 };
+	const measFilter = { q: measSearch || undefined, page: measPage, limit: 10 };
+	const payFilter = { q: paySearch || undefined, page: payPage, limit: 10 };
 	const handleMeasPageChange = useCallback((p: number) => setMeasPage(p), []);
 	const handlePayPageChange = useCallback((p: number) => setPayPage(p), []);
+	const handleMeasSearchChange = useCallback((value: string) => {
+		setMeasSearch(value);
+		setMeasPage(1);
+	}, []);
+	const handlePaySearchChange = useCallback((value: string) => {
+		setPaySearch(value);
+		setPayPage(1);
+	}, []);
 
 	const { data: contract, isLoading } = useQuery({
 		queryKey: contractKeys.detail(workId, contractId),
@@ -421,13 +433,13 @@ function RouteComponent() {
 		error: measurementsError,
 		refetch: refetchMeasurements,
 	} = useQuery({
-		queryKey: contractKeys.measurementsList(workId, contractId, measFilter),
+			queryKey: contractKeys.measurementsList(workId, contractId, measFilter),
 		queryFn: () => listContractMeasurements(workId, contractId, measFilter),
 		staleTime: 2 * 60 * 1000,
 	});
 
 	const { data: payments, isLoading: isPaymentsLoading } = useQuery({
-		queryKey: contractKeys.paymentsList(workId, contractId, payFilter),
+			queryKey: contractKeys.paymentsList(workId, contractId, payFilter),
 		queryFn: () => listContractPayments(workId, contractId, payFilter),
 		staleTime: 2 * 60 * 1000,
 	});
@@ -440,11 +452,6 @@ function RouteComponent() {
 		queryFn: () =>
 			listContractMeasurements(workId, contractId, { page: 1, limit: 100 }),
 		staleTime: 2 * 60 * 1000,
-	});
-
-	const { data: effectiveBudgetVersion } = useQuery({
-		queryKey: workKeys.budgetVersion(workId),
-		queryFn: () => getEffectiveBudgetVersion(workId),
 	});
 
 	const activeBudgetVersionQuery = useQuery({
@@ -510,6 +517,22 @@ function RouteComponent() {
 		queryFn: () => listContractAmendments(workId, contractId),
 		staleTime: 2 * 60 * 1000,
 	});
+	const servicesWithMeasurementBalance = useMemo(
+		() =>
+			(services ?? []).map((service) => {
+				const aggregateService = aggregate?.services.find(
+					(candidate) => candidate.id === service.id,
+				);
+				return {
+					...service,
+					measuredAccumulatedQuantity:
+						aggregateService?.measuredAccumulatedQuantity ?? 0,
+					remainingQuantity:
+						aggregateService?.remainingQuantity ?? service.quantity,
+				};
+			}),
+		[aggregate, services],
+	);
 
 	const invalidatePayments = () =>
 		invalidateContractRelated(queryClient, workId, contractId);
@@ -524,8 +547,6 @@ function RouteComponent() {
 			retentionValue?: number;
 			discountValue?: number;
 			status?: PaymentStatus;
-			balanceOverride?: boolean;
-			reason?: string;
 		}) => createContractPayment(workId, contractId, values),
 		onSuccess: () => {
 			toast.success("Pagamento criado!");
@@ -554,8 +575,6 @@ function RouteComponent() {
 		retentionValue?: string;
 		discountValue?: string;
 		status?: PaymentStatus;
-		balanceOverride?: boolean;
-		reason?: string;
 	}) => {
 		const parsed = contractPaymentCreateSchema.safeParse(values);
 		if (!parsed.success) {
@@ -576,10 +595,6 @@ function RouteComponent() {
 					? (parseCurrencyToNumber(parsed.data.discountValue) ?? 0)
 					: undefined,
 				status: parsed.data.status || undefined,
-				balanceOverride: parsed.data.balanceOverride,
-				reason: parsed.data.balanceOverride
-					? parsed.data.reason?.trim() || undefined
-					: undefined,
 			}),
 		);
 	};
@@ -727,7 +742,6 @@ function RouteComponent() {
 							</Button>
 						)}
 						<Button
-							variant="outline"
 							size="sm"
 							disabled={
 								artifactMutation.isPending ||
@@ -743,7 +757,7 @@ function RouteComponent() {
 						>
 							<FileText className="h-4 w-4" />
 							<span className="hidden sm:inline">
-								{artifactMutation.isPending ? "Gerando..." : "PDF"}
+								{artifactMutation.isPending ? "Gerando..." : "Gerar contrato"}
 							</span>
 						</Button>
 						<Button
@@ -808,6 +822,44 @@ function RouteComponent() {
 						: null)
 				}
 			/>
+			{isAggregateLoading ? (
+				<div className="rounded-lg border p-4 text-sm text-muted-foreground">
+					Carregando indicadores do contrato...
+				</div>
+			) : aggregate ? (
+				<KpiGrid>
+					<KpiCard
+						title="Valor pago"
+						value={formatCurrency(aggregate.totals.totalPaid)}
+						tone="success"
+					/>
+					<KpiCard
+						title="Valor a pagar"
+						value={formatCurrency(aggregate.totals.totalOutstanding)}
+						tone={aggregate.totals.totalOutstanding > 0 ? "warning" : "success"}
+					/>
+					<KpiCard
+						title="Valor medido"
+						value={formatCurrency(aggregate.totals.totalMeasured)}
+						tone="success"
+					/>
+					<KpiCard
+						title="Valor a medir"
+						value={formatCurrency(aggregate.totals.totalToMeasure)}
+						tone={aggregate.totals.totalToMeasure > 0 ? "warning" : "success"}
+					/>
+					<KpiCard
+						title="Medições realizadas"
+						value={aggregate.measurementsCount}
+						tone="default"
+					/>
+					<KpiCard
+						title="Medições faltantes"
+						value={aggregate.pendingServiceCount}
+						tone={aggregate.pendingServiceCount > 0 ? "warning" : "success"}
+					/>
+				</KpiGrid>
+			) : null}
 			<Tabs
 				value={searchParams.tab ?? "servicos"}
 				onValueChange={(tab) =>
@@ -824,7 +876,7 @@ function RouteComponent() {
 					})
 				}
 			>
-				<TabsList className="w-full justify-start mb-4">
+				<TabsList className="w-full mt-4 justify-start mb-4">
 					<TabsTrigger value="servicos" className="gap-1.5">
 						<FileText className="h-4 w-4" />
 						Serviços
@@ -867,7 +919,7 @@ function RouteComponent() {
 						workId={workId}
 						contractId={contractId}
 						measurements={measurements?.data ?? []}
-						services={services ?? []}
+						services={servicesWithMeasurementBalance}
 						isLoading={isMeasurementsLoading}
 						isError={!!measurementsError}
 						isCreatingMeasurement={createMeasMutation.isPending}
@@ -887,6 +939,8 @@ function RouteComponent() {
 						}
 						warnings={measurementWarnings}
 						onDismissWarnings={() => setMeasurementWarnings([])}
+						searchValue={measSearch}
+						onSearchChange={handleMeasSearchChange}
 					/>
 					{measurements && (
 						<PaginationBar
@@ -905,6 +959,8 @@ function RouteComponent() {
 						isCreatingPayment={createPaymentMutation.isPending}
 						onCreatePayment={handleCreatePayment}
 						onDeletePayment={(id) => deletePaymentMutation.mutate(id)}
+						searchValue={paySearch}
+						onSearchChange={handlePaySearchChange}
 					/>
 					{payments && (
 						<PaginationBar

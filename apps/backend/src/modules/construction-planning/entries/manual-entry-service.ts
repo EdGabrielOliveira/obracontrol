@@ -449,9 +449,23 @@ export class ConstructionManualEntryService {
 		workId: string,
 		costId: string,
 		input: UpdateActualCostInput,
+		ctx?: { userId: string },
 	) {
 		await this.assertWritable(ownerId, workId, "WORK_COSTS");
 		await this.governance.assertWritable(ownerId, "COST_STATUS", costId);
+		const rejectedApproval = ctx
+			? await prisma.approvalRequest.findFirst({
+					where: {
+						ownerId,
+						resourceType: "ACTUAL_COST",
+						resourceId: costId,
+						effectAction: "COST_APPROVE",
+						status: "REJECTED",
+					},
+					orderBy: { createdAt: "desc" },
+					select: { id: true },
+				})
+			: null;
 		if (input.supplierId) {
 			await this.supplierScope.assertLinkedToWork(
 				ownerId,
@@ -517,6 +531,24 @@ export class ConstructionManualEntryService {
 					normalized,
 					tx,
 				);
+			}
+			if (rejectedApproval && ctx) {
+				const { submitApproval } = await import(
+					"../../governance/approval.service",
+				);
+				await submitApproval({
+					actorId: ctx.userId,
+					resourceType: "ACTUAL_COST",
+					resourceId: costId,
+					effectAction: "COST_APPROVE",
+					payload: {
+						workId,
+						actualCostId: costId,
+						description: updated.description ?? null,
+					},
+					expectedVersion: 1,
+					idempotencyKey: ["actual-cost-revision", costId, crypto.randomUUID()].join("-"),
+				});
 			}
 			return updated;
 		});

@@ -139,7 +139,7 @@ function buildWorkContextNavGroups(pathname: string): NavGroup[] {
 					label: "Aprovações",
 					to: `${base}/aprovacoes`,
 					icon: ShieldCheck,
-					visibleForRoles: ["ADMIN", "GERENTE"],
+					visibleForRoles: ["ADMIN", "GERENTE", "GESTOR"],
 					matches: (p) => p.startsWith(`${base}/aprovacoes`),
 				},
 			],

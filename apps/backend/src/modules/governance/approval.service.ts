@@ -425,7 +425,7 @@ async function notifyEligibleApprovers(input: {
 	for (const member of organizationMembers) {
 		if (
 			input.requiredApproverRole === "GERENTE" &&
-			member.user?.role === "GERENTE"
+			normalizeRole(member.user?.role) === "GERENTE"
 		) {
 			recipients.add(member.userId);
 		}
@@ -433,7 +433,7 @@ async function notifyEligibleApprovers(input: {
 	for (const member of costCenterMembers) {
 		if (
 			input.requiredApproverRole === "GESTOR" &&
-			member.user?.role === "GESTOR"
+			normalizeRole(member.user?.role) === "GESTOR"
 		) {
 			recipients.add(member.userId);
 		}
@@ -441,9 +441,9 @@ async function notifyEligibleApprovers(input: {
 	for (const member of companyMembers) {
 		if (
 			(input.requiredApproverRole === "GESTOR" &&
-				member.user?.role === "GESTOR") ||
+				normalizeRole(member.user?.role) === "GESTOR") ||
 			(input.requiredApproverRole === "GERENTE" &&
-				member.user?.role === "GERENTE")
+				normalizeRole(member.user?.role) === "GERENTE")
 		) {
 			recipients.add(member.userId);
 		}
@@ -676,8 +676,12 @@ export async function decideApproval(input: {
 			const managerRequest = await tx.approvalRequest.create({
 				data: {
 					ownerId: request.ownerId,
-					actorId: input.approverId,
-					actorRole: "GESTOR",
+					// This is the second review of the same supervisor request,
+					// not a new request owned by the intermediate Gestor. Keeping
+					// the original actor makes final decisions visible and
+					// notifiable to the person who initiated the operation.
+					actorId: request.actorId,
+					actorRole: request.actorRole,
 					organizationId: request.organizationId,
 					costCenterId: request.costCenterId,
 					resourceType: request.resourceType,
@@ -719,7 +723,12 @@ export async function decideApproval(input: {
 					input.decision === "APPROVE"
 						? "Solicitacao aprovada"
 						: "Solicitacao rejeitada",
-				body: input.reason?.trim() ?? null,
+				body: [
+					input.reason?.trim(),
+					approvalDetailDeepLink(request),
+				]
+					.filter(Boolean)
+					.join(" ") || null,
 			},
 			tx,
 		);
@@ -760,11 +769,11 @@ async function notifyManagersForReview(
 	});
 	const managerIds = new Set(
 		memberships
-			.filter((membership) => membership.user?.role === "GERENTE")
+			.filter((membership) => normalizeRole(membership.user?.role) === "GERENTE")
 			.map((membership) => membership.userId),
 	);
 	for (const membership of companyMemberships) {
-		if (membership.user?.role === "GERENTE") managerIds.add(membership.userId);
+		if (normalizeRole(membership.user?.role) === "GERENTE") managerIds.add(membership.userId);
 	}
 	for (const managerId of managerIds) {
 		await notificationService.create(
@@ -839,12 +848,12 @@ async function notifyGerentesAfterSupervisorExecution(
 	const gerenteIds = [
 		...new Set(
 			memberships
-				.filter((membership) => membership.user?.role === "GERENTE")
+				.filter((membership) => normalizeRole(membership.user?.role) === "GERENTE")
 				.map((membership) => membership.userId),
 		),
 	];
 	for (const membership of companyMemberships) {
-		if (membership.user?.role === "GERENTE") gerenteIds.push(membership.userId);
+		if (normalizeRole(membership.user?.role) === "GERENTE") gerenteIds.push(membership.userId);
 	}
 	for (const gerenteId of gerenteIds) {
 		await notificationService.create(
@@ -1138,4 +1147,64 @@ export async function listPendingApprovals(actorId: string, workId?: string) {
 	});
 	if (!workId) return rows;
 	return rows.filter((row) => getApprovalWorkId(row) === workId);
+}
+
+function approvalDetailDeepLink(row: {
+	id: string;
+	payloadJson: unknown;
+	effectAction: string;
+	resourceType: string;
+	resourceId: string | null;
+}): string {
+	const workId = getApprovalWorkId(row);
+	if (!workId) return "/app/aprovacoes";
+	if (row.effectAction === "CONTRACT_REQUEST_FINALIZE" && row.resourceId) {
+		return `/app/obras/${workId}/contratos/${row.resourceId}/comparativo`;
+	}
+	if (row.effectAction === "CONTRACT_CREATE") {
+		return `/app/obras/${workId}/contratos/aprovacoes/${row.id}`;
+	}
+	return `/app/obras/${workId}`;
+}
+
+/**
+ * Retorna o histórico das solicitações abertas pelo próprio usuário. A fila
+ * de aprovação continua restrita aos superiores; este histórico existe para
+ * que o solicitante acompanhe pendências e rejeições sem ganhar autoridade
+ * para decidir a própria solicitação.
+ */
+export async function listMyApprovalRequests(actorId: string, workId?: string) {
+	const rows = await prisma.approvalRequest.findMany({
+		where: { actorId },
+		include: {
+			actor: { select: { name: true } },
+			decisions: { select: { reason: true }, take: 1 },
+		},
+		orderBy: { createdAt: "desc" },
+		take: 100,
+	});
+	if (!workId) return rows;
+	return rows.filter((row) => getApprovalWorkId(row) === workId);
+}
+
+/**
+ * Permite abrir uma solicitação pelo link de visualização. O solicitante
+ * pode consultar seu próprio registro; um superior só pode consultar um
+ * registro que esteja dentro do escopo de aprovação dele.
+ */
+export async function getApprovalRequest(actorId: string, requestId: string) {
+	const request = await prisma.approvalRequest.findUnique({
+		where: { id: requestId },
+		include: {
+			actor: { select: { name: true } },
+			decisions: { select: { reason: true }, take: 1 },
+		},
+	});
+	if (!request) {
+		throw new ConstructionError("NOT_FOUND", "Solicitacao nao encontrada", 404);
+	}
+	if (request.actorId !== actorId) {
+		await assertApproverAuthorized(actorId, request);
+	}
+	return request;
 }

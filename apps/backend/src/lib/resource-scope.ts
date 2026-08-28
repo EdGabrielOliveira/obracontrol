@@ -323,7 +323,28 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 
 	if (role === "ADMIN") {
 		const works = await prisma.constructionWork.findMany({
-			where: user.workspaceId ? { workspaceId: user.workspaceId } : undefined,
+			where: user.workspaceId
+				? {
+						OR: [
+							{ workspaceId: user.workspaceId },
+							// Obras criadas antes da migration podem ainda não ter
+							// workspaceId. O centro de custo/organização é a fonte
+							// confiável para recuperar o escopo sem expor outra empresa.
+							{
+								workspaceId: null,
+								costCenter: {
+									OR: [
+										{ workspaceId: user.workspaceId },
+										{ organization: { workspaceId: user.workspaceId } },
+									],
+								},
+							},
+							// Também preserva obras legadas cujo proprietário ainda é
+							// o próprio administrador, mesmo sem hierarquia migrada.
+							{ workspaceId: null, ownerId: actorId },
+						],
+					}
+				: undefined,
 			select: {
 				id: true,
 				costCenter: { select: { id: true, organizationId: true } },

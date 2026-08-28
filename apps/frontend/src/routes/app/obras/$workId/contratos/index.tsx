@@ -16,6 +16,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { listContractRequests } from "@/api/contract-requests";
+import { listMyApprovalRequests } from "@/api/governance";
 import {
 	type ContractFilter,
 	deleteContract,
@@ -24,7 +25,7 @@ import {
 	updateContract,
 } from "@/api/contracts";
 import { exportContratos } from "@/api/export";
-import { governanceKeys, workKeys } from "@/api/query-keys";
+import { contractRequestKeys, governanceKeys, workKeys } from "@/api/query-keys";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
@@ -114,8 +115,12 @@ function RouteComponent() {
 		queryFn: () => listContracts(workId, searchParams as ContractFilter),
 	});
 	const { data: pendingRequests = [] } = useQuery({
-		queryKey: ["contract-requests", workId],
+		queryKey: contractRequestKeys.all(workId),
 		queryFn: () => listContractRequests(workId),
+	});
+	const { data: myApprovalRequests = [] } = useQuery({
+		queryKey: governanceKeys.mine(workId),
+		queryFn: () => listMyApprovalRequests(workId),
 	});
 	const { data: summaryData } = useQuery({
 		queryKey: workKeys.contractsSummary(workId),
@@ -125,6 +130,15 @@ function RouteComponent() {
 	const handlePageChange = (page: number) => {
 		navigate({
 			search: (prev) => ({ ...prev, page }),
+		});
+	};
+	const handleSearchChange = (value: string) => {
+		navigate({
+			search: (prev) => ({
+				...prev,
+				q: value.trim() || undefined,
+				page: 1,
+			}),
 		});
 	};
 
@@ -200,6 +214,13 @@ function RouteComponent() {
 
 	const handleRowClick = (contract: ContractTableRow) => {
 		if (contract.isPending) {
+			if (contract.approvalKind === "approval" && contract.approvalRequestId) {
+				navigate({
+					to: "/app/obras/$workId/contratos/aprovacoes/$requestId",
+					params: { workId, requestId: contract.approvalRequestId },
+				});
+				return;
+			}
 			navigate({
 				to: "/app/obras/$workId/contratos/$requestId/comparativo",
 				params: { workId, requestId: contract.requestId },
@@ -237,16 +258,69 @@ function RouteComponent() {
 		title: request.title,
 		startDate: null,
 		endDate: null,
-		status: "PENDENTE",
+		status: request.approvalStatus === "REJECTED" ? "RECUSADO" : "PENDENTE",
 		notes: null,
 		createdAt: request.createdAt,
 		isPending: true,
 		requestId: request.id,
+		approvalRequestId: request.approvalRequestId,
+		approvalKind: "comparison",
+		approvalStatus: request.approvalStatus,
+		approvalReason: request.approvalReason,
 	}));
-	const tableRows: ContractTableRow[] = [...contractList, ...pendingRows];
-	const totalContractCount = data.total + pendingRows.length;
+	const manualApprovalRows: ContractTableRow[] = myApprovalRequests
+		.filter(
+			(request) =>
+				request.effectAction === "CONTRACT_CREATE" &&
+				["PENDING", "REJECTED", "CONFLICTED"].includes(request.status),
+		)
+		.map((request) => {
+			const payload = request.payload as {
+				contract?: {
+					code?: string;
+					title?: string | null;
+					supplierName?: string;
+					serviceType?: string | null;
+					contractValue?: number;
+					startDate?: string | null;
+					endDate?: string | null;
+				};
+			} | null;
+			const contract = payload?.contract;
+			return {
+				id: request.id,
+				workId,
+				supplierName: contract?.supplierName ?? "Contrato solicitado",
+				supplierId: null,
+				contractValue: contract?.contractValue ?? 0,
+				serviceType: contract?.serviceType ?? "Não informado",
+				title: contract?.title ?? contract?.code ?? "Contrato solicitado",
+				startDate: contract?.startDate ?? null,
+				endDate: contract?.endDate ?? null,
+				status: request.status === "REJECTED" ? "RECUSADO" : "PENDENTE",
+				notes: null,
+				createdAt: request.createdAt,
+				isPending: true,
+				requestId: request.id,
+				approvalRequestId: request.id,
+				approvalKind: "approval",
+				approvalStatus: request.status,
+				approvalReason: request.decisionReason,
+			};
+		});
+	const tableRows: ContractTableRow[] = [
+		...contractList,
+		...pendingRows,
+		...manualApprovalRows,
+	];
+	const totalContractCount =
+		data.total + pendingRows.length + manualApprovalRows.length;
 	const pendingContractCount =
-		(summaryData?.pendingContracts ?? 0) + pendingRows.length;
+		(summaryData?.pendingContracts ?? 0) +
+		pendingRows.length +
+		manualApprovalRows.filter(
+			(row) => "approvalStatus" in row && row.approvalStatus === "PENDING",
+		).length;
 	const paginationMeta: PaginationMeta = getPaginationMeta(data);
 	const contractKpis = (
 		<KpiGrid>
@@ -268,7 +342,11 @@ function RouteComponent() {
 		</KpiGrid>
 	);
 
-	if (contractList.length === 0 && pendingRequests.length === 0) {
+	if (
+		contractList.length === 0 &&
+		pendingRows.length === 0 &&
+		manualApprovalRows.length === 0
+	) {
 		return (
 			<PageContainer>
 				<PageHeader
@@ -328,6 +406,8 @@ function RouteComponent() {
 						<ContractTable
 							contracts={tableRows}
 							workId={workId}
+							searchValue={searchParams.q ?? ""}
+							onSearchChange={handleSearchChange}
 							onDelete={(id) => setDeleteId(id)}
 							onEdit={(contract) =>
 								navigate({
@@ -339,9 +419,12 @@ function RouteComponent() {
 							onOpenStatus={setStatusTarget}
 							isUpdatingStatus={statusMutation.isPending}
 							onRowClick={handleRowClick}
-							onPendingClick={(requestId) =>
+							onPendingClick={(requestId, kind) =>
 								navigate({
-									to: "/app/obras/$workId/contratos/$requestId/comparativo",
+									to:
+										kind === "approval"
+											? "/app/obras/$workId/contratos/aprovacoes/$requestId"
+											: "/app/obras/$workId/contratos/$requestId/comparativo",
 									params: { workId, requestId },
 								})
 							}

@@ -366,8 +366,10 @@ export class SupplierService {
 		return supplierRepository.createWorkSupplier(ownerId, workId, supplierId);
 	}
 
-	listForWork(ownerId: string, workId: string) {
-		return supplierRepository.listWorkSuppliers(ownerId, workId);
+	listForWork(ownerId: string, workId: string, workspaceId?: string | null) {
+		return workspaceId === undefined
+			? supplierRepository.listWorkSuppliers(ownerId, workId)
+			: supplierRepository.listWorkSuppliers(ownerId, workId, workspaceId);
 	}
 
 	async unlinkFromWork(ownerId: string, workId: string, supplierId: string) {

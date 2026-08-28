@@ -1,10 +1,13 @@
 import type { Prisma } from "@prisma/client";
 import { writeAudit } from "../../lib/audit-writer";
+import { normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
+import { resolveResourceScope } from "../../lib/resource-scope";
 import { validateStatusTransition } from "../../lib/status-machine";
 import { withSerializableRetry } from "../../lib/transaction-retry";
 import { auditService } from "../audit/audit.service";
+import { notificationService } from "../governance/notification.service";
 import { findActiveImpactsBySource } from "./budget-control/budget-control.repository";
 import { budgetControlService } from "./budget-control/budget-control.service";
 import type {
@@ -64,6 +67,123 @@ export class ContractService {
 				contractId,
 			);
 		}
+	}
+
+	private async notifyAmendmentApprovers(
+		ownerId: string,
+		workId: string,
+		contractId: string,
+		amendmentId: string,
+		role: "GESTOR" | "GERENTE",
+	) {
+		const scope = await resolveResourceScope(ownerId, { workId });
+		const membershipRows = await Promise.all([
+			role === "GESTOR" && scope.path.costCenterId
+				? prisma.costCenterMembership.findMany({
+						where: { costCenterId: scope.path.costCenterId, revokedAt: null },
+						select: { userId: true, user: { select: { role: true } } },
+					})
+				: Promise.resolve([]),
+			prisma.organizationMembership.findMany({
+				where: { organizationId: scope.path.organizationId, revokedAt: null },
+				select: { userId: true, user: { select: { role: true } } },
+			}),
+			prisma.companyMembership.findMany({
+				where: {
+					revokedAt: null,
+					company: {
+						organizations: { some: { id: scope.path.organizationId } },
+					},
+				},
+				select: { userId: true, user: { select: { role: true } } },
+			}),
+		]);
+		const recipients = new Set<string>();
+		for (const row of membershipRows.flat()) {
+			if (normalizeRole(row.user?.role) === role) recipients.add(row.userId);
+		}
+		for (const recipientId of recipients) {
+			await notificationService.create({
+				recipientId,
+				eventType: "CONTRACT_AMENDMENT_APPROVAL_REQUIRED",
+				referenceId: amendmentId,
+				title: "Aditivo de contrato aguardando aprovação",
+				body: `Revise o aditivo do contrato em /app/obras/${workId}/contratos/${contractId}?tab=aditivos`,
+			});
+		}
+	}
+
+	private async approveAmendment(
+		ownerId: string,
+		workId: string,
+		contractId: string,
+		amendment: {
+			id: string;
+			kind: string;
+			value: unknown;
+			reason: string;
+			date: Date;
+		},
+		actorId: string,
+	) {
+		const reference = await this.contractCommitmentRef(
+			ownerId,
+			workId,
+			contractId,
+		);
+		if (!reference)
+			throw new ConstructionError(
+				"CONTRACT_BUDGET_COVERAGE_MISSING",
+				"Sem cobertura orcamentaria vigente para o aditivo",
+				422,
+			);
+		return withSerializableRetry(async (tx) => {
+			const signedValue =
+				amendment.kind === "ADITIVO"
+					? Number(amendment.value)
+					: -Number(amendment.value);
+			await budgetControlService.apply(
+				ownerId,
+				workId,
+				{
+					workId,
+					allocations: [
+						{ budgetItemId: reference.budgetItemId, value: signedValue },
+					],
+					amount: signedValue,
+					impactType: "COMMITMENT",
+					sourceType: AMENDMENT_SOURCE_TYPE,
+					sourceId: `${amendment.id}#1`,
+					componentId: COMPONENT_AMENDMENT,
+					competence: competenceOf(amendment.date),
+					occurredAt: amendment.date,
+				},
+				{ userId: actorId },
+				tx,
+			);
+			const result = await tx.constructionContractAmendment.update({
+				where: { id: amendment.id, ownerId },
+				data: {
+					approvalStatus: "APPROVED",
+					gerenteReviewedBy: actorId,
+					gerenteReviewedAt: new Date(),
+					effectiveAt: new Date(),
+				},
+			});
+			await writeAudit(tx, {
+				userId: actorId,
+				ownerId,
+				action: "APPROVE",
+				entityType: "CONTRACT_AMENDMENT",
+				entityId: amendment.id,
+				entityDescription: `Aditivo ${amendment.kind} - ${amendment.reason}`,
+				newState: {
+					approvalStatus: "APPROVED",
+					value: Number(amendment.value),
+				},
+			});
+			return result;
+		});
 	}
 
 	// Guarda compartilhada entre previa, criacao e lote: o item precisa de
@@ -260,6 +380,13 @@ export class ContractService {
 		}
 		await getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId);
+		if (!input.supplierId?.trim()) {
+			throw new ConstructionError(
+				"INVALID_SUPPLIER",
+				"Selecione um fornecedor cadastrado",
+				422,
+			);
+		}
 		// Cada solicitacao recebe sua propria chave de idempotencia. Nao
 		// bloquear por workId: contratos distintos podem tramitar em paralelo
 		// para fornecedores diferentes na mesma obra.
@@ -1036,7 +1163,7 @@ export class ContractService {
 		workId: string,
 		contractId: string,
 		input: CreateContractAmendmentInput,
-		ctx: { userId: string },
+		ctx: { userId: string; role: string },
 	) {
 		await getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId, contractId);
@@ -1047,13 +1174,31 @@ export class ContractService {
 				422,
 			);
 		}
-		const amendment = await contractRepository.createAmendment(
+		let amendment = await contractRepository.createAmendment(
 			ownerId,
 			contractId,
 			{ ...input, createdBy: ctx.userId },
 		);
 		if (!amendment)
 			throw new ConstructionError("NOT_FOUND", "Contrato nao encontrado", 404);
+		if (ctx.role === "ADMIN" || ctx.role === "GERENTE") {
+			const approved = await this.approveAmendment(
+				ownerId,
+				workId,
+				contractId,
+				amendment,
+				ctx.userId,
+			);
+			amendment = { ...approved, measurementIds: amendment.measurementIds };
+		} else {
+			await this.notifyAmendmentApprovers(
+				ownerId,
+				workId,
+				contractId,
+				amendment.id,
+				"GESTOR",
+			);
+		}
 		await auditService.log({
 			userId: ctx.userId,
 			ownerId,
@@ -1062,7 +1207,7 @@ export class ContractService {
 			entityId: amendment.id,
 			entityDescription: `Aditivo ${amendment.kind} - ${amendment.reason}`,
 			newState: {
-				approvalStatus: "PENDING_GESTOR",
+				approvalStatus: amendment.approvalStatus,
 				value: Number(amendment.value),
 			},
 		});
@@ -1125,7 +1270,7 @@ export class ContractService {
 			ctx.role === "GESTOR" &&
 			amendment.approvalStatus === "PENDING_GESTOR"
 		) {
-			return prisma.constructionContractAmendment.update({
+			const progressed = await prisma.constructionContractAmendment.update({
 				where: { id: amendmentId, ownerId },
 				data: {
 					approvalStatus: "PENDING_GERENTE",
@@ -1133,6 +1278,14 @@ export class ContractService {
 					gestorReviewedAt: new Date(),
 				},
 			});
+			await this.notifyAmendmentApprovers(
+				ownerId,
+				workId,
+				contractId,
+				amendmentId,
+				"GERENTE",
+			);
+			return progressed;
 		}
 		if (
 			ctx.role !== "GERENTE" ||
@@ -1144,64 +1297,13 @@ export class ContractService {
 				422,
 			);
 		}
-		const reference = await this.contractCommitmentRef(
+		return this.approveAmendment(
 			ownerId,
 			workId,
 			contractId,
+			amendment,
+			ctx.userId,
 		);
-		if (!reference)
-			throw new ConstructionError(
-				"CONTRACT_BUDGET_COVERAGE_MISSING",
-				"Sem cobertura orcamentaria vigente para o aditivo",
-				422,
-			);
-		return withSerializableRetry(async (tx) => {
-			const signedValue =
-				amendment.kind === "ADITIVO"
-					? Number(amendment.value)
-					: -Number(amendment.value);
-			await budgetControlService.apply(
-				ownerId,
-				workId,
-				{
-					workId,
-					allocations: [
-						{ budgetItemId: reference.budgetItemId, value: signedValue },
-					],
-					amount: signedValue,
-					impactType: "COMMITMENT",
-					sourceType: AMENDMENT_SOURCE_TYPE,
-					sourceId: `${amendment.id}#1`,
-					componentId: COMPONENT_AMENDMENT,
-					competence: competenceOf(amendment.date),
-					occurredAt: amendment.date,
-				},
-				{ userId: ctx.userId },
-				tx,
-			);
-			const result = await tx.constructionContractAmendment.update({
-				where: { id: amendmentId, ownerId },
-				data: {
-					approvalStatus: "APPROVED",
-					gerenteReviewedBy: ctx.userId,
-					gerenteReviewedAt: new Date(),
-					effectiveAt: new Date(),
-				},
-			});
-			await writeAudit(tx, {
-				userId: ctx.userId,
-				ownerId,
-				action: "APPROVE",
-				entityType: "CONTRACT_AMENDMENT",
-				entityId: amendmentId,
-				entityDescription: `Aditivo ${amendment.kind} - ${amendment.reason}`,
-				newState: {
-					approvalStatus: "APPROVED",
-					value: Number(amendment.value),
-				},
-			});
-			return result;
-		});
 	}
 
 	async updateAmendment(

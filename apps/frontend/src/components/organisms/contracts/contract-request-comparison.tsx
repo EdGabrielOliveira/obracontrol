@@ -2,6 +2,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { BarChart3, CheckCircle2, FileText, ListChecks } from "lucide-react";
 import { useState } from "react";
 import { DataTable } from "@/components/atoms/data-table";
+import { APPROVAL_STATUS_MAP, StatusBadge } from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -133,6 +134,22 @@ export function ContractRequestComparisonView({
 
 	return (
 		<div className="space-y-6">
+			{comparison.approval?.status === "REJECTED" ? (
+				<Card className="border-destructive/40">
+					<CardContent className="status-danger space-y-1 pt-6">
+						<div className="flex flex-wrap items-center gap-2">
+							<StatusBadge
+								status="REJECTED"
+								map={APPROVAL_STATUS_MAP}
+							/>
+							<span className="font-semibold">Esta solicitação foi recusada.</span>
+						</div>
+						<p className="text-sm">
+							{comparison.approval.reason || "O aprovador não informou um motivo."}
+						</p>
+					</CardContent>
+				</Card>
+			) : null}
 			<Card>
 				<CardHeaderWithIcon
 					icon={FileText}

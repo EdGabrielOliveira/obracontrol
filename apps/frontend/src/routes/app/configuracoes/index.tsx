@@ -15,9 +15,11 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authClient } from "@/lib/auth-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { queryClient } from "@/lib/query-client";
 
 export const Route = createFileRoute("/app/configuracoes/")({
+	beforeLoad: () => requireAuthorizationCapability("canManageApiKeys"),
 	loader: () => {
 		void Promise.all([
 			queryClient.prefetchQuery({

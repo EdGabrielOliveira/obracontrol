@@ -40,14 +40,16 @@ export const contractMeasurementRoutes = new Elysia({
 		async ({ params, query, scope }) => {
 			const page = query.page ? Number(query.page) : undefined;
 			const limit = query.limit ? Number(query.limit) : undefined;
+			const q = query.q?.trim() || undefined;
 			return contractMeasurementService.listMeasurements(
 				scope.resourceOwnerId,
 				params.contractId,
-				{ page, limit },
+				{ q, page, limit },
 			);
 		},
 		{
 			query: t.Object({
+				q: t.Optional(t.String()),
 				page: t.Optional(t.String()),
 				limit: t.Optional(t.String()),
 			}),
@@ -102,14 +104,16 @@ export const contractMeasurementRoutes = new Elysia({
 		async ({ params, query, scope }) => {
 			const page = query.page ? Number(query.page) : undefined;
 			const limit = query.limit ? Number(query.limit) : undefined;
+			const q = query.q?.trim() || undefined;
 			return contractMeasurementService.listPayments(
 				scope.resourceOwnerId,
 				params.contractId,
-				{ page, limit },
+				{ q, page, limit },
 			);
 		},
 		{
 			query: t.Object({
+				q: t.Optional(t.String()),
 				page: t.Optional(t.String()),
 				limit: t.Optional(t.String()),
 			}),
@@ -247,13 +251,12 @@ export const contractMeasurementRoutes = new Elysia({
 	)
 	.post(
 		"/payments",
-		async ({ params, body, user, scope }) => {
+		async ({ params, body, scope }) => {
 			const parsed = parseInput(createContractPaymentSchema, body);
 			return contractMeasurementService.createPayment(
 				scope.resourceOwnerId,
 				params.contractId,
 				parsed,
-				{ userId: user.id, role: normalizeGovernanceRole(user.role) },
 			);
 		},
 		{
@@ -266,8 +269,6 @@ export const contractMeasurementRoutes = new Elysia({
 				retentionValue: t.Optional(t.Number()),
 				discountValue: t.Optional(t.Number()),
 				status: t.Optional(t.String()),
-				balanceOverride: t.Optional(t.Boolean()),
-				reason: t.Optional(t.Union([t.String(), t.Null()])),
 			}),
 			detail: { tags: ["Contract Payments"] },
 		},
@@ -281,7 +282,7 @@ export const contractMeasurementRoutes = new Elysia({
 				params.contractId,
 				params.pId,
 				parsed,
-				{ userId: user.id, role: normalizeGovernanceRole(user.role) },
+				{ userId: user.id },
 			);
 		},
 		{
@@ -294,8 +295,6 @@ export const contractMeasurementRoutes = new Elysia({
 				retentionValue: t.Optional(t.Number()),
 				discountValue: t.Optional(t.Number()),
 				status: t.Optional(t.String()),
-				balanceOverride: t.Optional(t.Boolean()),
-				reason: t.Optional(t.Union([t.String(), t.Null()])),
 			}),
 			detail: { tags: ["Contract Payments"] },
 		},

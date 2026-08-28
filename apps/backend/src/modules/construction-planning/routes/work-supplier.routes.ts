@@ -19,7 +19,11 @@ export const workSupplierRoutes = new Elysia({
 	.get(
 		"/:workId/suppliers",
 		({ params, scope }) =>
-			supplierService.listForWork(scope.resourceOwnerId, params.workId),
+			supplierService.listForWork(
+				scope.resourceOwnerId,
+				params.workId,
+				scope.workspaceId,
+			),
 		{
 			params: t.Object({ workId: t.String() }),
 			detail: { tags: ["Suppliers"] },

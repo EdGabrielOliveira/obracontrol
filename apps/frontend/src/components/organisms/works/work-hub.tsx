@@ -10,6 +10,7 @@ import { SummaryTab } from "./summary-tab";
 
 type WorkHubProps = {
 	workId: string;
+	canViewHistory: boolean;
 	canAccessGovernance: boolean;
 	activeTab: WorkHubTab;
 	aprovacoes: ReactNode;
@@ -44,6 +45,7 @@ type WorkHubProps = {
 
 export function WorkHub({
 	workId,
+	canViewHistory,
 	canAccessGovernance,
 	activeTab,
 	aprovacoes,
@@ -73,11 +75,11 @@ export function WorkHub({
 	onOpenAuditDetail,
 	onOpenAuditNavigationTarget,
 }: WorkHubProps) {
-	if (activeTab === "historico" && canAccessGovernance) {
+	if (activeTab === "historico" && canViewHistory) {
 		return (
 			<HistoryTab
 				workId={workId}
-				canViewHistory={canAccessGovernance}
+				canViewHistory
 				rows={auditRows}
 				total={auditTotal}
 				page={auditPage}

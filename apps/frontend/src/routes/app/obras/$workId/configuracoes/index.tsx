@@ -153,6 +153,7 @@ function RouteComponent() {
 			areaM2: formData.areaM2 ? Number(formData.areaM2) : undefined,
 			responsibleName: formData.responsibleName || undefined,
 			operationalStatus: formData.operationalStatus,
+			statusReason: formData.statusReason?.trim() || undefined,
 			structuredAddress: formData.structuredAddress,
 		});
 	};
@@ -196,6 +197,7 @@ function RouteComponent() {
 							areaM2: work.areaM2 ?? undefined,
 							responsibleName: work.responsibleName ?? undefined,
 							operationalStatus: work.operationalStatus ?? "NOT_STARTED",
+							statusReason: work.statusReason ?? undefined,
 							structuredAddress: work.structuredAddress,
 						}}
 						onSubmit={handleSubmit}

@@ -133,12 +133,16 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.use(requireWorkAccess("read"))
 	.get(
 		"/:workId",
-		async ({ params, user }) => {
+		async ({ params, scope }) => {
 			// O acesso e validado pelo middleware usando o workspace da sessão.
 			// O ID do executor não é mais usado como dono dos dados, mas é o
 			// contexto correto para localizar a obra de um ADMIN após a remoção
 			// do administrador que a criou.
-			return constructionWorkService.get(user.id, params.workId);
+			return scope.workspaceId
+				? constructionWorkService.get(scope.resourceOwnerId, params.workId, {
+						workspaceId: scope.workspaceId,
+					})
+				: constructionWorkService.get(scope.resourceOwnerId, params.workId);
 		},
 		{
 			detail: {
@@ -442,7 +446,13 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				scope.resourceOwnerId,
 				params.workId,
 				body,
-				{ userId: user.id, role: user.role },
+				scope.workspaceId
+					? {
+							userId: user.id,
+							role: user.role,
+							workspaceId: scope.workspaceId,
+						}
+					: { userId: user.id, role: user.role },
 			);
 			const statusChanged =
 				body.operationalStatus !== undefined &&
@@ -625,6 +635,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 				params.workId,
 				params.id,
 				parsed.data,
+				{ userId: user.id },
 			);
 			auditService.log({
 				userId: user.id,

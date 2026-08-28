@@ -18,6 +18,9 @@ const acceptedLegacyChecksums: Readonly<Record<string, readonly string[]>> = {
 	"0008_company_membership.sql": [
 		"90142f376c2ec97fab3e1fd6b4c26b0c1a8629a30a10494b43dce195953db418",
 	],
+	"0009_status_lifecycle.sql": [
+		"1cdf076bb8ced2fd949104d868f0639b2b8528685f6d7c67f8e3eb1853119b89",
+	],
 };
 
 type SchemaRow = {

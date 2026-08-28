@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "../../../generated/prisma/client";
 import type { AuthorizationRole } from "../../lib/authorization";
-import { isAuthorizationRole } from "../../lib/authorization";
+import {
+	isAuthorizationRole,
+	normalizeRole,
+} from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
@@ -23,13 +26,25 @@ async function assertActorCanInvite(
 	actorId: string,
 	targetRole: AuthorizationRole,
 	scope: UserScopeInput,
+	targetWorkspaceId?: string | null,
 ): Promise<void> {
 	const actor = await prisma.user.findUnique({
 		where: { id: actorId },
-		select: { role: true },
+		select: { role: true, workspaceId: true },
 	});
-	if (actor?.role === "ADMIN") return;
-	if (actor?.role !== "GERENTE") {
+	const actorRole = normalizeRole(actor?.role);
+	if (!actor) {
+		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+	}
+	if (targetWorkspaceId !== undefined && actor?.workspaceId !== targetWorkspaceId) {
+		throw new ConstructionError(
+			"FORBIDDEN",
+			"Convite fora do workspace do usuario",
+			403,
+		);
+	}
+	if (actorRole === "ADMIN") return;
+	if (actorRole !== "GERENTE") {
 		throw new ConstructionError(
 			"FORBIDDEN",
 			"Voce nao tem permissao para convidar usuarios",
@@ -45,21 +60,35 @@ async function assertActorCanInvite(
 	}
 	const [memberships, companyMemberships, centers, works] = await Promise.all([
 		prisma.organizationMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
+			where: {
+				userId: actorId,
+				revokedAt: null,
+				organization: { workspaceId: actor.workspaceId },
+			},
 			select: { organizationId: true },
 		}),
 		prisma.companyMembership.findMany({
-			where: { userId: actorId, revokedAt: null },
+			where: {
+				userId: actorId,
+				revokedAt: null,
+				company: { workspaceId: actor.workspaceId },
+			},
 			select: {
 				company: { select: { organizations: { select: { id: true } } } },
 			},
 		}),
 		prisma.costCenter.findMany({
-			where: { id: { in: scope.costCenterIds } },
+			where: {
+				id: { in: scope.costCenterIds },
+				workspaceId: actor.workspaceId,
+			},
 			select: { organizationId: true },
 		}),
 		prisma.constructionWork.findMany({
-			where: { id: { in: scope.workIds } },
+			where: {
+				id: { in: scope.workIds },
+				workspaceId: actor.workspaceId,
+			},
 			select: { costCenter: { select: { organizationId: true } } },
 		}),
 	]);
@@ -134,20 +163,46 @@ function assertInvitationScope(
 	}
 }
 
-async function assertWorksHaveCenterAccess(
+async function assertScopeResourcesInWorkspace(
 	scope: UserScopeInput,
+	workspaceId: string | null,
 ): Promise<void> {
-	if (scope.workIds.length === 0) return;
-	const works = await prisma.constructionWork.findMany({
-		where: { id: { in: scope.workIds } },
-		select: { id: true, costCenterId: true },
-	});
-	if (works.length !== scope.workIds.length) {
-		throw new ConstructionError(
-			"INVALID_WORK",
-			"Obra selecionada no convite nao existe",
-			422,
-		);
+	const [companies, organizations, costCenters, works] = await Promise.all([
+		(scope.companyIds ?? []).length > 0
+			? prisma.company.findMany({
+					where: { id: { in: scope.companyIds ?? [] }, workspaceId },
+					select: { id: true },
+				})
+			: Promise.resolve([]),
+		scope.organizationIds.length > 0
+			? prisma.organization.findMany({
+					where: { id: { in: scope.organizationIds }, workspaceId },
+					select: { id: true },
+				})
+			: Promise.resolve([]),
+		scope.costCenterIds.length > 0
+			? prisma.costCenter.findMany({
+					where: { id: { in: scope.costCenterIds }, workspaceId },
+					select: { id: true },
+				})
+			: Promise.resolve([]),
+		scope.workIds.length > 0
+			? prisma.constructionWork.findMany({
+					where: { id: { in: scope.workIds }, workspaceId },
+					select: { id: true },
+				})
+			: Promise.resolve([]),
+	]);
+	const checks = [
+		[companies.length, (scope.companyIds ?? []).length, "INVALID_COMPANY", "Empresa selecionada no convite nao existe"],
+		[organizations.length, scope.organizationIds.length, "INVALID_ORGANIZATION", "Organizacao selecionada no convite nao existe"],
+		[costCenters.length, scope.costCenterIds.length, "INVALID_COST_CENTER", "Centro de custo selecionado no convite nao existe"],
+		[works.length, scope.workIds.length, "INVALID_WORK", "Obra selecionada no convite nao existe"],
+	] as const;
+	for (const [found, expected, code, message] of checks) {
+		if (found !== expected) {
+			throw new ConstructionError(code, message, 422);
+		}
 	}
 }
 
@@ -160,8 +215,9 @@ export const invitationService = {
 			workIds: input.scope.workIds ?? [],
 		};
 		assertInvitationScope(input.role, scope);
+		const workspaceId = await getWorkspaceIdForUser(actorId);
 		await assertActorCanInvite(actorId, input.role, scope);
-		await assertWorksHaveCenterAccess(scope);
+		await assertScopeResourcesInWorkspace(scope, workspaceId);
 
 		const raw = Buffer.from(
 			crypto.getRandomValues(new Uint8Array(TOKEN_LENGTH)),
@@ -170,8 +226,6 @@ export const invitationService = {
 		const expiresAt = new Date(
 			Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000,
 		);
-		const workspaceId = await getWorkspaceIdForUser(actorId);
-
 		const invitation = await prisma.$transaction(async (tx) => {
 			await tx.userInvitation.updateMany({
 				where: {
@@ -250,7 +304,8 @@ export const invitationService = {
 				403,
 			);
 		}
-		if (!isAuthorizationRole(invitation.role)) {
+		const role = normalizeRole(invitation.role);
+		if (!isAuthorizationRole(role)) {
 			throw new ConstructionError(
 				"INVITATION_INVALID_ROLE",
 				"Convite com papel invalido",
@@ -258,7 +313,7 @@ export const invitationService = {
 			);
 		}
 
-		const role = invitation.role as AuthorizationRole;
+		const normalizedRole = role;
 		const persistedScope = invitation.scopeJson as UserScopeInput | null;
 		const scope: UserScopeInput = {
 			companyIds: persistedScope?.companyIds ?? [],
@@ -268,13 +323,13 @@ export const invitationService = {
 			costCenterIds: persistedScope?.costCenterIds ?? [],
 			workIds: persistedScope?.workIds ?? [],
 		};
-		assertInvitationScope(role, scope);
-		await assertWorksHaveCenterAccess(scope);
+		assertInvitationScope(normalizedRole, scope);
+		await assertScopeResourcesInWorkspace(scope, invitation.workspaceId);
 
 		await prisma.$transaction(async (tx) => {
 			await tx.user.update({
 				where: { id: userId },
-				data: { role, workspaceId: invitation.workspaceId },
+				data: { role: normalizedRole, workspaceId: invitation.workspaceId },
 			});
 			await tx.companyMembership.updateMany({
 				where: { userId, revokedAt: null },
@@ -297,29 +352,29 @@ export const invitationService = {
 					where: {
 						organizationId_userId: { organizationId, userId },
 					},
-					create: { organizationId, userId, role },
-					update: { revokedAt: null, role },
+					create: { organizationId, userId, role: normalizedRole },
+					update: { revokedAt: null, role: normalizedRole },
 				});
 			}
 			for (const costCenterId of scope.costCenterIds) {
 				await tx.costCenterMembership.upsert({
 					where: { costCenterId_userId: { costCenterId, userId } },
-					create: { costCenterId, userId, role },
-					update: { revokedAt: null, role },
+					create: { costCenterId, userId, role: normalizedRole },
+					update: { revokedAt: null, role: normalizedRole },
 				});
 			}
 			for (const workId of scope.workIds) {
 				await tx.workMembership.upsert({
 					where: { workId_userId: { workId, userId } },
-					create: { workId, userId, role },
-					update: { revokedAt: null, role },
+					create: { workId, userId, role: normalizedRole },
+					update: { revokedAt: null, role: normalizedRole },
 				});
 			}
 			for (const companyId of scope.companyIds ?? []) {
 				await tx.companyMembership.upsert({
 					where: { companyId_userId: { companyId, userId } },
-					create: { companyId, userId, role },
-					update: { revokedAt: null, role },
+					create: { companyId, userId, role: normalizedRole },
+					update: { revokedAt: null, role: normalizedRole },
 				});
 			}
 			await tx.userInvitation.update({
@@ -332,7 +387,7 @@ export const invitationService = {
 
 		return {
 			accepted: true,
-			role,
+			role: normalizedRole,
 			scope,
 		};
 	},
@@ -344,7 +399,8 @@ export const invitationService = {
 		if (!invitation) {
 			throw new ConstructionError("NOT_FOUND", "Convite nao encontrado", 404);
 		}
-		if (!isAuthorizationRole(invitation.role)) {
+		const role = normalizeRole(invitation.role);
+		if (!isAuthorizationRole(role)) {
 			throw new ConstructionError(
 				"INVITATION_INVALID_ROLE",
 				"Convite com papel invalido",
@@ -359,9 +415,11 @@ export const invitationService = {
 		};
 		await assertActorCanInvite(
 			actorId,
-			invitation.role as AuthorizationRole,
+			role,
 			scope,
+			invitation.workspaceId,
 		);
+		await assertScopeResourcesInWorkspace(scope, invitation.workspaceId);
 		if (invitation.acceptedAt) {
 			throw new ConstructionError(
 				"INVITATION_ALREADY_ACCEPTED",
@@ -392,7 +450,7 @@ export const invitationService = {
 						invitation.scopeJson === null
 							? Prisma.JsonNull
 							: (invitation.scopeJson as Prisma.InputJsonValue),
-					role: invitation.role,
+					role,
 					email: invitation.email,
 					expiresAt,
 					createdBy: actorId,
@@ -418,7 +476,8 @@ export const invitationService = {
 		if (!invitation) {
 			throw new ConstructionError("NOT_FOUND", "Convite nao encontrado", 404);
 		}
-		if (!isAuthorizationRole(invitation.role)) {
+		const role = normalizeRole(invitation.role);
+		if (!isAuthorizationRole(role)) {
 			throw new ConstructionError(
 				"INVITATION_INVALID_ROLE",
 				"Convite com papel invalido",
@@ -433,9 +492,11 @@ export const invitationService = {
 		};
 		await assertActorCanInvite(
 			actorId,
-			invitation.role as AuthorizationRole,
+			role,
 			scope,
+			invitation.workspaceId,
 		);
+		await assertScopeResourcesInWorkspace(scope, invitation.workspaceId);
 		if (invitation.acceptedAt) {
 			throw new ConstructionError(
 				"INVITATION_ALREADY_ACCEPTED",
@@ -462,24 +523,40 @@ export const invitationService = {
 			where: { id: actorId },
 			select: {
 				role: true,
-				companyMemberships: {
-					where: { revokedAt: null },
-					select: { companyId: true },
-				},
+				workspaceId: true,
 			},
 		});
-		let where = {};
-		if (actor?.role !== "ADMIN") {
+		const actorRole = normalizeRole(actor?.role);
+		if (!actor || !isAuthorizationRole(actorRole)) {
+			throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+		}
+		const actorCompanyMemberships = await prisma.companyMembership.findMany({
+			where: {
+				userId: actorId,
+				revokedAt: null,
+				company: { workspaceId: actor.workspaceId },
+			},
+			select: { companyId: true },
+		});
+		let where: Prisma.UserInvitationWhereInput = {
+			workspaceId: actor.workspaceId,
+		};
+		if (actorRole !== "ADMIN") {
 			const [memberships, companyOrganizations] = await Promise.all([
 				prisma.organizationMembership.findMany({
-					where: { userId: actorId, revokedAt: null },
+					where: {
+						userId: actorId,
+						revokedAt: null,
+						organization: { workspaceId: actor.workspaceId },
+					},
 					select: { organizationId: true },
 				}),
-				actor?.companyMemberships?.length
+				actorCompanyMemberships.length
 					? prisma.organization.findMany({
 							where: {
+								workspaceId: actor.workspaceId,
 								companyId: {
-									in: actor.companyMemberships.map((m) => m.companyId),
+									in: actorCompanyMemberships.map((m) => m.companyId),
 								},
 							},
 							select: { id: true },
@@ -496,6 +573,7 @@ export const invitationService = {
 				return buildPaginatedResponse([], 0, page, limit);
 			}
 			where = {
+				workspaceId: actor.workspaceId,
 				OR: [
 					{ createdBy: actorId },
 					{

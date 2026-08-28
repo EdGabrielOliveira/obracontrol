@@ -34,6 +34,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { useAuth } from "@/lib/auth-context";
 import type {
 	ContractAmendment,
 	ContractMeasurement,
@@ -96,6 +97,7 @@ export function AmendmentsTab({
 	const [deleteId, setDeleteId] = useState<string | null>(null);
 	const prevSaving = useRef(isSaving);
 	const prevDeleting = useRef(isDeleting);
+	const { role } = useAuth();
 
 	useEffect(() => {
 		if (prevSaving.current && !isSaving) {
@@ -179,15 +181,14 @@ export function AmendmentsTab({
 				icon={FilePlus2}
 				title="Aditivos do Contrato"
 				description="Acréscimos e reduções que compõem o valor total do contrato."
-			/>
-			<CardContent>
-				<div className="mb-4">
+				actions={
 					<Button variant="default" size="sm" onClick={openCreate}>
 						<Plus className="mr-2 h-4 w-4" />
 						Novo aditivo
 					</Button>
-				</div>
-
+				}
+			/>
+			<CardContent>
 				{amendments.length === 0 ? (
 					<EmptyState
 						icon={<FilePlus2 className="h-12 w-12" />}
@@ -204,6 +205,7 @@ export function AmendmentsTab({
 									<TableHead>Data</TableHead>
 									<TableHead>Motivo</TableHead>
 									<TableHead>Medicoes</TableHead>
+									<TableHead>Status</TableHead>
 									<TableHead />
 								</TableRow>
 							</TableHeader>
@@ -232,13 +234,13 @@ export function AmendmentsTab({
 										<TableCell>{formatDate(amendment.date)}</TableCell>
 										<TableCell>{amendment.reason}</TableCell>
 										<TableCell>
+											{amendment.measurementIds?.length ?? 0}
+										</TableCell>
+										<TableCell>
 											<StatusBadge
 												status={amendment.approvalStatus}
 												map={AMENDMENT_APPROVAL_STATUS_MAP}
 											/>
-										</TableCell>
-										<TableCell>
-											{amendment.measurementIds?.length ?? 0}
 										</TableCell>
 										<TableCell>
 											<div className="flex justify-end gap-1">
@@ -249,8 +251,10 @@ export function AmendmentsTab({
 												>
 													<Pencil className="h-4 w-4" />
 												</Button>
-												{amendment.approvalStatus === "PENDING_GESTOR" ||
-												amendment.approvalStatus === "PENDING_GERENTE" ? (
+												{(amendment.approvalStatus === "PENDING_GESTOR" &&
+													role === "GESTOR") ||
+												(amendment.approvalStatus === "PENDING_GERENTE" &&
+													role === "GERENTE") ? (
 													<Button
 														size="sm"
 														variant="outline"

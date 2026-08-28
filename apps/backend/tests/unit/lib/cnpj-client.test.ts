@@ -47,7 +47,7 @@ describe("cnpj client (EMP-002) - consulta resiliente sem auto-gravacao", () => 
 		await expect(client.lookup("123")).rejects.toMatchObject({
 			code: "INVALID_CNPJ",
 			status: 400,
-			message: "CNPJ deve conter 14 digitos",
+			message: "CNPJ deve conter 14 dígitos",
 		});
 		expect(fetchFn).not.toHaveBeenCalled();
 	});

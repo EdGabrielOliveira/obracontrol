@@ -87,34 +87,46 @@ export function ServicesTab({
 			header: "Descrição",
 			meta: { mobileLabel: "Descrição" },
 		}),
-		servicesHelper.accessor("budgetItemId", {
-			header: "Vínculo",
-			cell: (info) => {
-				const service = info.row.original;
-				const change = service.budgetItem
-					? budgetVersionChanges?.get(service.budgetItem.index)
-					: undefined;
-				return service.budgetItemId ? (
-					<div className="flex items-center gap-1">
-						<Link2 className="h-3 w-3 shrink-0 text-muted-foreground" />
-						<span className="max-w-[180px] truncate text-xs">
-							{service.budgetItem?.displayIndex ?? service.budgetItem?.index}{" "}
-							{service.budgetItem?.description}
-						</span>
-						{change ? (
-							<span className="text-xs text-muted-foreground">
-								({change.kind === "NEW" ? "Novo" : "Alterado"})
+		servicesHelper.accessor(
+			(service) =>
+				[
+					service.budgetItemId,
+					service.budgetItem?.index,
+					service.budgetItem?.displayIndex,
+					service.budgetItem?.description,
+				]
+					.filter(Boolean)
+					.join(" "),
+			{
+				id: "budgetItemId",
+				header: "Vínculo",
+				cell: (info) => {
+					const service = info.row.original;
+					const change = service.budgetItem
+						? budgetVersionChanges?.get(service.budgetItem.index)
+						: undefined;
+					return service.budgetItemId ? (
+						<div className="flex items-center gap-1">
+							<Link2 className="h-3 w-3 shrink-0 text-muted-foreground" />
+							<span className="max-w-[180px] truncate text-xs">
+								{service.budgetItem?.displayIndex ?? service.budgetItem?.index}{" "}
+								{service.budgetItem?.description}
 							</span>
-						) : null}
-					</div>
-				) : (
-					<span className="text-xs text-destructive">
-						Sem vinculo orcamentario
-					</span>
-				);
+							{change ? (
+								<span className="text-xs text-muted-foreground">
+									({change.kind === "NEW" ? "Novo" : "Alterado"})
+								</span>
+							) : null}
+						</div>
+					) : (
+						<span className="text-xs text-destructive">
+							Sem vinculo orcamentario
+						</span>
+					);
+				},
+				meta: { mobileLabel: "Vínculo" },
 			},
-			meta: { mobileLabel: "Vínculo" },
-		}),
+		),
 		servicesHelper.accessor("unit", {
 			header: "Unid. orçamento",
 			cell: (info) =>

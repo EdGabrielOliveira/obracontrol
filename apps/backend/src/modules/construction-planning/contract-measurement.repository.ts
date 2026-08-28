@@ -192,7 +192,26 @@ export async function listMeasurements(
 	contractId: string,
 	filters?: { q?: string; page?: number; limit?: number },
 ) {
-	const where: Prisma.ContractMeasurementWhereInput = { ownerId, contractId };
+	const query = filters?.q?.trim();
+	const numberQuery = query ? Number.parseInt(query, 10) : Number.NaN;
+	const where: Prisma.ContractMeasurementWhereInput = {
+		ownerId,
+		contractId,
+		...(query
+			? {
+					OR: [
+						{ title: { contains: query } },
+						{ notes: { contains: query } },
+						...(Number.isInteger(numberQuery) ? [{ number: numberQuery }] : []),
+						{
+							items: {
+								some: { service: { description: { contains: query } } },
+							},
+						},
+					],
+				}
+			: {}),
+	};
 
 	const page = filters?.page ?? 1;
 	const limit = filters?.limit ?? 10;
@@ -591,16 +610,28 @@ export async function getContractAggregate(
 		hydrateContractMeasurementItems(measurement, servicesById),
 	);
 
-	let totalMeasured = 0;
+	const measuredByService = new Map<
+		string,
+		{ quantity: number; value: number }
+	>();
 	let retentionTotal = 0;
 	let discountTotal = 0;
 
 	for (const m of measurements) {
 		for (const item of m.items) {
-			totalMeasured += contractMeasuredValue(
-				item,
-				servicesById.get(item.serviceId),
+			const current = measuredByService.get(item.serviceId) ?? {
+				quantity: 0,
+				value: 0,
+			};
+			current.quantity += toFiniteNumber(
+				item.measuredQuantity ?? item.accumulatedQuantity,
 			);
+			current.value += toFiniteNumber(
+				item.measuredValue ??
+					item.accumulatedValue ??
+					contractMeasuredValue(item, servicesById.get(item.serviceId)),
+			);
+			measuredByService.set(item.serviceId, current);
 		}
 		retentionTotal += toFiniteNumber(m.retentionValue);
 		discountTotal += toFiniteNumber(m.discountValue);
@@ -617,6 +648,37 @@ export async function getContractAggregate(
 			value: Number(amendment.value),
 		})),
 	);
+	const serviceRows = contract.services.map((service) => {
+		const totals = servicesById.get(service.id);
+		const measured = measuredByService.get(service.id) ?? {
+			quantity: 0,
+			value: 0,
+		};
+		const contractServiceValue =
+			totals?.totalCost ?? toFiniteNumber(service.totalCost);
+		return {
+			...service,
+			totalCost: contractServiceValue || service.totalCost,
+			measuredAccumulated: roundCurrency(measured.value),
+			measuredAccumulatedQuantity: measured.quantity,
+			measuredPercentage:
+				contractServiceValue > 0 ? measured.value / contractServiceValue : 0,
+			remainingQuantity: Math.max(
+				0,
+				toFiniteNumber(service.quantity) - measured.quantity,
+			),
+			remainingValue: roundCurrency(
+				Math.max(0, contractServiceValue - measured.value),
+			),
+		};
+	});
+	const totalMeasured = [...measuredByService.values()].reduce(
+		(sum, value) => sum + value.value,
+		0,
+	);
+	const measuredServiceCount = serviceRows.filter(
+		(service) => (service.measuredAccumulated ?? 0) > 0,
+	).length;
 
 	return {
 		contract: {
@@ -627,10 +689,7 @@ export async function getContractAggregate(
 			status: contract.status,
 			contractValue,
 		},
-		services: contract.services.map((service) => ({
-			...service,
-			totalCost: servicesById.get(service.id)?.totalCost ?? service.totalCost,
-		})),
+		services: serviceRows,
 		measurements,
 		payments: contract.payments,
 		totals: {
@@ -641,10 +700,16 @@ export async function getContractAggregate(
 			retentionTotal: roundCurrency(retentionTotal),
 			discountTotal: roundCurrency(discountTotal),
 			balance: roundCurrency(contractValue - totalPaid),
+			totalOutstanding: roundCurrency(Math.max(0, contractValue - totalPaid)),
+			totalToMeasure: roundCurrency(Math.max(0, contractValue - totalMeasured)),
 			measuredPercentage: contractValue > 0 ? totalMeasured / contractValue : 0,
+			paidPercentage: contractValue > 0 ? totalPaid / contractValue : 0,
 		},
 		measurementsCount: contract.measurements.length,
 		paymentsCount: contract.payments.length,
+		serviceCount: serviceRows.length,
+		measuredServiceCount,
+		pendingServiceCount: Math.max(0, serviceRows.length - measuredServiceCount),
 	};
 }
 
@@ -892,19 +957,42 @@ export async function getMeasurementDetail(
 export async function listPayments(
 	ownerId: string,
 	contractId: string,
-	filters?: { page?: number; limit?: number },
+	filters?: { q?: string; page?: number; limit?: number },
 ) {
 	const page = filters?.page ?? 1;
 	const limit = filters?.limit ?? 10;
+	const query = filters?.q?.trim();
+	const where: Prisma.ContractPaymentWhereInput = {
+		ownerId,
+		contractId,
+		...(query
+			? {
+					OR: [
+						{ description: { contains: query } },
+						{ status: query },
+						{
+							measurement: {
+								OR: [
+									{ title: { contains: query } },
+									...(Number.isInteger(Number.parseInt(query, 10))
+										? [{ number: Number.parseInt(query, 10) }]
+										: []),
+								],
+							},
+						},
+					],
+				}
+			: {}),
+	};
 
 	const [data, total] = await Promise.all([
 		prisma.contractPayment.findMany({
-			where: { ownerId, contractId },
+			where,
 			orderBy: { date: "desc" },
 			skip: (page - 1) * limit,
 			take: limit,
 		}),
-		prisma.contractPayment.count({ where: { ownerId, contractId } }),
+		prisma.contractPayment.count({ where }),
 	]);
 
 	return buildPaginatedResponse(data, total, page, limit);
@@ -996,7 +1084,6 @@ export async function createPayment(
 			retentionValue: input.retentionValue ?? null,
 			discountValue: input.discountValue ?? null,
 			status: input.status ?? "EM_ABERTO",
-			balanceOverride: input.balanceOverride ?? false,
 		},
 	});
 }
@@ -1047,7 +1134,6 @@ export async function updatePayment(
 		"retentionValue",
 		"discountValue",
 		"status",
-		"balanceOverride",
 	] as (keyof typeof input)[]);
 	if (input.date !== undefined)
 		(updateData as Record<string, unknown>).date = new Date(input.date);

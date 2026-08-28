@@ -16,17 +16,20 @@ import {
 } from "@/components/atoms/status-badge";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { InputFormField } from "@/components/molecules/FormField";
+import {
+	type BudgetItemSelection,
+	BudgetItemSelector,
+} from "@/components/organisms/budget/budget-item-selector";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import type { BudgetTreeItem } from "@/types/budget";
 import type {
 	ContractMeasurement,
 	ContractService,
@@ -87,6 +90,8 @@ interface MeasurementsTabProps {
 	canChangeMeasurementStatus?: boolean;
 	onOpenMeasurementStatus?: (measurement: ContractMeasurement) => void;
 	isUpdatingMeasurementStatus?: boolean;
+	searchValue?: string;
+	onSearchChange?: (value: string) => void;
 
 	warnings?: MeasurementWarningItem[];
 	onDismissWarnings?: () => void;
@@ -106,17 +111,16 @@ export function MeasurementsTab({
 	canChangeMeasurementStatus = false,
 	onOpenMeasurementStatus,
 	isUpdatingMeasurementStatus,
+	searchValue,
+	onSearchChange,
 	warnings,
 	onDismissWarnings,
 }: MeasurementsTabProps) {
 	const [showAdd, setShowAdd] = useState(false);
 	const [deleteId, setDeleteId] = useState<string | null>(null);
-	const [selectedServiceIds, setSelectedServiceIds] = useState<Set<string>>(
-		new Set(),
-	);
-	const [measurementDraft, setMeasurementDraft] = useState<
-		Record<string, { measuredQuantity: string }>
-	>({});
+	const [selectedServices, setSelectedServices] = useState<
+		BudgetItemSelection[]
+	>([]);
 	const prevCreating = useRef(isCreatingMeasurement);
 	const navigate = useNavigate();
 
@@ -125,14 +129,44 @@ export function MeasurementsTab({
 		[services],
 	);
 	const canCreateMeasurement = services.some(
-		(service) => Number(service.quantity) > 0,
+		(service) => Number(service.remainingQuantity ?? service.quantity) > 0,
 	);
-	const selectedServiceIdsWithQuantity = services
-		.filter(
-			(service) =>
-				selectedServiceIds.has(service.id) && Number(service.quantity) > 0,
-		)
-		.map((service) => service.id);
+	const selectorItems = useMemo<BudgetTreeItem[]>(
+		() =>
+			services.map((service, index) => ({
+				id: service.id,
+				parentId: null,
+				index:
+					service.budgetItem?.displayIndex ??
+					service.budgetItem?.index ??
+					`${index + 1}`,
+				type: "ITEM",
+				description: service.description,
+				unit: service.unit,
+				quantity: service.quantity,
+				unitCost: service.unitCost,
+				totalCost: service.totalCost,
+				plannedStart: null,
+				plannedEnd: null,
+				completionPercentage: null,
+				sortOrder: service.sortOrder,
+				children: [],
+			})),
+		[services],
+	);
+	const availableQuantities = useMemo(
+		() =>
+			Object.fromEntries(
+				services.map((service) => [
+					service.id,
+					Math.max(
+						0,
+						Number(service.remainingQuantity ?? service.quantity ?? 0),
+					),
+				]),
+			),
+		[services],
+	);
 
 	const createForm = useForm<MeasurementCreateValues>({
 		resolver: zodResolver(measurementCreateSchema),
@@ -155,8 +189,7 @@ export function MeasurementsTab({
 			date: "",
 			notes: "",
 		});
-		setSelectedServiceIds(new Set());
-		setMeasurementDraft({});
+		setSelectedServices([]);
 		setShowAdd(true);
 	};
 
@@ -339,6 +372,17 @@ export function MeasurementsTab({
 				icon={ClipboardList}
 				title="Medições do Contrato"
 				description="Registre a quantidade executada por serviço do contrato."
+				actions={
+					<Button
+						variant="default"
+						size="sm"
+						disabled={!canCreateMeasurement}
+						onClick={openAdd}
+					>
+						<Plus className="mr-2 h-4 w-4" />
+						Nova medição
+					</Button>
+				}
 			/>
 			<CardContent>
 				{warnings && warnings.length > 0 && (
@@ -365,33 +409,22 @@ export function MeasurementsTab({
 						</AlertDescription>
 					</Alert>
 				)}
-				<div className="mb-4 flex flex-wrap gap-2">
-					<Button
-						variant="default"
-						size="sm"
-						disabled={!canCreateMeasurement}
-						onClick={openAdd}
-					>
-						<Plus className="mr-2 h-4 w-4" />
-						Nova medição
-					</Button>
-				</div>
 				{!canCreateMeasurement && (
 					<div className="status-warning mb-4 rounded-md px-3 py-2 text-sm">
 						<p>
-							Não há serviços do contrato com quantidade contratada para medir.
+							Não há saldo disponível em nenhum serviço do contrato para medir.
 						</p>
 					</div>
 				)}
 
-				{measurements.length === 0 ? (
+				{measurements.length === 0 && !searchValue?.trim() ? (
 					<EmptyState
 						icon={<ClipboardList className="h-12 w-12" />}
 						title="Nenhuma medição cadastrada."
 						description={
-								canCreateMeasurement
-									? "Crie uma medição informando a quantidade executada por serviço."
-									: "Cadastre serviços com quantidade contratada antes de criar medições."
+							canCreateMeasurement
+								? "Crie uma medição informando a quantidade executada por serviço."
+								: "Todos os serviços já estão 100% medidos ou não possuem saldo contratado."
 						}
 					/>
 				) : (
@@ -404,6 +437,8 @@ export function MeasurementsTab({
 								: undefined
 						}
 						searchPlaceholder="Buscar medições..."
+						searchValue={searchValue}
+						onSearchChange={onSearchChange}
 						pageSize={10}
 						emptyMessage="Nenhuma medição cadastrada."
 					/>
@@ -416,16 +451,16 @@ export function MeasurementsTab({
 						</DialogHeader>
 						<form
 							onSubmit={createForm.handleSubmit((values) => {
-								const items = selectedServiceIdsWithQuantity.flatMap((id) => {
-									const rawQuantity = measurementDraft[id]?.measuredQuantity;
-									if (!rawQuantity) return [];
-									return [
-										{
-											serviceId: id,
-											measuredQuantity: Number(rawQuantity),
-										},
-									];
-								});
+								const items = selectedServices.flatMap((selection) =>
+									selection.quantity > 0
+										? [
+												{
+													serviceId: selection.budgetItemId,
+													measuredQuantity: selection.quantity,
+												},
+											]
+										: [],
+								);
 
 								if (items.length === 0) return;
 								onCreateMeasurement?.({
@@ -474,75 +509,25 @@ export function MeasurementsTab({
 								)}
 							/>
 
-							<div className="space-y-2">
-								<Label>Serviços</Label>
-								<div className="max-h-72 overflow-y-auto rounded-md border border-border">
-									{services.map((svc) => (
-										<div
-											key={svc.id}
-											className="grid grid-cols-[auto_minmax(0,1fr)_6rem_6rem] gap-2 border-b border-border px-2 py-2 text-sm last:border-b-0"
-										>
-											<Checkbox
-														checked={selectedServiceIds.has(svc.id)}
-														disabled={Number(svc.quantity) <= 0}
-														onCheckedChange={(checked) => {
-															if (Number(svc.quantity) <= 0) return;
-													setSelectedServiceIds((prev) => {
-														const next = new Set(prev);
-														if (checked) {
-															next.add(svc.id);
-														} else {
-															next.delete(svc.id);
-														}
-														return next;
-													});
-												}}
-											/>
-											<div className="min-w-0">
-												<div className="truncate font-medium">
-													{svc.description}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													{svc.quantity ?? "—"} {svc.unit ?? ""} contratados
-												</div>
-											</div>
-											<input
-												type="number"
-												min="0"
-												step="0.0001"
-												placeholder="Qtd"
-												disabled={!selectedServiceIds.has(svc.id)}
-												className="h-8 rounded-md border border-border bg-background px-2 text-xs disabled:opacity-50"
-												value={measurementDraft[svc.id]?.measuredQuantity ?? ""}
-												onChange={(event) =>
-													setMeasurementDraft((prev) => ({
-														...prev,
-														[svc.id]: {
-															measuredQuantity: event.target.value,
-														},
-													}))
-												}
-											/>
-											<span className="self-center text-right text-xs text-muted-foreground">
-												{(() => {
-													const measured = Number(
-														measurementDraft[svc.id]?.measuredQuantity,
-													);
-													const contracted = Number(svc.quantity);
-													return measured > 0 && contracted > 0
-														? formatPercentage((measured / contracted) * 100)
-														: "—";
-												})()}
-											</span>
-										</div>
-									))}
-									{services.length === 0 && (
-										<p className="text-xs text-muted-foreground px-1 py-2">
-											Cadastre serviços primeiro.
-										</p>
-									)}
-								</div>
-							</div>
+							<BudgetItemSelector
+								workId={workId}
+								budgetItems={selectorItems}
+								selectedItems={selectedServices}
+								onChange={setSelectedServices}
+								disabledItemIds={
+									new Set(
+										services
+											.filter((service) => availableQuantities[service.id] <= 0)
+											.map((service) => service.id),
+									)
+								}
+								availableQuantities={availableQuantities}
+								showUnitPrice={false}
+								quantityLabel="Quantidade medida"
+								showMeasurementPercentage
+								title="Serviços do contrato"
+								description="Selecione os serviços e informe a quantidade desta medição."
+							/>
 
 							<div className="flex justify-end gap-2 pt-2">
 								<Button
@@ -556,9 +541,9 @@ export function MeasurementsTab({
 									type="submit"
 									disabled={
 										!canCreateMeasurement ||
-																selectedServiceIdsWithQuantity.length === 0 ||
-																selectedServiceIdsWithQuantity.every(
-											(id) => !measurementDraft[id]?.measuredQuantity,
+										selectedServices.length === 0 ||
+										selectedServices.every(
+											(selection) => selection.quantity <= 0,
 										)
 									}
 								>

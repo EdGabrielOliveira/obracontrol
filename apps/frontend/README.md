@@ -70,8 +70,8 @@ docker compose -f docker-compose.yml up -d --build
 O backend e o frontend sobem juntos com o Compose da raiz. O banco atual é
 SQLite persistido no volume `obracontrol_api_data`; ele não possui porta TCP.
 
-Para rodar o frontend pelo Vite dentro do Docker, com hot reload para arquivos
-do workspace, aplique também o override de desenvolvimento:
+O Compose da raiz roda o frontend pelo Vite dentro do Docker, com hot reload
+para arquivos do workspace:
 
 ```powershell
 bun run dev:docker
@@ -79,7 +79,6 @@ bun run dev:docker
 
 Esse modo expõe o Vite na porta `7000`, encaminha a API para o serviço
 `backend` e ativa polling de arquivos para compatibilidade com Docker Desktop.
-O Compose sem o override continua sendo o modo de produção com Nginx.
 
 Em produção, o frontend é publicado via Docker no Dokploy; o Nginx encaminha
 as rotas da API para o backend `obracontrol-api` na mesma rede. O backend usa

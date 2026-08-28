@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-router";
 import { createColumnHelper } from "@tanstack/react-table";
 import { FileSearch } from "lucide-react";
+import { useState } from "react";
 import { z } from "zod";
 import { listAdminUsers } from "@/api/admin-users";
 import { listAuditLogs } from "@/api/audit";
@@ -14,11 +15,14 @@ import { listAllCostCenters, listOrganizations } from "@/api/organizations";
 import { auditKeys } from "@/api/query-keys";
 import { listWorks } from "@/api/works";
 import { EmptyState } from "@/atoms/empty-state";
+import { AccessDenied } from "@/atoms/access-denied";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { DataTable } from "@/components/atoms/data-table";
 import { PageHeader } from "@/components/atoms/page-header";
+import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
+import { Button } from "@/components/ui/button";
 import {
 	AUDIT_ACTION_STATUS_MAP,
 	StatusBadge,
@@ -31,13 +35,19 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { auditEntityLabel } from "@/lib/audit-labels";
+import {
+	auditDescription,
+	auditEntityLabel,
+	auditUserName,
+} from "@/lib/audit-labels";
 import { queryClient } from "@/lib/query-client";
+import { useAuth } from "@/lib/auth-context";
 import { paginationSchema } from "@/schemas/pagination";
 import type { AuditLogEntry } from "@/types/audit";
 import type { PaginationMeta } from "@/types/shared";
-import { formatDate } from "@/utils/format";
+import { formatDateTime } from "@/utils/format";
 import { getPaginationMeta } from "@/utils/pagination";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 
 const auditFilterSchema = z
 	.object({
@@ -69,6 +79,7 @@ const _ENTITY_LABELS: Record<string, string> = {
 const auditColumnHelper = createColumnHelper<AuditLogEntry>();
 
 export const Route = createFileRoute("/app/auditoria/")({
+	beforeLoad: () => requireAuthorizationCapability("canViewAudit"),
 	validateSearch: auditFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
 	loader: ({ deps }) => {
@@ -90,31 +101,41 @@ export const Route = createFileRoute("/app/auditoria/")({
 function RouteComponent() {
 	const searchParams = useSearch({ from: Route.id }) as AuditFilter;
 	const navigate = useNavigate({ from: Route.id });
+	const { capabilities } = useAuth();
+	const [auditDetail, setAuditDetail] = useState<AuditLogEntry | null>(null);
 
 	const { data, isLoading, error } = useQuery({
 		queryKey: auditKeys.list(searchParams as Record<string, unknown>),
 		queryFn: () => listAuditLogs(searchParams as Record<string, unknown>),
+		enabled: capabilities?.canViewAudit === true,
 	});
 	const { data: users } = useQuery({
 		queryKey: ["audit-filter-users"],
 		queryFn: () => listAdminUsers({ limit: 100 }),
+		enabled: capabilities?.canViewAudit === true,
 	});
 	const { data: companies } = useQuery({
 		queryKey: ["audit-filter-companies"],
 		queryFn: listCompanies,
+		enabled: capabilities?.canViewAudit === true,
 	});
 	const { data: organizations } = useQuery({
 		queryKey: ["audit-filter-organizations"],
 		queryFn: () => listOrganizations({ limit: 100 }),
+		enabled: capabilities?.canViewAudit === true,
 	});
 	const { data: costCenters } = useQuery({
 		queryKey: ["audit-filter-cost-centers"],
 		queryFn: () => listAllCostCenters({ limit: 100 }),
+		enabled: capabilities?.canViewAudit === true,
 	});
 	const { data: works } = useQuery({
 		queryKey: ["audit-filter-works"],
 		queryFn: () => listWorks({ limit: 100 }),
+		enabled: capabilities?.canViewAudit === true,
 	});
+
+	if (capabilities && !capabilities.canViewAudit) return <AccessDenied />;
 
 	const handlePageChange = (page: number) => {
 		navigate({ search: (prev) => ({ ...prev, page }) });
@@ -123,6 +144,11 @@ function RouteComponent() {
 		navigate({
 			search: (prev) => ({ ...prev, [key]: value || undefined, page: 1 }),
 		});
+	};
+	const handleAuditNavigation = (
+		target: NonNullable<AuditLogEntry["navigationTarget"]>,
+	) => {
+		if (target.path.startsWith("/app/")) navigate({ to: target.path as never });
 	};
 
 	if (isLoading) return <LoadingSpinner title="Carregando logs..." />;
@@ -242,13 +268,13 @@ function RouteComponent() {
 						columns={[
 							auditColumnHelper.accessor("createdAt", {
 								header: "Data/Hora",
-								cell: ({ getValue }) => formatDate(getValue()),
+								cell: ({ getValue }) => formatDateTime(getValue()),
 							}),
 							auditColumnHelper.display({
 								id: "user",
 								header: "Usuário",
 								cell: ({ row }) =>
-									row.original.user.name || row.original.user.email,
+									auditUserName(row.original),
 							}),
 							auditColumnHelper.accessor("action", {
 								header: "Ação",
@@ -267,7 +293,43 @@ function RouteComponent() {
 								id: "description",
 								header: "Descrição",
 								cell: ({ row }) =>
-									row.original.entityDescription || row.original.entityId,
+									auditDescription(
+										row.original.entityDescription,
+										row.original.action,
+									),
+							}),
+							auditColumnHelper.display({
+								id: "actions",
+								header: "Detalhe",
+								cell: ({ row }) => {
+									const entry = row.original;
+									return (
+										<div className="flex justify-end gap-1">
+											<Button
+												variant="outline"
+												size="sm"
+												onClick={() => setAuditDetail(entry)}
+											>
+												Detalhe
+											</Button>
+											{entry.navigationTarget && (
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() =>
+														handleAuditNavigation(
+															entry.navigationTarget as NonNullable<
+																AuditLogEntry["navigationTarget"]
+															>,
+														)
+													}
+												>
+													{entry.navigationTarget.label}
+												</Button>
+											)}
+										</div>
+									);
+								},
 							}),
 						]}
 						data={logList}
@@ -283,6 +345,13 @@ function RouteComponent() {
 					)}
 				</div>
 			)}
+			<AuditEntryDetail
+				entry={auditDetail}
+				onOpenNavigationTarget={handleAuditNavigation}
+				onOpenChange={(open) => {
+					if (!open) setAuditDetail(null);
+				}}
+			/>
 		</PageContainer>
 	);
 }

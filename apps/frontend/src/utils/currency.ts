@@ -17,7 +17,8 @@ export function parseCurrencyToNumber(
 	raw: string | undefined | null,
 ): number | null {
 	if (!raw) return null;
-	const cleaned = raw.replace(/[^\d,-]/g, "").replace(",", ".");
+	const sign = raw.trim().startsWith("-") ? "-" : "";
+	const cleaned = `${sign}${raw.replace(/[^\d,]/g, "").replace(",", ".")}`;
 	const num = Number(cleaned);
 	return Number.isNaN(num) ? null : num;
 }
@@ -26,7 +27,8 @@ export function parseMonetaryPreprocess(val: unknown): number | null {
 	if (val === null || val === undefined || val === "") return null;
 	if (typeof val === "number") return Number.isNaN(val) ? null : val;
 	if (typeof val === "string") {
-		const cleaned = val.replace(/[^\d,-]/g, "").replace(",", ".");
+		const sign = val.trim().startsWith("-") ? "-" : "";
+		const cleaned = `${sign}${val.replace(/[^\d,]/g, "").replace(",", ".")}`;
 		const num = Number(cleaned);
 		return Number.isNaN(num) ? null : num;
 	}

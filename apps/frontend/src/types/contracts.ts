@@ -179,6 +179,8 @@ export type ContractService = {
 		totalCost?: number | null;
 	} | null;
 	children?: ContractService[];
+	measuredAccumulatedQuantity?: number | null;
+	remainingQuantity?: number | null;
 };
 
 export type CreateContractServiceInput = {
@@ -207,7 +209,6 @@ export type ContractPayment = {
 	retentionValue: number | null;
 	discountValue: number | null;
 	status: PaymentStatus;
-	balanceOverride: boolean;
 };
 
 export type CreateContractPaymentInput = {
@@ -219,8 +220,6 @@ export type CreateContractPaymentInput = {
 	retentionValue?: number;
 	discountValue?: number;
 	status?: PaymentStatus;
-	balanceOverride?: boolean;
-	reason?: string | null;
 };
 
 export type UpdateContractPaymentInput = Partial<
