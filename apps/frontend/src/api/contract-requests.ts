@@ -4,6 +4,7 @@ import type {
 	ContractRequestCreateInput,
 	ContractRequestDetail,
 	ContractRequestSummary,
+	ManualContractRequestProposalInput,
 	QuotationMapConfirmResult,
 } from "@/types/contract-requests";
 import type { ImportPreviewPage } from "@/types/import";
@@ -134,6 +135,18 @@ export async function negotiateContractRequestProposal(
 	}>(
 		`/construction/works/${workId}/contract-requests/${requestId}/proposals/${proposalId}/negotiate`,
 		{ proposalValue, reason },
+	);
+	return data;
+}
+
+export async function addManualContractRequestProposal(
+	workId: string,
+	requestId: string,
+	input: ManualContractRequestProposalInput,
+) {
+	const { data } = await api.post<{ id: string }>(
+		`/construction/works/${workId}/contract-requests/${requestId}/proposals/manual`,
+		input,
 	);
 	return data;
 }

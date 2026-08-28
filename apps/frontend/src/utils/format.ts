@@ -6,6 +6,36 @@ export function formatCurrency(value: number): string {
 	}).format(value);
 }
 
+/** Formats a CNPJ while keeping partially entered values usable in inputs. */
+export function formatCnpj(value: string | null | undefined): string {
+	const digits = (value ?? "").replace(/\D/g, "").slice(0, 14);
+	if (digits.length <= 2) return digits;
+	if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+	if (digits.length <= 8) {
+		return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+	}
+	if (digits.length <= 12) {
+		return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+	}
+	return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+
+/** Currency input mask: raw digits represent cents (e.g. 123300 => R$ 1.233,00). */
+export function formatCurrencyInput(value: string): string {
+	const digits = value.replace(/\D/g, "");
+	if (!digits) return "";
+	return new Intl.NumberFormat("pt-BR", {
+		style: "currency",
+		currency: "BRL",
+		minimumFractionDigits: 2,
+	}).format(Number(digits) / 100);
+}
+
+export function parseCurrencyInput(value: string): number {
+	const digits = value.replace(/\D/g, "");
+	return digits ? Number(digits) / 100 : Number.NaN;
+}
+
 export function formatNullableCurrency(
 	value: number | null | undefined,
 ): string {

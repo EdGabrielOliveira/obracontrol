@@ -52,6 +52,13 @@ export type ContractRequestCreateInput = {
 	items: Array<{ budgetItemId: string; quantity: number }>;
 };
 
+export type ManualContractRequestProposalInput = {
+	supplierName: string;
+	cnpj: string;
+	proposalValue: number;
+	notes?: string;
+};
+
 export type ContractRequestComparison = {
 	request: {
 		id: string;

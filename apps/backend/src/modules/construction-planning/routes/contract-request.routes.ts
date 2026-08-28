@@ -5,6 +5,7 @@ import {
 } from "../../../lib/authorization-middleware";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import {
+	addManualContractRequestProposal,
 	cancelContractRequest,
 	createContractRequest,
 	getContractRequest,
@@ -151,7 +152,33 @@ export const contractRequestRoutes = new Elysia({
 		{
 			detail: {
 				tags: ["Contracts"],
-				summary: "Cancelar etapa incompleta de cotação",
+				summary: "Cancelar cotação",
+			},
+		},
+	)
+	.post(
+		"/:requestId/proposals/manual",
+		({ params, body, user }) =>
+			addManualContractRequestProposal(
+				user.id,
+				params.workId,
+				params.requestId,
+				body,
+			),
+		{
+			body: t.Object({
+				supplierName: t.String({ minLength: 1, maxLength: 200 }),
+				cnpj: t.String({
+					minLength: 14,
+					maxLength: 14,
+					pattern: "^[0-9]{14}$",
+				}),
+				proposalValue: t.Number({ exclusiveMinimum: 0 }),
+				notes: t.Optional(t.String({ maxLength: 2_000 })),
+			}),
+			detail: {
+				tags: ["Contracts"],
+				summary: "Adicionar fornecedor manualmente ao comparativo",
 			},
 		},
 	)

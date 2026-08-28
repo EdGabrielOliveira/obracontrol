@@ -15,8 +15,10 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { listContractRequests } from "@/api/contract-requests";
-import { listMyApprovalRequests } from "@/api/governance";
+import {
+	cancelContractRequest,
+	listContractRequests,
+} from "@/api/contract-requests";
 import {
 	type ContractFilter,
 	deleteContract,
@@ -25,7 +27,14 @@ import {
 	updateContract,
 } from "@/api/contracts";
 import { exportContratos } from "@/api/export";
-import { contractRequestKeys, governanceKeys, workKeys } from "@/api/query-keys";
+import { listMyApprovalRequests } from "@/api/governance";
+import {
+	contractRequestKeys,
+	governanceKeys,
+	quotationKeys,
+	workKeys,
+} from "@/api/query-keys";
+import { listQuotations } from "@/api/quotations";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
@@ -35,8 +44,8 @@ import { KpiCard } from "@/components/atoms/kpi-card";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
-import { ContractStatusModal } from "@/components/organisms/contracts/contract-status-modal";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
+import { ContractStatusModal } from "@/components/organisms/contracts/contract-status-modal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -46,13 +55,14 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { invalidateContractRelated } from "@/lib/invalidate-contract";
 import { queryClient } from "@/lib/query-client";
-import { useAuth } from "@/lib/auth-context";
 import {
 	ContractTable,
 	type ContractTableRow,
+	type PendingContractRow,
 } from "@/organisms/contracts/contract-table";
 import { contractStatusSchema } from "@/schemas/contracts";
 import { paginationSchema } from "@/schemas/pagination";
@@ -77,14 +87,20 @@ export const Route = createFileRoute("/app/obras/$workId/contratos/")({
 	loaderDeps: ({ search }) => ({ search }),
 	component: RouteComponent,
 	loader: async ({ params, deps }) =>
-		await queryClient.prefetchQuery({
-			queryKey: workKeys.contractsList(
-				params.workId,
-				deps.search as Record<string, unknown>,
-			),
-			queryFn: () =>
-				listContracts(params.workId, deps.search as ContractFilter),
-		}),
+		await Promise.all([
+			queryClient.prefetchQuery({
+				queryKey: workKeys.contractsList(
+					params.workId,
+					deps.search as Record<string, unknown>,
+				),
+				queryFn: () =>
+					listContracts(params.workId, deps.search as ContractFilter),
+			}),
+			queryClient.prefetchQuery({
+				queryKey: quotationKeys.list(params.workId),
+				queryFn: () => listQuotations(params.workId),
+			}),
+		]),
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -104,6 +120,9 @@ function RouteComponent() {
 	const { role } = useAuth();
 
 	const [deleteId, setDeleteId] = useState<string | null>(null);
+	const [cancelTarget, setCancelTarget] = useState<PendingContractRow | null>(
+		null,
+	);
 	const [statusTarget, setStatusTarget] = useState<Contract | null>(null);
 	const [creationModeOpen, setCreationModeOpen] = useState(false);
 
@@ -117,6 +136,10 @@ function RouteComponent() {
 	const { data: pendingRequests = [] } = useQuery({
 		queryKey: contractRequestKeys.all(workId),
 		queryFn: () => listContractRequests(workId),
+	});
+	const { data: quotations = [], isLoading: isLoadingQuotations } = useQuery({
+		queryKey: quotationKeys.list(workId),
+		queryFn: () => listQuotations(workId),
 	});
 	const { data: myApprovalRequests = [] } = useQuery({
 		queryKey: governanceKeys.mine(workId),
@@ -163,6 +186,30 @@ function RouteComponent() {
 			setDeleteId(null);
 		},
 		onError: () => toast.error("Erro ao excluir contrato."),
+	});
+
+	const cancelMutation = useMutation({
+		mutationFn: (requestId: string) => cancelContractRequest(workId, requestId),
+		onSuccess: (result) => {
+			if (!result.cancelled) {
+				setCancelTarget(null);
+				toast.error("Esta cotação não pode mais ser excluída.");
+				return;
+			}
+			toast.success("Cotação excluída.");
+			queryClient.invalidateQueries({
+				queryKey: contractRequestKeys.all(workId),
+			});
+			queryClient.invalidateQueries({ queryKey: workKeys.contracts(workId) });
+			queryClient.invalidateQueries({
+				queryKey: workKeys.contractsSummary(workId),
+			});
+			setCancelTarget(null);
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível excluir a cotação."),
+			),
 	});
 
 	const statusMutation = useMutation({
@@ -221,6 +268,13 @@ function RouteComponent() {
 				});
 				return;
 			}
+			if (contract.approvalKind === "quotation") {
+				navigate({
+					to: "/app/obras/$workId/contratos/$requestId/aprovacao",
+					params: { workId, requestId: contract.requestId },
+				});
+				return;
+			}
 			navigate({
 				to: "/app/obras/$workId/contratos/$requestId/comparativo",
 				params: { workId, requestId: contract.requestId },
@@ -244,7 +298,8 @@ function RouteComponent() {
 		});
 	};
 
-	if (isLoading) return <LoadingSpinner title="Carregando contratos..." />;
+	if (isLoading || isLoadingQuotations)
+		return <LoadingSpinner title="Carregando contratos..." />;
 	if (error || !data) return <ErrorFeedback onRetry={() => refetch()} />;
 
 	const contractList = data.data;
@@ -258,7 +313,17 @@ function RouteComponent() {
 		title: request.title,
 		startDate: null,
 		endDate: null,
-		status: request.approvalStatus === "REJECTED" ? "RECUSADO" : "PENDENTE",
+		status:
+			request.approvalStatus === "REJECTED" &&
+			request.status === "EM_NEGOCIACAO"
+				? "EM_RECOTACAO"
+				: request.approvalStatus === "REJECTED"
+					? "RECUSADO"
+					: request.status === "EM_ESPERA"
+						? "EM_COTACAO"
+						: request.status === "EM_NEGOCIACAO"
+							? "EM_RECOTACAO"
+							: "PENDENTE",
 		notes: null,
 		createdAt: request.createdAt,
 		isPending: true,
@@ -268,6 +333,30 @@ function RouteComponent() {
 		approvalStatus: request.approvalStatus,
 		approvalReason: request.approvalReason,
 	}));
+	const quotationRows: ContractTableRow[] = quotations
+		.filter((quotation) => quotation.status !== "CONTRATADA")
+		.map((quotation) => ({
+			id: quotation.id,
+			workId,
+			supplierName: quotation.title,
+			supplierId: null,
+			contractValue: 0,
+			serviceType: quotation.serviceType ?? "Cotação",
+			title: quotation.title,
+			startDate: null,
+			endDate: null,
+			status:
+				quotation.status === "EM_COTACAO"
+					? "EM_COTACAO"
+					: quotation.status === "NEGOCIACAO"
+						? "EM_RECOTACAO"
+						: "PENDENTE",
+			notes: null,
+			createdAt: quotation.createdAt,
+			isPending: true,
+			requestId: quotation.id,
+			approvalKind: "quotation",
+		}));
 	const manualApprovalRows: ContractTableRow[] = myApprovalRequests
 		.filter(
 			(request) =>
@@ -311,13 +400,18 @@ function RouteComponent() {
 	const tableRows: ContractTableRow[] = [
 		...contractList,
 		...pendingRows,
+		...quotationRows,
 		...manualApprovalRows,
 	];
 	const totalContractCount =
-		data.total + pendingRows.length + manualApprovalRows.length;
+		data.total +
+		pendingRows.length +
+		quotationRows.length +
+		manualApprovalRows.length;
 	const pendingContractCount =
 		(summaryData?.pendingContracts ?? 0) +
 		pendingRows.length +
+		quotationRows.length +
 		manualApprovalRows.filter(
 			(row) => "approvalStatus" in row && row.approvalStatus === "PENDING",
 		).length;
@@ -345,6 +439,7 @@ function RouteComponent() {
 	if (
 		contractList.length === 0 &&
 		pendingRows.length === 0 &&
+		quotationRows.length === 0 &&
 		manualApprovalRows.length === 0
 	) {
 		return (
@@ -399,8 +494,8 @@ function RouteComponent() {
 				<Card className="mt-4">
 					<CardHeaderWithIcon
 						icon={FolderOpen}
-						title="Lista de Contratos"
-						description="Contratos efetivados e solicitações pendentes"
+						title="Lista de contratos e cotações"
+						description="Contratos efetivados, solicitações pendentes e cotações em andamento."
 					/>
 					<CardContent>
 						<ContractTable
@@ -409,6 +504,7 @@ function RouteComponent() {
 							searchValue={searchParams.q ?? ""}
 							onSearchChange={handleSearchChange}
 							onDelete={(id) => setDeleteId(id)}
+							onDeletePending={setCancelTarget}
 							onEdit={(contract) =>
 								navigate({
 									to: "/app/obras/$workId/contratos/$contractId/edit",
@@ -424,7 +520,9 @@ function RouteComponent() {
 									to:
 										kind === "approval"
 											? "/app/obras/$workId/contratos/aprovacoes/$requestId"
-											: "/app/obras/$workId/contratos/$requestId/comparativo",
+											: kind === "quotation"
+												? "/app/obras/$workId/contratos/$requestId/aprovacao"
+												: "/app/obras/$workId/contratos/$requestId/comparativo",
 									params: { workId, requestId },
 								})
 							}
@@ -444,6 +542,16 @@ function RouteComponent() {
 				onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
 				onCancel={() => setDeleteId(null)}
 				loading={deleteMutation.isPending}
+			/>
+			<ConfirmDialog
+				open={cancelTarget !== null}
+				title="Excluir cotação?"
+				description="A cotação e suas propostas serão removidas da listagem. Esta ação não pode ser desfeita."
+				onConfirm={() =>
+					cancelTarget && cancelMutation.mutate(cancelTarget.requestId)
+				}
+				onCancel={() => setCancelTarget(null)}
+				loading={cancelMutation.isPending}
 			/>
 			<ContractStatusModal
 				open={statusTarget !== null}

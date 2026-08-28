@@ -47,6 +47,7 @@ export type Quotation = {
 export type QuotationComparisonProposal = QuotationProposal & {
 	supplierRegistered: boolean;
 	differenceFromBudget: number | null;
+	round?: number | null;
 };
 
 export type QuotationComparison = Omit<Quotation, "proposals"> & {

@@ -18,6 +18,7 @@ import {
 	workKeys,
 } from "@/api/query-keys";
 import {
+	addQuotationProposal,
 	chooseQuotationWinner,
 	getQuotationComparison,
 	negotiateQuotationProposal,
@@ -28,6 +29,7 @@ import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { InputFormField } from "@/components/molecules/FormField";
+import { ManualContractRequestProposalDialog } from "@/components/organisms/contracts/manual-contract-request-proposal-dialog";
 import { QuotationComparisonView } from "@/components/organisms/contracts/quotation-comparison";
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
+import type { ManualContractRequestProposalInput } from "@/types/contract-requests";
 import type { QuotationComparisonProposal } from "@/types/quotations";
 import { getErrorMessage } from "@/utils/api-error";
 
@@ -92,6 +95,8 @@ function RouteComponent() {
 	const { role } = useAuth();
 	const [registerTarget, setRegisterTarget] =
 		useState<QuotationComparisonProposal | null>(null);
+	const [isManualProposalDialogOpen, setIsManualProposalDialogOpen] =
+		useState(false);
 	const [negotiateTarget, setNegotiateTarget] =
 		useState<QuotationComparisonProposal | null>(null);
 
@@ -172,6 +177,24 @@ function RouteComponent() {
 		},
 		onError: () => toast.error("Não foi possível abrir a recotação."),
 	});
+	const manualProposalMutation = useMutation({
+		mutationFn: (input: ManualContractRequestProposalInput) =>
+			addQuotationProposal(workId, requestId, {
+				supplierName: input.supplierName,
+				supplierDocument: input.cnpj,
+				value: input.proposalValue,
+				justification: input.notes ?? null,
+			}),
+		onSuccess: () => {
+			setIsManualProposalDialogOpen(false);
+			invalidateComparison();
+			toast.success("Participante adicionado ao comparativo.");
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível adicionar o participante."),
+			),
+	});
 
 	if (comparisonQuery.isLoading) {
 		return <LoadingSpinner title="Carregando aprovação..." />;
@@ -212,6 +235,7 @@ function RouteComponent() {
 				onNegotiate={setNegotiateTarget}
 				onChoose={(proposalId) => chooseMutation.mutate(proposalId)}
 				onRegisterSupplier={setRegisterTarget}
+				onCreateProposal={() => setIsManualProposalDialogOpen(true)}
 			/>
 			<SupplierModal
 				open={registerTarget !== null}
@@ -239,6 +263,12 @@ function RouteComponent() {
 					setRegisterTarget(null);
 					if (proposalId) chooseMutation.mutate(proposalId);
 				}}
+			/>
+			<ManualContractRequestProposalDialog
+				open={isManualProposalDialogOpen}
+				onOpenChange={setIsManualProposalDialogOpen}
+				onSubmit={(input) => manualProposalMutation.mutate(input)}
+				isSubmitting={manualProposalMutation.isPending}
 			/>
 			<NegotiateDialog
 				open={negotiateTarget !== null}

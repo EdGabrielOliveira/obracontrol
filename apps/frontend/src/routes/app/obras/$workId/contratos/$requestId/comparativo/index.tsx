@@ -4,9 +4,11 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
+	addManualContractRequestProposal,
 	getContractRequest,
 	getContractRequestComparison,
 	negotiateContractRequestProposal,
@@ -21,11 +23,15 @@ import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { ContractRequestComparisonView } from "@/components/organisms/contracts/contract-request-comparison";
+import { ManualContractRequestProposalDialog } from "@/components/organisms/contracts/manual-contract-request-proposal-dialog";
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { Button } from "@/components/ui/button";
 import { queryClient } from "@/lib/query-client";
 import { supplierImportDefaults } from "@/lib/supplier-import-defaults";
-import type { ContractRequestComparison } from "@/types/contract-requests";
+import type {
+	ContractRequestComparison,
+	ManualContractRequestProposalInput,
+} from "@/types/contract-requests";
 import { getErrorMessage } from "@/utils/api-error";
 import { createIdempotencyKey } from "@/utils/idempotency-key";
 
@@ -58,6 +64,8 @@ function ComparisonRouteComponent() {
 	const [registerTarget, setRegisterTarget] = useState<
 		ContractRequestComparison["proposals"][number] | null
 	>(null);
+	const [isManualProposalDialogOpen, setIsManualProposalDialogOpen] =
+		useState(false);
 
 	const {
 		data: comparison,
@@ -139,6 +147,21 @@ function ComparisonRouteComponent() {
 		onError: (error) =>
 			toast.error(getErrorMessage(error, "Erro ao negociar proposta.")),
 	});
+	const manualProposalMutation = useMutation({
+		mutationFn: (input: ManualContractRequestProposalInput) =>
+			addManualContractRequestProposal(workId, requestId, input),
+		onSuccess: () => {
+			toast.success("Participante adicionado ao comparativo.");
+			setIsManualProposalDialogOpen(false);
+			queryClient.invalidateQueries({
+				queryKey: contractRequestKeys.comparison(workId, requestId),
+			});
+		},
+		onError: (error) =>
+			toast.error(
+				getErrorMessage(error, "Não foi possível adicionar o participante."),
+			),
+	});
 
 	if (isLoading) return <LoadingSpinner title="Carregando comparativo..." />;
 	if (error || !comparison)
@@ -160,12 +183,28 @@ function ComparisonRouteComponent() {
 				eyebrow="Contratos"
 				title={comparison.request.title}
 				description="Compare as propostas com o orçamento e aceite o fornecedor vencedor."
+				actions={
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() =>
+							navigate({
+								to: "/app/obras/$workId/contratos",
+								params: { workId },
+							})
+						}
+					>
+						<ArrowLeft className="mr-2 h-4 w-4" />
+						Voltar para contratos
+					</Button>
+				}
 			/>
 			<ContractRequestComparisonView
 				comparison={comparison}
 				isAccepting={selectMutation.isPending}
 				onAccept={(proposalId) => selectMutation.mutate(proposalId)}
 				onRegisterSupplier={setRegisterTarget}
+				onCreateProposal={() => setIsManualProposalDialogOpen(true)}
 				isNegotiating={negotiateMutation.isPending}
 				onNegotiate={(proposalId, value, reason) =>
 					negotiateMutation.mutate({ proposalId, value, reason })
@@ -199,6 +238,12 @@ function ComparisonRouteComponent() {
 					setRegisterTarget(null);
 					if (proposalId) selectMutation.mutate(proposalId);
 				}}
+			/>
+			<ManualContractRequestProposalDialog
+				open={isManualProposalDialogOpen}
+				onOpenChange={setIsManualProposalDialogOpen}
+				onSubmit={(input) => manualProposalMutation.mutate(input)}
+				isSubmitting={manualProposalMutation.isPending}
 			/>
 		</PageContainer>
 	);

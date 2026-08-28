@@ -21,6 +21,12 @@ const proposalFindFirst = mock(
 const proposalFindMany = mock(
 	async (): Promise<Array<Record<string, unknown>>> => [],
 );
+const proposalCreate = mock(
+	async (args: { data: Record<string, unknown> }) => ({
+		id: "proposal-manual-1",
+		...args.data,
+	}),
+);
 const importRowFindMany = mock(
 	async (): Promise<Array<Record<string, unknown>>> => [],
 );
@@ -111,6 +117,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		contractRequestProposal: {
 			findFirst: proposalFindFirst,
 			findMany: proposalFindMany,
+			create: proposalCreate,
 		},
 		importRow: { findMany: importRowFindMany },
 		constructionSupplier: {
@@ -188,6 +195,7 @@ describe("contract request service", () => {
 		contractRequestFindFirst.mockResolvedValue(null);
 		proposalFindFirst.mockResolvedValue(null);
 		proposalFindMany.mockResolvedValue([]);
+		proposalCreate.mockResolvedValue({ id: "proposal-manual-1" });
 		importRowFindMany.mockResolvedValue([]);
 		supplierFindFirst.mockResolvedValue(null);
 		supplierFindMany.mockResolvedValue([]);
@@ -232,6 +240,70 @@ describe("contract request service", () => {
 			serviceType: "Execucao",
 			description: "Execucao da fundacao da torre A",
 		});
+	});
+
+	it("adds a manual participant to the confirmed quotation map", async () => {
+		const { addManualContractRequestProposal } = await import(
+			"../../../../src/modules/construction-planning/contract-request.service"
+		);
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			resourceOwnerId: "owner-1",
+		});
+		contractRequestFindFirst.mockResolvedValue({
+			id: "request-1",
+			status: "EM_ESPERA",
+			confirmedBatchId: "batch-1",
+		});
+		proposalFindMany.mockResolvedValue([{ rowNumber: 4 }]);
+
+		await addManualContractRequestProposal("user-1", "work-1", "request-1", {
+			supplierName: "Construtora Nova Ltda.",
+			cnpj: "11222333000181",
+			proposalValue: 42_500,
+			notes: "Proposta recebida após a cotação inicial",
+		});
+
+		expect(proposalCreate).toHaveBeenCalledWith({
+			data: expect.objectContaining({
+				ownerId: "owner-1",
+				workId: "work-1",
+				batchId: "batch-1",
+				normalizedCnpj: "11222333000181",
+				supplierName: "Construtora Nova Ltda.",
+				rowNumber: 5,
+			}),
+			select: expect.any(Object),
+		});
+	});
+
+	it("does not add a duplicated CNPJ to the comparison", async () => {
+		const { addManualContractRequestProposal } = await import(
+			"../../../../src/modules/construction-planning/contract-request.service"
+		);
+		resolveScopeMock.mockResolvedValue({
+			canRead: true,
+			canWrite: true,
+			resourceOwnerId: "owner-1",
+		});
+		contractRequestFindFirst.mockResolvedValue({
+			id: "request-1",
+			status: "EM_ESPERA",
+			confirmedBatchId: "batch-1",
+		});
+		proposalFindMany.mockResolvedValue([
+			{ normalizedCnpj: "11222333000181", rowNumber: 2 },
+		]);
+
+		await expect(
+			addManualContractRequestProposal("user-1", "work-1", "request-1", {
+				supplierName: "Construtora Repetida Ltda.",
+				cnpj: "11222333000181",
+				proposalValue: 42_500,
+			}),
+		).rejects.toMatchObject({ code: "DUPLICATE_PROPOSAL" });
+		expect(proposalCreate).not.toHaveBeenCalled();
 	});
 
 	it("rejects an item outside the active budget version", async () => {

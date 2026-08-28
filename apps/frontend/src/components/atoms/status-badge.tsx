@@ -22,6 +22,8 @@ export const WORK_STATUS_MAP: StatusMap = {
 export const CONTRACT_STATUS_MAP: StatusMap = {
 	PENDENTE: { label: "Pendente", tone: "warning" },
 	RECUSADO: { label: "Recusado", tone: "danger" },
+	EM_RECOTACAO: { label: "Em recotação", tone: "warning" },
+	EM_COTACAO: { label: "Em cotação", tone: "info" },
 	RASCUNHO: { label: "Rascunho", tone: "neutral" },
 	A_INICIAR: { label: "A iniciar", tone: "warning" },
 	EM_ANDAMENTO: { label: "Em andamento", tone: "info" },

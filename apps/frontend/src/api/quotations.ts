@@ -2,6 +2,7 @@ import type {
 	Quotation,
 	QuotationComparison,
 	QuotationNegotiateInput,
+	QuotationProposalInput,
 } from "@/types/quotations";
 import { api } from "./api";
 
@@ -15,12 +16,31 @@ export async function getQuotation(
 	return data;
 }
 
+export async function listQuotations(workId: string): Promise<Quotation[]> {
+	const { data } = await api.get<Quotation[]>(
+		`/construction/works/${workId}/quotations`,
+	);
+	return data;
+}
+
 export async function getQuotationComparison(
 	workId: string,
 	quotationId: string,
 ): Promise<QuotationComparison> {
 	const { data } = await api.get<QuotationComparison>(
 		`/construction/works/${workId}/quotations/${quotationId}/comparison`,
+	);
+	return data;
+}
+
+export async function addQuotationProposal(
+	workId: string,
+	quotationId: string,
+	input: QuotationProposalInput,
+): Promise<Quotation> {
+	const { data } = await api.post<Quotation>(
+		`/construction/works/${workId}/quotations/${quotationId}/proposals`,
+		input,
 	);
 	return data;
 }

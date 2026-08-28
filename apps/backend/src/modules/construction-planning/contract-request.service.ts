@@ -20,12 +20,38 @@ export type ContractRequestInput = {
 	items: Array<{ budgetItemId: string; quantity: number }>;
 };
 
+export type ManualContractRequestProposalInput = {
+	supplierName: string;
+	cnpj: string;
+	proposalValue: number;
+	notes?: string;
+};
+
 function parseRequiredDate(value: string, field: string): Date {
 	const date = new Date(value);
 	if (Number.isNaN(date.getTime())) {
 		throw new ConstructionError("INVALID_DATE", `${field} inválido`, 422);
 	}
 	return date;
+}
+
+const CNPJ_WEIGHT_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+const CNPJ_WEIGHT_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+
+function isValidCnpj(value: string): boolean {
+	if (value.length !== 14 || new Set(value).size === 1) return false;
+	const checkDigit = (base: string, weights: number[]) => {
+		const sum = weights.reduce(
+			(total, weight, index) => total + Number(base[index]) * weight,
+			0,
+		);
+		const rest = sum % 11;
+		return rest < 2 ? 0 : 11 - rest;
+	};
+	return (
+		checkDigit(value.slice(0, 12), CNPJ_WEIGHT_1) === Number(value[12]) &&
+		checkDigit(value.slice(0, 13), CNPJ_WEIGHT_2) === Number(value[13])
+	);
 }
 
 type QuotationMapRowValues = {
@@ -337,6 +363,123 @@ export async function negotiateContractRequestProposal(
 	};
 }
 
+/**
+ * Includes a late quotation in an already confirmed map without requiring a
+ * new spreadsheet import. The proposal remains attached to the same batch so
+ * it follows the exact comparison and approval flow as imported proposals.
+ */
+export async function addManualContractRequestProposal(
+	actorId: string,
+	workId: string,
+	requestId: string,
+	input: ManualContractRequestProposalInput,
+) {
+	const scope = await resolveResourceScope(actorId, { workId });
+	if (!scope.canWrite) {
+		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
+	}
+
+	const supplierName = input.supplierName.trim();
+	if (!supplierName || supplierName.length > 200) {
+		throw new ConstructionError(
+			"INVALID_SUPPLIER_NAME",
+			"Nome do fornecedor inválido",
+			422,
+		);
+	}
+	if (!/^\d{14}$/.test(input.cnpj)) {
+		throw new ConstructionError(
+			"INVALID_CNPJ",
+			"CNPJ deve conter exatamente 14 números",
+			422,
+		);
+	}
+	const normalizedCnpj = input.cnpj;
+	if (!isValidCnpj(normalizedCnpj)) {
+		throw new ConstructionError("INVALID_CNPJ", "CNPJ inválido", 422);
+	}
+	if (!Number.isFinite(input.proposalValue) || input.proposalValue <= 0) {
+		throw new ConstructionError(
+			"INVALID_PROPOSAL_VALUE",
+			"Valor da proposta inválido",
+			422,
+		);
+	}
+	const notes = input.notes?.trim() || null;
+	if (notes && notes.length > 2_000) {
+		throw new ConstructionError(
+			"INVALID_PROPOSAL_NOTES",
+			"Observações da proposta excedem o limite permitido",
+			422,
+		);
+	}
+
+	const request = await prisma.contractRequest.findFirst({
+		where: { id: requestId, ownerId: scope.resourceOwnerId, workId },
+		select: { id: true, status: true, confirmedBatchId: true },
+	});
+	if (!request) {
+		throw new ConstructionError("NOT_FOUND", "Solicitação não encontrada", 404);
+	}
+	if (!request.confirmedBatchId) {
+		throw new ConstructionError(
+			"QUOTATION_MAP_REQUIRED",
+			"Confirme o mapa de cotação antes de adicionar participantes",
+			409,
+		);
+	}
+	if (!["EM_ESPERA", "EM_NEGOCIACAO"].includes(request.status)) {
+		throw new ConstructionError(
+			"CONTRACT_REQUEST_CLOSED",
+			"Não é possível adicionar participantes nesta etapa da solicitação",
+			409,
+		);
+	}
+
+	const existingProposals = await prisma.contractRequestProposal.findMany({
+		where: {
+			ownerId: scope.resourceOwnerId,
+			workId,
+			batchId: request.confirmedBatchId,
+		},
+		select: { normalizedCnpj: true, rowNumber: true },
+	});
+	if (
+		existingProposals.some(
+			(proposal) => proposal.normalizedCnpj === normalizedCnpj,
+		)
+	) {
+		throw new ConstructionError(
+			"DUPLICATE_PROPOSAL",
+			"Já existe uma proposta deste CNPJ no comparativo",
+			409,
+		);
+	}
+
+	const rowNumber =
+		Math.max(0, ...existingProposals.map((proposal) => proposal.rowNumber)) + 1;
+	return prisma.contractRequestProposal.create({
+		data: {
+			ownerId: scope.resourceOwnerId,
+			workId,
+			batchId: request.confirmedBatchId,
+			normalizedCnpj,
+			supplierName,
+			originalProposalValue: new Decimal(input.proposalValue),
+			proposalValue: new Decimal(input.proposalValue),
+			notes,
+			rowNumber,
+		},
+		select: {
+			id: true,
+			normalizedCnpj: true,
+			supplierName: true,
+			proposalValue: true,
+			notes: true,
+		},
+	});
+}
+
 export async function selectContractRequestWinner(
 	actorId: string,
 	workId: string,
@@ -533,14 +676,16 @@ export async function cancelContractRequest(
 	if (!request) {
 		throw new ConstructionError("NOT_FOUND", "Solicitação não encontrada", 404);
 	}
-	if (request.status !== "EM_ESPERA" || request.confirmedBatchId) {
+	if (request.status !== "EM_ESPERA") {
 		return { cancelled: false, requestId };
 	}
 	await prisma.$transaction([
 		prisma.importBatch.updateMany({
 			where: {
 				contractRequestId: request.id,
-				status: { in: ["READY", "PENDING_CONFIRM", "PARSING"] },
+				status: {
+					in: ["READY", "PENDING_CONFIRM", "PARSING", "CONFIRMED"],
+				},
 			},
 			data: {
 				status: "CANCELLED",

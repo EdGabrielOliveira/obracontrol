@@ -17,13 +17,13 @@ export type PendingContractRow = {
 	title: string;
 	startDate: string | null;
 	endDate: string | null;
-	status: "PENDENTE" | "RECUSADO";
+	status: "PENDENTE" | "RECUSADO" | "EM_RECOTACAO" | "EM_COTACAO";
 	notes: null;
 	createdAt: string;
 	isPending: true;
 	requestId: string;
 	approvalRequestId?: string | null;
-	approvalKind?: "comparison" | "approval";
+	approvalKind?: "comparison" | "approval" | "quotation";
 	approvalStatus?: string | null;
 	approvalReason?: string | null;
 };
@@ -36,6 +36,7 @@ interface ContractTableProps {
 	contracts: ContractTableRow[];
 	workId: string;
 	onDelete?: (contractId: string) => void;
+	onDeletePending?: (contract: PendingContractRow) => void;
 	onEdit?: (contract: Contract) => void;
 	canChangeStatus?: boolean;
 	onOpenStatus?: (contract: Contract) => void;
@@ -43,7 +44,7 @@ interface ContractTableProps {
 	onRowClick?: (contract: ContractTableRow) => void;
 	onPendingClick?: (
 		requestId: string,
-		kind: "comparison" | "approval",
+		kind: "comparison" | "approval" | "quotation",
 	) => void;
 	searchValue?: string;
 	onSearchChange?: (value: string) => void;
@@ -55,6 +56,7 @@ export function ContractTable({
 	contracts,
 	workId,
 	onDelete,
+	onDeletePending,
 	onEdit,
 	canChangeStatus = false,
 	onOpenStatus,
@@ -121,7 +123,7 @@ export function ContractTable({
 						<StatusBadge status={info.getValue()} map={CONTRACT_STATUS_MAP} />
 						{row.isPending && row.approvalReason ? (
 							<span className="max-w-xs text-xs text-muted-foreground">
-								{row.approvalReason}
+								Motivo: {row.approvalReason}
 							</span>
 						) : null}
 					</div>
@@ -146,7 +148,32 @@ export function ContractTable({
 			header: () => <span className="sr-only">Ações</span>,
 			cell: (info) => {
 				const row = info.row.original;
-				if (row.isPending) return null;
+				if (row.isPending) {
+					const canDeleteQuotation =
+						onDeletePending &&
+						row.status === "EM_COTACAO" &&
+						row.approvalKind === "comparison";
+					if (!canDeleteQuotation) return null;
+					return (
+						<div
+							className="flex w-full items-center justify-end gap-1"
+							data-no-row-click
+						>
+							<Button
+								variant="ghost"
+								size="icon"
+								title="Excluir cotação"
+								aria-label="Excluir cotação"
+								onClick={(event) => {
+									event.stopPropagation();
+									onDeletePending(row);
+								}}
+							>
+								<Trash2 className="h-4 w-4 text-destructive" />
+							</Button>
+						</div>
+					);
+				}
 				return (
 					<div
 						className="flex w-full items-center justify-end gap-1"
