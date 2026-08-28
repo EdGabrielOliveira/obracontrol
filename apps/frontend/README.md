@@ -85,37 +85,6 @@ as rotas da API para o backend `obracontrol-api` na mesma rede. O backend usa
 SQLite em volume; não há origem Prisma ou banco externo configurado no
 frontend.
 
-## Acesso externo temporario com ngrok
-
-Use este fluxo somente para testes controlados. O Vite encaminha as chamadas da
-API ao backend local, portanto apenas a porta `7000` precisa de um tunel.
-
-1. Inicie o ngrok e copie a URL HTTPS exibida:
-
-```powershell
-ngrok http 7000
-```
-
-2. Em outro terminal, gere o build e sirva a versao compactada, autorizando
-   somente o hostname recebido:
-
-```powershell
-$env:__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS="SEU_HOST.ngrok-free.app"
-bun run build
-bun run serve
-```
-
-3. Reinicie o backend Docker com a origem publica confiavel:
-
-```powershell
-$env:FRONTEND_ORIGIN="https://SEU_HOST.ngrok-free.app"
-docker compose -f ..\obracontrol-backend\docker-compose.yml up -d --force-recreate --no-deps backend
-```
-
-Compartilhe apenas a URL HTTPS. Ao abrir pela primeira vez, o plano gratuito do
-ngrok pode mostrar uma tela de confirmacao antes de carregar a aplicacao. A URL
-deixa de funcionar quando o processo do ngrok e encerrado.
-
 ## Comandos
 
 ```bash

@@ -15,6 +15,7 @@ const usePolling =
 	process.env.VITE_USE_POLLING === "true" ||
 	process.env.CHOKIDAR_USEPOLLING === "true";
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "7000");
+const allowedHosts = ["obracontrol.engpac.com.br"];
 const apiProxy = {
 	"/api": {
 		target: backendTarget,
@@ -74,12 +75,12 @@ export default defineConfig({
 		hmr: {
 			clientPort: hmrClientPort,
 		},
-		allowedHosts: [".ngrok-free.app"],
+		allowedHosts,
 		proxy: apiProxy,
 	},
 	preview: {
 		host: true,
-		allowedHosts: [".ngrok-free.app"],
+		allowedHosts,
 		proxy: apiProxy,
 		strictPort: true,
 	},
