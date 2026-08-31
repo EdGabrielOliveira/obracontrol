@@ -64,6 +64,39 @@ const costs = [
 ];
 
 describe("projecoes EVM em calculateWorkMetrics", () => {
+	it("rateia BDI proporcionalmente no BAC, PV e EV", () => {
+		const metrics = calculateWorkMetrics(
+			{ ...work, bdiPercentage: 25 },
+			[
+				{ ...items[0], totalCost: 1000 },
+				{
+					...items[0],
+					id: "item-2",
+					index: "1.2",
+					totalCost: 1000,
+					sortOrder: 2,
+				},
+			],
+			[],
+			[
+				{ ...measurements[0], measuredPercentageAccumulated: 0.5 },
+				{
+					...measurements[0],
+					id: "m2",
+					budgetItemId: "item-2",
+					budgetItemIndex: "1.2",
+					measuredPercentageAccumulated: 0.25,
+				},
+			],
+			[],
+		);
+
+		expect(metrics.directBudget).toBe(2000);
+		expect(metrics.bdiValue).toBe(500);
+		expect(metrics.bac).toBe(2500);
+		expect(metrics.earnedValue).toBe(937.5);
+	});
+
 	it("calcula EAC tipico e atipico, ETC, VAC e TCPI com dados completos", () => {
 		const metrics = calculateWorkMetrics(
 			work,

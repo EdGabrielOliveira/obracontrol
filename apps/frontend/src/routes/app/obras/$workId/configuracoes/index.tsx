@@ -31,11 +31,12 @@ const settingsSearchSchema = z.object({
 export const Route = createFileRoute("/app/obras/$workId/configuracoes/")({
 	beforeLoad: requireManagementAccess,
 	validateSearch: settingsSearchSchema,
-	loader: async ({ params }) =>
-		await prefetchClient.prefetchQuery({
+	loader: ({ params }) => {
+		void prefetchClient.prefetchQuery({
 			queryKey: workKeys.detail(params.workId),
 			queryFn: () => getWork(params.workId),
-		}),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [

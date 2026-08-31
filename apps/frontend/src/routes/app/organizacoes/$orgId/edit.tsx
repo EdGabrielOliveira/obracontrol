@@ -28,11 +28,12 @@ import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/edit")({
 	beforeLoad: () => requireAuthorizationCapability("canManageStructure"),
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: organizationKeys.detail(params.orgId),
 			queryFn: () => getOrganization(params.orgId),
-		}),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [

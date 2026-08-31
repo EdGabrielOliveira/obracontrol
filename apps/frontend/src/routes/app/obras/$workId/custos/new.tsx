@@ -26,7 +26,8 @@ export const Route = createFileRoute("/app/obras/$workId/custos/new")({
 		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costBudgetItems(params.workId),
@@ -55,7 +56,8 @@ function RouteComponent() {
 	const [submitting, setSubmitting] = useState(false);
 	const budget = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const costBudget = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),

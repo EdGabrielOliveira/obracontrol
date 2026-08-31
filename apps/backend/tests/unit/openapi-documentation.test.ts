@@ -19,6 +19,14 @@ type OpenApiOperation = {
 };
 
 describe("OpenAPI documentation", () => {
+	it("expõe a duração da operação via Server-Timing", async () => {
+		const response = await createApp().handle(
+			new Request("http://localhost/openapi/json"),
+		);
+
+		expect(response.headers.get("server-timing")).toMatch(/^app;dur=\d+\.\d$/);
+	});
+
 	it("publishes a title and description for every operation", async () => {
 		const response = await createApp().handle(
 			new Request("http://localhost/openapi/json"),

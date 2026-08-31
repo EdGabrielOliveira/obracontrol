@@ -25,16 +25,18 @@ import { useBreadcrumb } from "@/lib/use-breadcrumb";
 export const Route = createFileRoute("/app/centros-de-custo/$ccId/multiobras/")(
 	{
 		beforeLoad: requireManagementAccess,
-		loader: async ({ params }) => {
-			const cc = await queryClient.fetchQuery({
-				queryKey: costCenterKeys.globalDetail(params.ccId),
-				queryFn: () => getCostCenterById(params.ccId),
-			});
-			const orgId = cc?.organization?.id ?? "";
-			await queryClient.prefetchQuery({
-				queryKey: biKeys.costCenterOverview(orgId, params.ccId),
-				queryFn: () => getCostCenterBI(orgId, params.ccId),
-			});
+		loader: ({ params }) => {
+			void (async () => {
+				const cc = await queryClient.fetchQuery({
+					queryKey: costCenterKeys.globalDetail(params.ccId),
+					queryFn: () => getCostCenterById(params.ccId),
+				});
+				const orgId = cc?.organization?.id ?? "";
+				await queryClient.prefetchQuery({
+					queryKey: biKeys.costCenterOverview(orgId, params.ccId),
+					queryFn: () => getCostCenterBI(orgId, params.ccId),
+				});
+			})().catch(() => undefined);
 		},
 		component: RouteComponent,
 		head: () => ({

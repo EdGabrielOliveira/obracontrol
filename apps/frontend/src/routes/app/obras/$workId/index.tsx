@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { canDecideSupervisorRequests } from "@/lib/role-permissions";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import { WorkDetailHeader } from "@/organisms/works/work-detail-header";
 import { WorkHub } from "@/organisms/works/work-hub";
 import { workHubSearchSchema } from "@/schemas/work-hub";
@@ -161,9 +162,7 @@ function RouteComponent() {
 		}) => decideApproval(input),
 		onSuccess: () => {
 			toast.success("Decisão registrada.");
-			queryClient.invalidateQueries({
-				queryKey: governanceKeys.pendingApprovals(workId),
-			});
+			invalidateWorkMeasurementQueries(queryClient, workId);
 			queryClient.invalidateQueries({
 				queryKey: workKeys.budget(workId),
 			});

@@ -49,6 +49,7 @@ export async function getDashboardSummary(ownerId: string) {
 			name: work.name,
 			costCenterId: work.costCenterId,
 			clientName: work.clientName,
+			bdiPercentage: work.bdiPercentage,
 			plannedStart: work.plannedStart,
 			plannedEnd: work.plannedEnd,
 			baseDate: work.baseDate,

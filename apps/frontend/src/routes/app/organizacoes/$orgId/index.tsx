@@ -26,8 +26,8 @@ const orgCostCentersSearchSchema = paginationSchema;
 export const Route = createFileRoute("/app/organizacoes/$orgId/")({
 	validateSearch: orgCostCentersSearchSchema,
 	loaderDeps: ({ search }) => ({ search }),
-	loader: async ({ params, deps }) => {
-		await Promise.all([
+	loader: ({ params, deps }) => {
+		void Promise.all([
 			prefetchClient.prefetchQuery({
 				queryKey: organizationKeys.detail(params.orgId),
 				queryFn: () => getOrganization(params.orgId),
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/")({
 				queryKey: costCenterKeys.list(params.orgId, deps.search),
 				queryFn: () => listCostCenters(params.orgId, deps.search),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

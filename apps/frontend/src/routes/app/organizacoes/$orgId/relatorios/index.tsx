@@ -24,11 +24,12 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/relatorios/")({
 			{ title: "Relatório da Organização - ObraControl" },
 		],
 	}),
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: organizationKeys.report(params.orgId),
 			queryFn: () => getOrgReport(params.orgId),
-		}),
+		}).catch(() => undefined);
+	},
 });
 
 function RouteComponent() {

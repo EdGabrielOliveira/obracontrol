@@ -1564,6 +1564,28 @@ describe("work measurement repository creator names", () => {
 	});
 });
 
+describe("work measurement BI source", () => {
+	it("consulta somente medições aceitas para os indicadores oficiais", async () => {
+		measurementFindMany.mockClear();
+		const { getWorkMeasurementsForBI } = await import(
+			"../../../../src/modules/construction-planning/work-measurement.repository"
+		);
+
+		await getWorkMeasurementsForBI("owner-1", "work-1");
+
+		expect(measurementFindMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					ownerId: "owner-1",
+					workId: "work-1",
+					status: "ACEITO",
+					archivedAt: null,
+				},
+			}),
+		);
+	});
+});
+
 describe("work measurement map without contracts", () => {
 	it("map nao consulta contratos nem expoe resumo de contratos", async () => {
 		contractFindMany.mockClear();

@@ -44,8 +44,16 @@ function addressResponse(
 import { getAccessibleWorkIds } from "../../../lib/scope-access";
 import { computeWorkSummary } from "../bi/work-summary";
 import type { ConstructionWorksFilter } from "../schema";
+import {
+	getWorkMeasurementsForBI,
+	getWorkMeasurementsForManyWorks,
+} from "../work-measurement.repository";
 
 export const MULTIWORKS_CAP = 1000;
+
+type ManualWorkMeasurement = Awaited<
+	ReturnType<typeof getWorkMeasurementsForBI>
+>[number];
 
 export type ActiveImportChildren = {
 	items: Prisma.ConstructionBudgetItemGetPayload<null>[];
@@ -53,6 +61,12 @@ export type ActiveImportChildren = {
 	scheduleRevisions: Prisma.ConstructionScheduleRevisionGetPayload<null>[];
 	measurements: Prisma.ConstructionMeasurementGetPayload<null>[];
 	actualCosts: Prisma.ConstructionActualCostGetPayload<null>[];
+	manualMeasurements?: ManualWorkMeasurement[];
+};
+
+export type WorkReadOptions = {
+	/** Evita carregar dados operacionais quando a tela só precisa do orçamento. */
+	includeOperationalChildren?: boolean;
 };
 
 const workListInclude = {
@@ -136,6 +150,7 @@ export function buildWorkSummaries(
 			costCenterId: w.costCenterId,
 			clientName: w.clientName,
 			operationalStatus: w.operationalStatus,
+			bdiPercentage: w.bdiPercentage,
 			plannedStart: w.plannedStart,
 			plannedEnd: w.plannedEnd,
 			baseDate: w.baseDate,
@@ -273,7 +288,26 @@ async function getActiveImportChildren(
 		scheduleRevisions,
 		measurements,
 		actualCosts,
+		manualMeasurements: await getWorkMeasurementsForBI(ownerId, workId),
 	};
+}
+
+async function getActiveBudgetItems(
+	ownerId: string,
+	workId: string,
+	activeImportId: string | null,
+) {
+	const resolvedImportId = await resolveActiveImportId(
+		ownerId,
+		workId,
+		activeImportId,
+	);
+	if (!resolvedImportId) return [];
+
+	return prisma.constructionBudgetItem.findMany({
+		where: { ownerId, workId, importId: resolvedImportId },
+		orderBy: { sortOrder: "asc" },
+	});
 }
 
 async function getBatchActiveImportChildren(
@@ -323,6 +357,7 @@ async function getBatchActiveImportChildren(
 		scheduleRevisions,
 		measurements,
 		actualCosts,
+		manualMeasurementsByWork,
 	] = await Promise.all([
 		activeWhereConditions.length > 0
 			? prisma.constructionBudgetItem.findMany({
@@ -353,6 +388,10 @@ async function getBatchActiveImportChildren(
 			orderBy: { costDate: "asc" },
 			include: { allocations: true },
 		}),
+		getWorkMeasurementsForManyWorks(
+			ownerId,
+			workIds.map(({ workId }) => workId),
+		),
 	]);
 
 	const groupByWork = <T extends { workId: string }>(arr: T[]) => {
@@ -380,6 +419,7 @@ async function getBatchActiveImportChildren(
 			scheduleRevisions: revisionsByWork.get(workId) ?? [],
 			measurements: measurementsByWork.get(workId) ?? [],
 			actualCosts: costsByWork.get(workId) ?? [],
+			manualMeasurements: manualMeasurementsByWork.get(workId) ?? [],
 		});
 	}
 
@@ -483,6 +523,7 @@ async function mergeWorksWithChildren<
 		scheduleRevisions: [] as ActiveImportChildren["scheduleRevisions"],
 		measurements: [] as ActiveImportChildren["measurements"],
 		actualCosts: [] as ActiveImportChildren["actualCosts"],
+		manualMeasurements: [] as ActiveImportChildren["manualMeasurements"],
 	};
 	return works.map((work) => ({
 		...work,
@@ -569,6 +610,7 @@ export async function listWorks(
 					scheduleRevisions: work.scheduleRevisions,
 					measurements: work.measurements,
 					actualCosts: work.actualCosts,
+					manualMeasurements: work.manualMeasurements,
 				},
 			]),
 		);
@@ -597,6 +639,7 @@ export async function listWorks(
 				scheduleRevisions: work.scheduleRevisions,
 				measurements: work.measurements,
 				actualCosts: work.actualCosts,
+				manualMeasurements: work.manualMeasurements,
 			},
 		]),
 	);
@@ -697,6 +740,7 @@ export async function getWorkById(
 	ownerId: string,
 	workId: string,
 	workspaceId?: string | null,
+	options?: WorkReadOptions,
 ) {
 	if (workspaceId) {
 		const scopedWork = await prisma.constructionWork.findFirst({
@@ -708,10 +752,7 @@ export async function getWorkById(
 					{
 						workspaceId: null,
 						costCenter: {
-							OR: [
-								{ workspaceId },
-								{ organization: { workspaceId } },
-							],
+							OR: [{ workspaceId }, { organization: { workspaceId } }],
 						},
 					},
 				],
@@ -753,11 +794,25 @@ export async function getWorkById(
 
 	if (!work) return null;
 
-	const children = await getActiveImportChildren(
-		work.ownerId,
-		work.id,
-		work.activeImportId,
-	);
+	const children =
+		options?.includeOperationalChildren === false
+			? {
+					items: await getActiveBudgetItems(
+						work.ownerId,
+						work.id,
+						work.activeImportId,
+					),
+					baselineSchedules: [],
+					scheduleRevisions: [],
+					measurements: [],
+					actualCosts: [],
+					manualMeasurements: [],
+				}
+			: await getActiveImportChildren(
+					work.ownerId,
+					work.id,
+					work.activeImportId,
+				);
 
 	const summary = computeWorkSummary({
 		id: work.id,
@@ -766,6 +821,7 @@ export async function getWorkById(
 		costCenterId: work.costCenterId,
 		clientName: work.clientName,
 		operationalStatus: work.operationalStatus,
+		bdiPercentage: work.bdiPercentage,
 		plannedStart: work.plannedStart,
 		plannedEnd: work.plannedEnd,
 		baseDate: work.baseDate,
@@ -807,7 +863,8 @@ export async function updateWork(
 		structuredAddress?: StructuredAddressInput | null;
 	},
 ) {
-	const workspaceId = data.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
+	const workspaceId =
+		data.workspaceId ?? (await getWorkspaceIdForUser(ownerId));
 	const { workspaceId: _scopeWorkspaceId, ...updateInput } = data;
 	const workScope = workspaceId
 		? { OR: [{ ownerId }, { workspaceId }] }

@@ -15,11 +15,12 @@ import { queryClient } from "@/lib/query-client";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/obras/$workId/cronograma")({
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: workKeys.schedule(params.workId),
 			queryFn: () => getSchedule(params.workId),
-		}),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [

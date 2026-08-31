@@ -22,11 +22,13 @@ import type { UpdateBudgetItemInput } from "@/types/budget";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/obras/$workId/orcamento/editar")({
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: workKeys.budget(params.workId),
-			queryFn: () => getBudgetItems(params.workId),
-		}),
+			queryFn: () =>
+				getBudgetItems(params.workId, { includePhysicalFinancial: false }),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [
@@ -46,7 +48,8 @@ function RouteComponent() {
 
 	const { data, isLoading, error, refetch } = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 
 	const items = useMemo(

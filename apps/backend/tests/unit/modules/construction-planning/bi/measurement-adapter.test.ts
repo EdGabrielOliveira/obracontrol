@@ -41,7 +41,7 @@ describe("workMeasurementsToMetricInputs", () => {
 		expect(input.measuredValueAccumulated).toBeNull();
 	});
 
-	it("passes accumulatedPercentage through raw (choke normalizes later)", () => {
+	it("normalizes accumulatedPercentage to the internal ratio", () => {
 		const [input] = workMeasurementsToMetricInputs([
 			{
 				date: new Date("2026-01-15T00:00:00.000Z"),
@@ -49,7 +49,7 @@ describe("workMeasurementsToMetricInputs", () => {
 			},
 		]);
 
-		expect(input.measuredPercentageAccumulated).toBe(50);
+		expect(input.measuredPercentageAccumulated).toBe(0.5);
 	});
 
 	it("keeps fractional accumulatedPercentage unchanged", () => {
@@ -89,7 +89,7 @@ describe("workMeasurementsToMetricInputs", () => {
 		]);
 
 		expect(input.measuredQuantityAccumulated).toBe(7.5);
-		expect(input.measuredPercentageAccumulated).toBe(75);
+		expect(input.measuredPercentageAccumulated).toBe(0.75);
 	});
 
 	it("flattens items from multiple measurements preserving date and budgetItemId", () => {

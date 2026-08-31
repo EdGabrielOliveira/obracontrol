@@ -4,6 +4,7 @@ import {
 	toWorkWithMetricsInput,
 	type WorkForBIInput,
 } from "../../../../../src/modules/construction-planning/bi/calculations";
+import { workMeasurementsToMetricInputs } from "../../../../../src/modules/construction-planning/bi/measurement-adapter";
 import { computeWorkSummary } from "../../../../../src/modules/construction-planning/bi/work-summary";
 import { buildScheduleFromDbItems } from "../../../../../src/modules/construction-planning/schedule/schedule-builder";
 
@@ -97,6 +98,39 @@ describe("percentage normalization chain", () => {
 		expect(result.work.measuredPercentage).toBe(0.5);
 	});
 
+	it("projects accepted work measurement progress into the Gantt item", () => {
+		const result = buildScheduleFromDbItems(
+			{
+				id: "work-1",
+				code: "OBRA-001",
+				name: "Obra",
+				clientName: null,
+				plannedStart: null,
+				plannedEnd: null,
+				baseDate: new Date("2026-01-31T00:00:00.000Z"),
+				createdAt: new Date("2026-01-01T00:00:00.000Z"),
+				lastImportAt: null,
+			},
+			{
+				items: workForBI([]).items,
+				measurements: workMeasurementsToMetricInputs([
+					{
+						date: new Date("2026-01-15T00:00:00.000Z"),
+						items: [
+							{
+								budgetItemId: "item-1",
+								accumulatedValue: 50,
+								accumulatedPercentage: 0.5,
+							},
+						],
+					},
+				]),
+			},
+		);
+
+		expect(result.gantt[0]?.measuredPercentage).toBe(0.5);
+	});
+
 	it("keeps raw 0..100 measurement rows canonical through the work summary path", () => {
 		const summary = computeWorkSummary({
 			id: "work-1",
@@ -118,5 +152,41 @@ describe("percentage normalization chain", () => {
 
 		expect(summary.earnedValue).toBe(50);
 		expect(summary.measuredPercentage).toBe(0.5);
+	});
+
+	it("includes accepted work measurements in the work summary path", () => {
+		const summary = computeWorkSummary({
+			id: "work-1",
+			code: "OBRA-001",
+			name: "Obra",
+			clientName: null,
+			plannedStart: null,
+			plannedEnd: null,
+			baseDate: new Date("2026-01-15T00:00:00.000Z"),
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			lastImportAt: new Date("2026-01-02T00:00:00.000Z"),
+			activeChildren: {
+				items: workForBI([]).items,
+				baselineSchedules: [],
+				measurements: [],
+				actualCosts: [],
+				manualMeasurements: [
+					{
+						date: new Date("2026-01-15T00:00:00.000Z"),
+						items: [
+							{
+								budgetItemId: "item-1",
+								accumulatedValue: 50,
+								accumulatedPercentage: 0.5,
+							},
+						],
+					},
+				],
+			},
+		});
+
+		expect(summary.earnedValue).toBe(50);
+		expect(summary.measuredPercentage).toBe(0.5);
+		expect(summary.dataCompleteness?.hasMeasurements).toBe(true);
 	});
 });

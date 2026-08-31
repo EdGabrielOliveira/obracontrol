@@ -5,17 +5,17 @@ import type * as constructionRepository from "../repository";
 import type { ConstructionBIWorksFilter } from "../schema";
 import type { WorkBIResponse } from "../types";
 import type * as wmRepository from "../work-measurement.repository";
-import {
-	buildWorkSummary,
-	calculateMetrics,
-	toWorkWithMetricsInput,
-} from "./calculations";
+import { buildWorkSummary } from "./calculations";
 import type { ResolvedMetricSource } from "./metric-source";
 import {
 	type MetricSourceResolver,
 	metricSourceResolver,
 } from "./metric-source-resolver";
 import { buildMultiworksAggregate } from "./multiworks-aggregator";
+import {
+	buildWorkMetricsSnapshot,
+	type ManualWorkMeasurementInput,
+} from "./work-metrics-snapshot";
 import { buildWorkBIFromResolved } from "./work-bi-builder";
 
 type ConstructionBIRepository = Pick<
@@ -77,11 +77,20 @@ export class ConstructionBIService {
 			ownerId,
 			workIds,
 		);
+		const manualMeasurementsByWork =
+			await this.repository.getWorkMeasurementsForManyWorks(
+				ownerId,
+				works.map((work) => work.id),
+			);
 
 		const results = works.map((w) => {
-			const biInput = toWorkWithMetricsInput(w);
-			const metricsResult = calculateMetrics(biInput, biInput);
-			const summary = buildWorkSummary(biInput, metricsResult);
+			const manualMeasurements = (manualMeasurementsByWork.get(w.id) ??
+				[]) as ManualWorkMeasurementInput[];
+			const snapshot = buildWorkMetricsSnapshot({
+				work: w,
+				manualMeasurements,
+			});
+			const summary = buildWorkSummary(snapshot.input, snapshot.metrics);
 			return {
 				workId: w.id,
 				code: summary.code,

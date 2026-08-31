@@ -1228,6 +1228,34 @@ describe("construction service read DTOs", () => {
 		});
 	});
 
+	it("includes accepted manual measurements in schedule gantt progress", async () => {
+		spyOn(repository, "getWorkWithItems").mockResolvedValue({
+			...makeStoredUnifiedWork(),
+			measurements: [],
+			manualMeasurements: [
+				{
+					date: new Date("2026-01-15T00:00:00.000Z"),
+					items: [
+						{
+							budgetItemId: "item-1",
+							measuredValue: 275,
+							accumulatedValue: 275,
+							accumulatedPercentage: 0.5,
+							accumulatedQuantity: 5,
+						},
+					],
+				},
+			],
+		} as never);
+
+		const result = await getSchedule("owner-1", "work-1");
+
+		expect(result.gantt[0]).toMatchObject({
+			itemId: "item-1",
+			measuredPercentage: 0.5,
+		});
+	});
+
 	it("filters multiworks status using calculated measurement metrics", async () => {
 		spyOn(repository, "getAllWorksWithItems").mockResolvedValue([
 			makeStoredUnifiedWork(),
@@ -1386,6 +1414,87 @@ describe("construction works and manual entries services", () => {
 			code: "NOT_FOUND",
 			status: 404,
 		});
+	});
+
+	it("allows a work status to change directly between operational states", async () => {
+		const repository = {
+			getWorkById: mock(async () => ({
+				id: "work-1",
+				operationalStatus: "DRAFT",
+			})),
+			updateWork: mock(async () => ({
+				id: "work-1",
+				operationalStatus: "DONE",
+			})),
+		};
+		const { ConstructionWorkService } = await import(
+			"../../../../src/modules/construction-planning/works/work-service"
+		);
+		const service = new ConstructionWorkService(repository as never);
+
+		await expect(
+			service.update(
+				"owner-1",
+				"work-1",
+				{ operationalStatus: "DONE" },
+				{ userId: "user-1", role: "GESTOR" },
+			),
+		).resolves.toMatchObject({ operationalStatus: "DONE" });
+		expect(repository.updateWork).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			expect.objectContaining({
+				operationalStatus: "DONE",
+				expectedOperationalStatus: "DRAFT",
+			}),
+		);
+	});
+
+	it("still requires a reason when suspending or archiving a work", async () => {
+		const repository = {
+			getWorkById: mock(async () => ({
+				id: "work-1",
+				operationalStatus: "DRAFT",
+			})),
+			updateWork: mock(async () => ({ id: "work-1" })),
+		};
+		const { ConstructionWorkService } = await import(
+			"../../../../src/modules/construction-planning/works/work-service"
+		);
+		const service = new ConstructionWorkService(repository as never);
+
+		await expect(
+			service.update(
+				"owner-1",
+				"work-1",
+				{ operationalStatus: "SUSPENDED" },
+				{ userId: "user-1", role: "GESTOR" },
+			),
+		).rejects.toMatchObject({ code: "STATUS_REASON_REQUIRED" });
+	});
+
+	it("rejects an invalid operational status without applying the update", async () => {
+		const repository = {
+			getWorkById: mock(async () => ({
+				id: "work-1",
+				operationalStatus: "DRAFT",
+			})),
+			updateWork: mock(async () => ({ id: "work-1" })),
+		};
+		const { ConstructionWorkService } = await import(
+			"../../../../src/modules/construction-planning/works/work-service"
+		);
+		const service = new ConstructionWorkService(repository as never);
+
+		await expect(
+			service.update(
+				"owner-1",
+				"work-1",
+				{ operationalStatus: "UNKNOWN" },
+				{ userId: "user-1", role: "GESTOR" },
+			),
+		).rejects.toMatchObject({ code: "INVALID_STATUS_TRANSITION" });
+		expect(repository.updateWork).not.toHaveBeenCalled();
 	});
 
 	it("returns successful work deletes instead of treating them as not found", async () => {

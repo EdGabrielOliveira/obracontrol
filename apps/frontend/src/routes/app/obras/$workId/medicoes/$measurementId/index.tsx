@@ -32,6 +32,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth-context";
 import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import type { MeasurementLifecycleStatus } from "@/types/measurements";
 import { getErrorMessage } from "@/utils/api-error";
 import { formatCurrency, formatDate } from "@/utils/format";
@@ -39,11 +40,11 @@ import { formatCurrency, formatDate } from "@/utils/format";
 export const Route = createFileRoute(
 	"/app/obras/$workId/medicoes/$measurementId/",
 )({
-	loader: async ({ params }) => {
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: workKeys.measurementDetail(params.workId, params.measurementId),
 			queryFn: () => getWorkMeasurement(params.workId, params.measurementId),
-		});
+		}).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({
@@ -90,13 +91,7 @@ function RouteComponent() {
 		onSuccess: () => {
 			toast.success("Status da medição atualizado.");
 			setStatusOpen(false);
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementDetail(workId, measurementId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementsBase(workId),
-			});
-			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
+			invalidateWorkMeasurementQueries(queryClient, workId);
 		},
 		onError: (error) =>
 			toast.error(getErrorMessage(error, "Não foi possível alterar o status.")),

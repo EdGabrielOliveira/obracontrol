@@ -39,7 +39,6 @@ import {
 	downloadScheduleTemplate,
 	TEMPLATE_FILENAMES,
 } from "@/api/templates";
-import { getWork } from "@/api/works";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
@@ -84,17 +83,18 @@ export const Route = createFileRoute("/app/obras/$workId/orcamento/")({
 			{ title: "Orçamento - ObraControl" },
 		],
 	}),
-	loader: async ({ params }) => {
-		await Promise.all([
+	loader: ({ params }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budgetVersion(params.workId),
 				queryFn: () => getEffectiveBudgetVersion(params.workId),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 });
 
@@ -131,7 +131,8 @@ function RouteComponent() {
 
 	const { data, isLoading, error, refetch } = useQuery<BudgetViewResponse>({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 		staleTime: 2 * 60 * 1000,
 	});
 
@@ -225,19 +226,10 @@ function RouteComponent() {
 		staleTime: 2 * 60 * 1000,
 	});
 
-	const { data: workDetail } = useQuery({
-		queryKey: workKeys.detail(workId),
-		queryFn: () => getWork(workId),
-		staleTime: 5 * 60 * 1000,
-	});
-
 	const budgetData = data ?? null;
 	const summary = budgetData?.summary ?? emptySummary;
 	const hasItems = (budgetData?.items?.length ?? 0) > 0;
-	const effectiveTotalBudgeted =
-		summary.totalBudgeted > 0
-			? summary.totalBudgeted
-			: (workDetail?.activeBudget ?? 0);
+	const effectiveTotalBudgeted = summary.totalBudgeted;
 
 	const createRevisionMutation = useMutation({
 		mutationFn: (values: Parameters<typeof createScheduleRevision>[1]) =>

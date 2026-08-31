@@ -28,6 +28,9 @@ export type MacroQualityIssue = {
 export type WorkBISummary = {
 	dataDate: string;
 	activeBudget: number;
+	directBudget?: number;
+	bdiPercentage?: number;
+	bdiValue?: number;
 	ignoredBudget: number;
 	suspendedBudget: number;
 	plannedValue: number;

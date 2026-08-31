@@ -4,11 +4,12 @@ import {
 	type WorkForBIInput,
 	type WorkMetricCalculationResult,
 } from "./calculations";
-import { workMeasurementsToMetricInputs } from "./measurement-adapter";
+import {
+	type ManualWorkMeasurementInput as AdapterManualWorkMeasurementInput,
+	composeMeasurementInputs,
+} from "./measurement-adapter";
 
-export type ManualWorkMeasurementInput = Parameters<
-	typeof workMeasurementsToMetricInputs
->[0][number];
+export type ManualWorkMeasurementInput = AdapterManualWorkMeasurementInput;
 
 export type WorkMetricsSnapshot = {
 	input: ReturnType<typeof toWorkWithMetricsInput>;
@@ -106,10 +107,10 @@ export function buildWorkMetricsSnapshot(input: {
 	const manualMeasurements = input.manualMeasurements ?? [];
 	const metricInput = toWorkWithMetricsInput({
 		...input.work,
-		measurements: [
-			...input.work.measurements,
-			...workMeasurementsToMetricInputs(manualMeasurements),
-		],
+		measurements: composeMeasurementInputs(
+			input.work.measurements,
+			manualMeasurements,
+		),
 	});
 
 	return {

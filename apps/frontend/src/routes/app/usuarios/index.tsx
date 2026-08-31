@@ -49,11 +49,12 @@ export const Route = createFileRoute("/app/usuarios/")({
 	validateSearch: usuariosFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
 	component: RouteComponent,
-	loader: async ({ deps }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ deps }) => {
+		void queryClient.prefetchQuery({
 			queryKey: adminUserKeys.list(deps.search as Record<string, unknown>),
 			queryFn: () => listAdminUsers(deps.search as AdminUserFilter),
-		}),
+		}).catch(() => undefined);
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },

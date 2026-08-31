@@ -241,6 +241,7 @@ export const adminUserKeys = {
 export const biKeys = {
 	all: ["bi"] as const,
 	multiworksAll: ["bi-multiworks"] as const,
+	compareAll: ["bi-compare"] as const,
 	overview: (orgId: string, filters?: Record<string, unknown>) =>
 		["bi", orgId, filters] as const,
 	costCenterOverview: (

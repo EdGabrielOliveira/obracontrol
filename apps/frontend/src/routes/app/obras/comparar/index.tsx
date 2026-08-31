@@ -34,11 +34,11 @@ const compareSearchSchema = z.object({
 export const Route = createFileRoute("/app/obras/comparar/")({
 	beforeLoad: requireManagementAccess,
 	validateSearch: compareSearchSchema,
-	loader: async () => {
-		await queryClient.prefetchQuery({
+	loader: () => {
+		void queryClient.prefetchQuery({
 			queryKey: workKeys.list({ limit: 1000 }),
 			queryFn: () => listWorks({ limit: 1000 }),
-		});
+		}).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

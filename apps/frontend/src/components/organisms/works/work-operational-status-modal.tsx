@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { updateWork } from "@/api/works";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	optionsForStatus,
-	WORK_OPERATIONAL_STATUS_TRANSITIONS,
-} from "@/lib/status-transitions";
 import type { ConstructionItemStatus } from "@/types/shared";
 import { getErrorMessage } from "@/utils/api-error";
 
@@ -49,15 +45,6 @@ export function WorkOperationalStatusModal({
 		setStatus(currentStatus ?? "NOT_STARTED");
 		setReason("");
 	}, [currentStatus, open]);
-	const availableOptions = useMemo(
-		() =>
-			optionsForStatus(
-				options,
-				currentStatus ?? "NOT_STARTED",
-				WORK_OPERATIONAL_STATUS_TRANSITIONS,
-			),
-		[currentStatus],
-	);
 
 	const mutation = useMutation({
 		mutationFn: () =>
@@ -93,7 +80,7 @@ export function WorkOperationalStatusModal({
 							setStatus(event.target.value as ConstructionItemStatus)
 						}
 					>
-						{availableOptions.map((option) => (
+						{options.map((option) => (
 							<option key={option.value} value={option.value}>
 								{option.label}
 							</option>

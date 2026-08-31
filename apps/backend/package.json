@@ -18,7 +18,7 @@
 		"db:test:setup": "bun tests/scripts/database/create-test-db.ts && bun tests/scripts/database/migrate-test-db.ts",
 		"test:e2e-db": "bun run db:test:setup && bun tests/scripts/database/run-e2e-db-tests.ts",
 		"db:generate": "bun prisma generate",
-		"db:setup:local": "bun prisma db push --skip-generate",
+		"db:setup:local": "bun prisma db push --skip-generate && bun prisma/scripts/normalize-imported-measurement-statuses.ts",
 		"db:migrate:dev": "bun prisma db push --skip-generate",
 		"db:push": "bun prisma db push --skip-generate",
 		"db:studio": "bunx prisma studio",
@@ -31,6 +31,7 @@
 		"budget:identity:backfill": "bun prisma/scripts/backfill-budget-item-identities.ts",
 		"budget:reconcile": "bun prisma/scripts/reconcile-budget-versions.ts",
 		"budget:repair-baselines": "bun prisma/scripts/repair-missing-budget-baselines.ts",
+		"execution-facts:audit": "bun prisma/scripts/audit-execution-facts.ts",
 		"db:reset": "bun scripts/reset-db.ts"
 	},
 	"dependencies": {

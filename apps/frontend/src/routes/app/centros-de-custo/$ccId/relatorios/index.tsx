@@ -40,16 +40,18 @@ export const Route = createFileRoute("/app/centros-de-custo/$ccId/relatorios/")(
 				{ title: "Relatório do Centro de Custo - ObraControl" },
 			],
 		}),
-		loader: async ({ params }) => {
-			const cc = await queryClient.fetchQuery({
-				queryKey: costCenterKeys.globalDetail(params.ccId),
-				queryFn: () => getCostCenterById(params.ccId),
-			});
-			const orgId = cc?.organization?.id ?? "";
-			await queryClient.prefetchQuery({
-				queryKey: costCenterKeys.orgScopedReport(orgId, params.ccId),
-				queryFn: () => getOrgCostCenterReport(orgId, params.ccId),
-			});
+		loader: ({ params }) => {
+			void (async () => {
+				const cc = await queryClient.fetchQuery({
+					queryKey: costCenterKeys.globalDetail(params.ccId),
+					queryFn: () => getCostCenterById(params.ccId),
+				});
+				const orgId = cc?.organization?.id ?? "";
+				await queryClient.prefetchQuery({
+					queryKey: costCenterKeys.orgScopedReport(orgId, params.ccId),
+					queryFn: () => getOrgCostCenterReport(orgId, params.ccId),
+				});
+			})().catch(() => undefined);
 		},
 	},
 );

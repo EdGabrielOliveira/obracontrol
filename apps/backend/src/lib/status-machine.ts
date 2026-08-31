@@ -48,14 +48,24 @@ export const CONTRACT_TRANSITIONS: Record<string, string[]> = {
 	],
 };
 
-export const WORK_OPERATIONAL_TRANSITIONS: Record<string, string[]> = {
-	DRAFT: ["NOT_STARTED", "IGNORED"],
-	NOT_STARTED: ["IN_PROGRESS", "SUSPENDED", "IGNORED"],
-	IN_PROGRESS: ["SUSPENDED", "DONE", "IGNORED"],
-	SUSPENDED: ["IN_PROGRESS", "DONE", "IGNORED"],
-	DONE: ["IGNORED"],
-	IGNORED: ["NOT_STARTED", "IN_PROGRESS"],
-};
+// Obra pode ser corrigida diretamente para qualquer status operacional.
+// A exigência de motivo para SUSPENDED/IGNORED permanece no serviço.
+const ALL_WORK_OPERATIONAL_STATUSES = [
+	"DRAFT",
+	"NOT_STARTED",
+	"IN_PROGRESS",
+	"DONE",
+	"SUSPENDED",
+	"IGNORED",
+] as const;
+
+export const WORK_OPERATIONAL_TRANSITIONS: Record<string, string[]> =
+	Object.fromEntries(
+		ALL_WORK_OPERATIONAL_STATUSES.map((status) => [
+			status,
+			[...ALL_WORK_OPERATIONAL_STATUSES],
+		]),
+	);
 
 export const MEASUREMENT_TRANSITIONS: Record<string, string[]> = {
 	RASCUNHO: ["ACEITO", "RECUSADO", "ARQUIVADO"],

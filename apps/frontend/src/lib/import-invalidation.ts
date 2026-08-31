@@ -22,6 +22,8 @@ const MODULE_QUERY_KEYS: Record<
 	],
 	cronograma: (workId) => [workKeys.schedule(workId)],
 	"medicao-obra": (workId) => [
+		workKeys.all,
+		workKeys.schedule(workId),
 		workKeys.measurementsBase(workId),
 		workKeys.measurementDetailBase(workId),
 		workKeys.measurementReportBase(workId),
@@ -36,6 +38,8 @@ const WORK_AGGREGATE_KEYS = (
 	workId: string,
 ): readonly (readonly unknown[])[] => [
 	workKeys.physicalFinancialBase(workId),
+	["work-statistics", workId],
+	["work-statistics-schedule", workId],
 	workKeys.bi(workId),
 	workKeys.management(workId),
 	workKeys.reports(workId),
@@ -83,5 +87,7 @@ export function importConfirmationQueryKeys(
 		workKeys.management(workId),
 		workKeys.reports(workId),
 		workKeys.physicalFinancialBase(workId),
+		["work-statistics", workId],
+		["work-statistics-schedule", workId],
 	];
 }

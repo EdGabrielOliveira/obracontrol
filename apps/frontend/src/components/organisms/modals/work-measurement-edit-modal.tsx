@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { governanceKeys, workKeys } from "@/api/query-keys";
 import { updateWorkMeasurement } from "@/api/work-measurements";
 import { InputFormField } from "@/components/molecules/FormField";
 import { BudgetItemSelector } from "@/components/organisms/budget/budget-item-selector";
@@ -17,6 +16,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { hydrateEditItems } from "@/lib/work-measurement-edit-hydration";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import {
 	type MeasurementEditValues,
 	measurementEditSchema,
@@ -101,19 +101,7 @@ export function WorkMeasurementEditModal({
 					warnings: result.warnings,
 					approvalStatus: result.approvalStatus,
 				});
-			for (const queryKey of [
-				workKeys.measurementDetail(workId, measurement.id),
-				workKeys.measurementsBase(workId),
-				workKeys.measurementMap(workId),
-				workKeys.measurementReports(workId),
-				workKeys.measurementSummary(workId),
-				workKeys.budget(workId),
-				workKeys.physicalFinancialBase(workId),
-				workKeys.bi(workId),
-				workKeys.reports(workId),
-				governanceKeys.pendingApprovals(workId),
-			])
-				queryClient.invalidateQueries({ queryKey });
+			invalidateWorkMeasurementQueries(queryClient, workId);
 			onOpenChange(false);
 		},
 		onError: (error) =>

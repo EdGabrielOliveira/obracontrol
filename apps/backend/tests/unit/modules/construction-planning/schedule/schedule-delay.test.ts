@@ -7,7 +7,7 @@ describe("schedule delay eligibility", () => {
 			isScheduleItemDelayed(
 				{
 					plannedEnd: new Date("2026-08-01"),
-					completionPercentage: 75,
+					completionPercentage: 0.75,
 				},
 				new Date("2026-08-06"),
 			),
@@ -19,7 +19,7 @@ describe("schedule delay eligibility", () => {
 			isScheduleItemDelayed(
 				{
 					plannedEnd: new Date("2026-08-07"),
-					completionPercentage: 75,
+					completionPercentage: 0.75,
 				},
 				new Date("2026-08-06"),
 			),
@@ -28,7 +28,7 @@ describe("schedule delay eligibility", () => {
 			isScheduleItemDelayed(
 				{
 					plannedEnd: new Date("2026-08-01"),
-					completionPercentage: 100,
+					completionPercentage: 1,
 				},
 				new Date("2026-08-06"),
 			),

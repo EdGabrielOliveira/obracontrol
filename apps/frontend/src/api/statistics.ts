@@ -3,6 +3,7 @@ import { api } from "./api";
 export type StatisticsPeriod = "daily" | "weekly" | "monthly";
 export type WorkStatisticsResponse = {
 	period: StatisticsPeriod;
+	asOfDate: string;
 	series: Array<{
 		date: string;
 		costs: number;
@@ -15,10 +16,11 @@ export type WorkStatisticsResponse = {
 export async function getWorkStatistics(
 	workId: string,
 	period: StatisticsPeriod,
+	asOfDate?: string,
 ) {
 	const { data } = await api.get<WorkStatisticsResponse>(
 		`/construction/works/${workId}/statistics`,
-		{ params: { period } },
+		{ params: { period, ...(asOfDate ? { asOfDate } : {}) } },
 	);
 	return data;
 }

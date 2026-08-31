@@ -55,8 +55,14 @@ export class BudgetService {
 		return this.governance.assertWritable(ownerId, "BUDGET", workId);
 	}
 
-	async getBudget(ownerId: string, workId: string) {
-		const result = await this.repository.getBudgetView(ownerId, workId);
+	async getBudget(
+		ownerId: string,
+		workId: string,
+		options?: { includePhysicalFinancial?: boolean },
+	) {
+		const result = await (options
+			? this.repository.getBudgetView(ownerId, workId, options)
+			: this.repository.getBudgetView(ownerId, workId));
 		if (!result) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}

@@ -34,8 +34,8 @@ const ccWorksSearchSchema = paginationSchema;
 export const Route = createFileRoute("/app/centros-de-custo/$ccId/")({
 	validateSearch: ccWorksSearchSchema,
 	loaderDeps: ({ search }) => ({ search }),
-	loader: async ({ params, deps }) => {
-		await Promise.all([
+	loader: ({ params, deps }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: costCenterKeys.globalDetail(params.ccId),
 				queryFn: () => getCostCenterById(params.ccId),
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/app/centros-de-custo/$ccId/")({
 				queryKey: workKeys.list({ costCenterId: params.ccId, ...deps.search }),
 				queryFn: () => listWorks({ costCenterId: params.ccId, ...deps.search }),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

@@ -223,6 +223,9 @@ export type CostRisk = "BELOW_COST" | "ON_COST" | "OVER_COST" | "UNAVAILABLE";
 
 export type WorkBudgetFields = {
 	activeBudget: number;
+	directBudget?: number;
+	bdiPercentage?: number;
+	bdiValue?: number;
 	ignoredBudget: number;
 	suspendedBudget: number;
 };

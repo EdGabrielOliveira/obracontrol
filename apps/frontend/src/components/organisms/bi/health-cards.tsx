@@ -95,7 +95,7 @@ export function HealthCards({ cards, works }: HealthCardsProps) {
 			<HealthCard
 				icon={Wallet}
 				label="Custo"
-				value={`${cards.worksAboveCost} acima do orçado`}
+				value={`${cards.worksAboveCost ?? 0} acima do orçado`}
 				tone={custoTone}
 				meta={{
 					text: `${cards.worksBelowCost ?? 0} abaixo do orçado`,

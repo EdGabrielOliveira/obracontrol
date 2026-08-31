@@ -25,8 +25,8 @@ import type { CostCenterEditValues } from "@/schemas/organizations";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/centros-de-custo/$ccId/edit")({
-	loader: async ({ params }) => {
-		await Promise.all([
+	loader: ({ params }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: costCenterKeys.globalDetail(params.ccId),
 				queryFn: () => getCostCenterById(params.ccId),
@@ -35,7 +35,7 @@ export const Route = createFileRoute("/app/centros-de-custo/$ccId/edit")({
 				queryKey: organizationKeys.list({ limit: 100 }),
 				queryFn: () => listOrganizations({ limit: 100 }),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

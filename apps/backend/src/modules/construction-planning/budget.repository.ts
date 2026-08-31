@@ -174,12 +174,33 @@ export async function sumChildrenTotalCost(
 	};
 }
 
-export async function getBudgetView(ownerId: string, workId: string) {
-	const work = await getWorkById(ownerId, workId);
+const EMPTY_PHYSICAL_FINANCIAL = {
+	stages: [],
+	totals: {
+		months: [],
+		plannedByMonth: [],
+		measuredByMonth: [],
+		actualByMonth: [],
+		plannedAccumulated: [],
+		measuredAccumulated: [],
+		actualAccumulated: [],
+	},
+};
+
+export async function getBudgetView(
+	ownerId: string,
+	workId: string,
+	options?: { includePhysicalFinancial?: boolean },
+) {
+	const work = await getWorkById(ownerId, workId, undefined, {
+		includeOperationalChildren: false,
+	});
 	if (!work) return null;
 
 	const [physicalFinancial, measurementSummary] = await Promise.all([
-		getPhysicalFinancialSchedule(ownerId, workId),
+		options?.includePhysicalFinancial === false
+			? Promise.resolve(EMPTY_PHYSICAL_FINANCIAL)
+			: getPhysicalFinancialSchedule(ownerId, workId),
 		getWorkMeasurementSummary(ownerId, workId),
 	]);
 

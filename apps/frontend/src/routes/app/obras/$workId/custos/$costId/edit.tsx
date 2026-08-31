@@ -29,7 +29,8 @@ export const Route = createFileRoute("/app/obras/$workId/custos/$costId/edit")({
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costBudgetItems(params.workId),
@@ -65,7 +66,8 @@ function RouteComponent() {
 	});
 	const budgetQuery = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const costBudgetQuery = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),

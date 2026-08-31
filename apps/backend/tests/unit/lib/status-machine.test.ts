@@ -110,9 +110,9 @@ describe("WORK_OPERATIONAL_TRANSITIONS", () => {
 		);
 	});
 
-	it("only treats in-progress as the operational portfolio", () => {
-		expect(WORK_OPERATIONAL_TRANSITIONS.IN_PROGRESS).toContain("SUSPENDED");
-		expect(WORK_OPERATIONAL_TRANSITIONS.DONE).not.toContain("RASCUNHO");
+	it("allows direct correction between operational statuses", () => {
+		expect(WORK_OPERATIONAL_TRANSITIONS.IN_PROGRESS).toContain("DRAFT");
+		expect(WORK_OPERATIONAL_TRANSITIONS.DONE).toContain("NOT_STARTED");
 	});
 });
 

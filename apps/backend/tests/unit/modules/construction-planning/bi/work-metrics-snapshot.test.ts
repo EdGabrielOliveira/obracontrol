@@ -63,7 +63,23 @@ describe("buildWorkMetricsSnapshot", () => {
 
 		expect(snapshot.metrics.earnedValue).toBe(600);
 		expect(snapshot.metrics.measuredPercentage).toBe(0.6);
-		expect(snapshot.input.measurements).toHaveLength(2);
+		expect(snapshot.input.measurements).toHaveLength(1);
+	});
+
+	it("uses a newer accepted measurement as the current data date", () => {
+		const snapshot = buildWorkMetricsSnapshot({
+			work: { ...work(), baseDate: new Date("2026-01-01T00:00:00.000Z") },
+			asOf: new Date("2026-01-20T00:00:00.000Z"),
+			manualMeasurements: [
+				{
+					date: new Date("2026-01-20T00:00:00.000Z"),
+					items: [{ budgetItemId: "item-1", accumulatedValue: 600 }],
+				},
+			],
+		});
+
+		expect(snapshot.metrics.dataDate).toBe("2026-01-20T00:00:00.000Z");
+		expect(snapshot.metrics.measuredPercentage).toBe(0.6);
 	});
 });
 

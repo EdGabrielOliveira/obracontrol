@@ -109,8 +109,8 @@ export type ConstructionItemStatus = z.infer<typeof constructionItemStatusEnum>;
 export type ScheduleRisk = z.infer<typeof scheduleRiskEnum>;
 export type CostRisk = z.infer<typeof costRiskEnum>;
 
-/** Statuses which are allowed to participate in the operational portfolio. */
-export const operationalWorkStatusEnum = z.enum(["IN_PROGRESS"]);
+/** All operational work statuses accepted by the API. */
+export const operationalWorkStatusEnum = constructionItemStatusEnum;
 
 export const createMeasurementSchema = z
 	.object({

@@ -7,7 +7,7 @@ describe("isReplanningEligible", () => {
 	it("permite somente atividade atrasada e ainda não concluída", () => {
 		expect(
 			isReplanningEligible(
-				{ plannedEnd: "2026-08-01", completionPercentage: 75 },
+				{ plannedEnd: "2026-08-01", completionPercentage: 0.75 },
 				referenceDate,
 			),
 		).toBe(true);
@@ -16,13 +16,13 @@ describe("isReplanningEligible", () => {
 	it("oculta replanejamento para atividade futura ou concluída", () => {
 		expect(
 			isReplanningEligible(
-				{ plannedEnd: "2026-08-07", completionPercentage: 75 },
+				{ plannedEnd: "2026-08-07", completionPercentage: 0.75 },
 				referenceDate,
 			),
 		).toBe(false);
 		expect(
 			isReplanningEligible(
-				{ plannedEnd: "2026-08-01", completionPercentage: 100 },
+				{ plannedEnd: "2026-08-01", completionPercentage: 1 },
 				referenceDate,
 			),
 		).toBe(false);

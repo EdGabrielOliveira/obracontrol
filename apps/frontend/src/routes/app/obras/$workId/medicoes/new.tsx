@@ -7,7 +7,7 @@ import {
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getBudgetItems, getCurrentCostBudgetItems } from "@/api/budget";
-import { governanceKeys, workKeys } from "@/api/query-keys";
+import { workKeys } from "@/api/query-keys";
 import {
 	createWorkMeasurement,
 	getWorkMeasurementMap,
@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/atoms/page-header";
 import { WorkMeasurementCreateForm } from "@/components/organisms/measurements/work-measurement-create-form";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { queryClient } from "@/lib/query-client";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import { buildWorkMeasurementPayload } from "@/lib/work-measurement-payload";
 import type { MeasurementCreateValues } from "@/schemas/measurements";
 import type { MeasurementTreeItem } from "@/types/measurements";
@@ -29,7 +30,8 @@ export const Route = createFileRoute("/app/obras/$workId/medicoes/new")({
 		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costBudgetItems(params.workId),
@@ -59,7 +61,8 @@ function RouteComponent() {
 	const [submitting, setSubmitting] = useState(false);
 	const budget = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const effectiveBudget = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
@@ -87,15 +90,7 @@ function RouteComponent() {
 			createWorkMeasurement(workId, buildWorkMeasurementPayload(values)),
 		onSuccess: () => {
 			toast.success("Medição criada com sucesso!");
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementsBase(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementMap(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: governanceKeys.pendingApprovals(workId),
-			});
+			invalidateWorkMeasurementQueries(queryClient, workId);
 			navigate({ to: "/app/obras/$workId/medicoes", params: { workId } });
 		},
 		onError: (error) =>

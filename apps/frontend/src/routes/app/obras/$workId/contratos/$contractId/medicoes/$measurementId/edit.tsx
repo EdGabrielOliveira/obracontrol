@@ -35,8 +35,8 @@ import { getErrorMessage } from "@/utils/api-error";
 export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/edit",
 )({
-	loader: async ({ params }) => {
-		await Promise.all([
+	loader: ({ params }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: contractKeys.measurementDetail(
 					params.workId,
@@ -54,7 +54,7 @@ export const Route = createFileRoute(
 				queryKey: workKeys.detail(params.workId),
 				queryFn: () => getWork(params.workId),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

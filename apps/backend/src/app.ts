@@ -44,7 +44,13 @@ export function createApp(options?: {
 			metrics.timing(`http.${request.method}.${routeName}`, duration);
 			metrics.increment(`http.status.${status}`);
 		})
-		.onAfterHandle({ as: "global" }, async ({ request, response }) => {
+		.onAfterHandle({ as: "global" }, async ({ request, response, set }) => {
+			const startedAt = requestStarts.get(request);
+			if (startedAt !== undefined) {
+				set.headers["Server-Timing"] = `app;dur=${(
+					performance.now() - startedAt
+				).toFixed(1)}`;
+			}
 			if (!requestPath(request).endsWith("/openapi/json")) return response;
 			if (response instanceof Response) {
 				const document = await response.clone().json();

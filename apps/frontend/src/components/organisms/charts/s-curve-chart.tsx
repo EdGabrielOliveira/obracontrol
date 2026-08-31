@@ -21,6 +21,7 @@ export function SCurveChart({ points }: SCurveChartProps) {
 	const data = buildSCurveChartData(points);
 
 	if (data.length === 0) return null;
+	const hasSinglePoint = data.length === 1;
 
 	return (
 		<div>
@@ -85,7 +86,7 @@ export function SCurveChart({ points }: SCurveChartProps) {
 							name="Planejado"
 							stroke={CHART_COLORS.chart1}
 							strokeWidth={2}
-							dot={false}
+							dot={hasSinglePoint ? { r: 4 } : false}
 							activeDot={{ r: 3 }}
 						/>
 						<Line
@@ -105,7 +106,7 @@ export function SCurveChart({ points }: SCurveChartProps) {
 							stroke={CHART_COLORS.chart3}
 							strokeWidth={2}
 							strokeDasharray="5 5"
-							dot={false}
+							dot={hasSinglePoint ? { r: 4 } : false}
 							activeDot={{ r: 3 }}
 							connectNulls
 						/>

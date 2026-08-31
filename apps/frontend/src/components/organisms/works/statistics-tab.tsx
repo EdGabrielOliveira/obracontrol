@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { WorkBIResponse } from "@/types/bi";
+import type { SchedulePhysicalFinancialResponse } from "@/types/schedule";
 import {
 	formatCurrency,
 	formatPercentage,
@@ -51,6 +52,12 @@ type StatisticsTabProps = {
 	error: Error | null;
 	onRetry: () => void;
 };
+
+export function hasPhysicalFinancialPeriods(
+	totals: SchedulePhysicalFinancialResponse["totals"] | null | undefined,
+): totals is SchedulePhysicalFinancialResponse["totals"] {
+	return (totals?.months.length ?? 0) > 0;
+}
 
 export function StatisticsTab({
 	workId,
@@ -155,6 +162,14 @@ export function StatisticsTab({
 								value={
 									completeness.hasMeasurements
 										? formatPercentage(summary.measuredPercentage * 100)
+										: noInformation
+								}
+							/>
+							<KpiCard
+								title={`BDI (${summary.bdiPercentage ?? 0}%)`}
+								value={
+									completeness.hasBudget
+										? formatCurrency(summary.bdiValue ?? 0)
 										: noInformation
 								}
 							/>
@@ -332,39 +347,47 @@ export function StatisticsTab({
 							<LoadingSpinner title="Carregando movimentações detalhadas..." />
 						) : statisticsQuery.error ? (
 							<ErrorFeedback onRetry={() => statisticsQuery.refetch()} />
-						) : totals && totals.months.length > 0 && exactSeries.length > 0 ? (
+						) : hasPhysicalFinancialPeriods(totals) ? (
 							<>
 								<PhysicalFinancialChart data={{ totals }} period={period} />
-								<div className="overflow-x-auto">
-									<table className="w-full text-sm">
-										<thead>
-											<tr className="border-b text-left">
-												<th className="py-2">Data/período</th>
-												<th className="py-2 text-right">Contratos</th>
-												<th className="py-2 text-right">Medido</th>
-												<th className="py-2 text-right">Custos</th>
-											</tr>
-										</thead>
-										<tbody>
-											{exactSeries.map((point) => (
-												<tr key={point.date} className="border-b">
-													<td className="py-2">
-														{formatPeriodLabel(point.date, period)}
-													</td>
-													<td className="py-2 text-right">
-														{formatCurrency(point.contracts)}
-													</td>
-													<td className="py-2 text-right">
-														{formatCurrency(point.measurements)}
-													</td>
-													<td className="py-2 text-right">
-														{formatCurrency(point.costs)}
-													</td>
+								{exactSeries.length > 0 ? (
+									<div className="overflow-x-auto">
+										<table className="w-full text-sm">
+											<thead>
+												<tr className="border-b text-left">
+													<th className="py-2">Data/período</th>
+													<th className="py-2 text-right">Contratos</th>
+													<th className="py-2 text-right">Medido</th>
+													<th className="py-2 text-right">Custos</th>
 												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
+											</thead>
+											<tbody>
+												{exactSeries.map((point) => (
+													<tr key={point.date} className="border-b">
+														<td className="py-2">
+															{formatPeriodLabel(point.date, period)}
+														</td>
+														<td className="py-2 text-right">
+															{formatCurrency(point.contracts)}
+														</td>
+														<td className="py-2 text-right">
+															{formatCurrency(point.measurements)}
+														</td>
+														<td className="py-2 text-right">
+															{formatCurrency(point.costs)}
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								) : (
+									<EmptyState
+										icon={<Inbox className="h-10 w-10" />}
+										title="Nenhuma movimentação detalhada no período"
+										description="O cronograma planejado continua disponível; custos, medições e contratos aparecerão quando forem registrados."
+									/>
+								)}
 							</>
 						) : (
 							<EmptyState

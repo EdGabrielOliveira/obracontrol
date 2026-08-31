@@ -72,11 +72,12 @@ export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$requestId/aprovacao/",
 )({
 	component: RouteComponent,
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: quotationKeys.comparison(params.workId, params.requestId),
 			queryFn: () => getQuotationComparison(params.workId, params.requestId),
-		}),
+		}).catch(() => undefined);
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },

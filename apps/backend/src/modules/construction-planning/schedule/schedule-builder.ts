@@ -140,7 +140,9 @@ export function buildScheduleFromDbItems(
 			stageRollup?.measuredPercentage ??
 			normalizePercentage(toNum(item.completionPercentage));
 		const totalCost =
-			item.type === "STAGE" ? activeBudget : toNum(item.totalCost);
+			item.type === "STAGE"
+				? activeBudget
+				: (metric?.totalCost ?? toNum(item.totalCost));
 
 		const itemBaseline = findBaseline(item, rows.baselineSchedules ?? []);
 		const itemRevision = findLatestRevision(item, rows.scheduleRevisions ?? []);

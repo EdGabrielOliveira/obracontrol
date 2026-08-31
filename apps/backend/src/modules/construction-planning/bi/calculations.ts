@@ -108,6 +108,7 @@ export type WorkForBIInput = {
 	scheduleRevisions: DbScheduleRevisionInput[];
 	measurements: DbMeasurementInput[];
 	actualCosts: DbActualCostInput[];
+	bdiPercentage?: number | Decimal | null;
 };
 
 export function toWorkWithMetricsInput(
@@ -130,6 +131,7 @@ export function toWorkWithMetricsInput(
 		baseDate: identity.baseDate,
 		createdAt: work.createdAt,
 		lastImportAt: work.imports[0]?.createdAt ?? null,
+		bdiPercentage: work.bdiPercentage ?? 0,
 		items: work.items.map((item) => toMetricItem(item)),
 		baselineSchedules: work.baselineSchedules,
 		scheduleRevisions: work.scheduleRevisions,
@@ -339,6 +341,9 @@ export function buildWorkSummary(
 		baseDate: work.baseDate?.toISOString() ?? null,
 		totalBudget: metrics.activeBudget,
 		activeBudget: metrics.activeBudget,
+		directBudget: metrics.directBudget,
+		bdiPercentage: metrics.bdiPercentage,
+		bdiValue: metrics.bdiValue,
 		ignoredBudget: metrics.ignoredBudget,
 		suspendedBudget: metrics.suspendedBudget,
 		plannedValue: metrics.plannedValue,

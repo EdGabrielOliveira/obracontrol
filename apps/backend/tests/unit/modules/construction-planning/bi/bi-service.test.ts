@@ -276,6 +276,22 @@ describe("ConstructionBIService.getMultiworksBI via canonical source resolver", 
 		).toBe(1);
 	});
 
+	it("keeps non-finalized works in the default portfolio", async () => {
+		const { service, repository } = makeService();
+		repository.getAllWorksWithItems.mockResolvedValue([
+			{
+				...workFixture({ operationalStatus: "DRAFT" }),
+				ownerId: "owner-1",
+			},
+		] as never[]);
+		repository.getWorkMeasurementsForManyWorks.mockResolvedValue(new Map());
+
+		const result = await service.getMultiworksBI("owner-1");
+
+		expect(result.cards.totalWorks).toBe(1);
+		expect(result.works[0]?.workId).toBe("work-1");
+	});
+
 	it("BI-004: N obras LIVE consomem 1 query em lote para medicoes, nao N+1", async () => {
 		const { service, repository } = makeService();
 		repository.getAllWorksWithItems.mockResolvedValue([

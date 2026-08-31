@@ -1,4 +1,4 @@
-import { toNum } from "../../../lib/decimal-utils";
+import type { Decimal } from "@prisma/client/runtime/library";
 import { deriveWorkIdentity } from "../identity";
 import { normalizeWorkOperationalStatus } from "../works/work-operational-status";
 import type {
@@ -8,14 +8,18 @@ import type {
 	DbMeasurementInput,
 } from "./calculations";
 import { buildWorkSummary, toMetricItem } from "./calculations";
+import {
+	composeMeasurementInputs,
+	type ManualWorkMeasurementInput,
+} from "./measurement-adapter";
 import { calculateWorkMetrics } from "./metrics";
-import { normalizePercentage } from "./percent-utils";
 
 type ActiveChildren = {
 	items: DbItemCalculationInput[];
 	baselineSchedules: DbBaselineScheduleInput[];
 	measurements: DbMeasurementInput[];
 	actualCosts: DbActualCostInput[];
+	manualMeasurements?: ManualWorkMeasurementInput[];
 };
 
 function emptyWorkSummary(overrides: {
@@ -29,6 +33,7 @@ function emptyWorkSummary(overrides: {
 	code?: string;
 	clientName?: string | null;
 	operationalStatus?: string | null;
+	bdiPercentage?: number | Decimal | null;
 }) {
 	return {
 		id: overrides.id,
@@ -41,6 +46,9 @@ function emptyWorkSummary(overrides: {
 		baseDate: overrides.baseDate,
 		totalBudget: 0,
 		activeBudget: 0,
+		directBudget: 0,
+		bdiPercentage: Number(overrides.bdiPercentage ?? 0),
+		bdiValue: 0,
 		ignoredBudget: 0,
 		suspendedBudget: 0,
 		plannedValue: 0,
@@ -82,6 +90,7 @@ export function computeWorkSummary(w: {
 	costCenterId?: string | null;
 	clientName: string | null;
 	operationalStatus?: string | null;
+	bdiPercentage?: number | Decimal | null;
 	plannedStart: Date | null;
 	plannedEnd: Date | null;
 	baseDate: Date | null;
@@ -106,17 +115,15 @@ export function computeWorkSummary(w: {
 			plannedStart: w.plannedStart?.toISOString() ?? null,
 			plannedEnd: w.plannedEnd?.toISOString() ?? null,
 			baseDate: identity.baseDate?.toISOString() ?? null,
+			bdiPercentage: w.bdiPercentage,
 			lastImportAt: w.lastImportAt.toISOString(),
 		});
 	}
 
-	const measurements = w.activeChildren.measurements.map((measurement) => ({
-		...measurement,
-		measuredPercentageAccumulated:
-			measurement.measuredPercentageAccumulated != null
-				? normalizePercentage(toNum(measurement.measuredPercentageAccumulated))
-				: null,
-	}));
+	const measurements = composeMeasurementInputs(
+		w.activeChildren.measurements,
+		w.activeChildren.manualMeasurements,
+	);
 
 	const metrics = calculateWorkMetrics(
 		{
@@ -127,6 +134,7 @@ export function computeWorkSummary(w: {
 			baseDate: identity.baseDate,
 			createdAt: w.createdAt,
 			lastImportAt: w.lastImportAt,
+			bdiPercentage: w.bdiPercentage,
 		},
 		w.activeChildren.items.map(toMetricItem),
 		w.activeChildren.baselineSchedules.length > 0

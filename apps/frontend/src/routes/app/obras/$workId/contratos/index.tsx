@@ -86,8 +86,8 @@ export const Route = createFileRoute("/app/obras/$workId/contratos/")({
 	validateSearch: contractFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
 	component: RouteComponent,
-	loader: async ({ params, deps }) =>
-		await Promise.all([
+	loader: ({ params, deps }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.contractsList(
 					params.workId,
@@ -100,7 +100,8 @@ export const Route = createFileRoute("/app/obras/$workId/contratos/")({
 				queryKey: quotationKeys.list(params.workId),
 				queryFn: () => listQuotations(params.workId),
 			}),
-		]),
+		]).catch(() => undefined);
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },

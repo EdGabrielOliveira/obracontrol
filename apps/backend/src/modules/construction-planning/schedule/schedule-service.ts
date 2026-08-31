@@ -1,5 +1,7 @@
 import { ConstructionError } from "../../../lib/errors";
 import { prisma } from "../../../lib/prisma";
+import { composeMeasurementInputs } from "../bi/measurement-adapter";
+import { normalizePercentage } from "../bi/percent-utils";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
@@ -82,7 +84,7 @@ export function isScheduleItemDelayed(
 	referenceDate: Date,
 ): boolean {
 	if (!item.plannedEnd) return false;
-	if (Number(item.completionPercentage ?? 0) >= 100) return false;
+	if (Number(item.completionPercentage ?? 0) >= 1) return false;
 	return toDayUtc(item.plannedEnd) < toDayUtc(referenceDate);
 }
 
@@ -181,12 +183,16 @@ export class ConstructionScheduleService {
 				baseDate: identity.baseDate,
 				createdAt: work.createdAt,
 				lastImportAt: work.imports[0]?.createdAt ?? null,
+				bdiPercentage: work.bdiPercentage,
 			},
 			{
 				items: work.items,
 				baselineSchedules: work.baselineSchedules,
 				scheduleRevisions: work.scheduleRevisions,
-				measurements: work.measurements,
+				measurements: composeMeasurementInputs(
+					work.measurements,
+					work.manualMeasurements,
+				),
 				actualCosts: work.actualCosts,
 			},
 		);
@@ -501,7 +507,9 @@ export class ConstructionScheduleService {
 			!isScheduleItemDelayed(
 				{
 					plannedEnd: scheduledEnd,
-					completionPercentage: budgetItem.completionPercentage,
+					completionPercentage: normalizePercentage(
+						Number(budgetItem.completionPercentage ?? 0),
+					),
 				},
 				new Date(),
 			)
@@ -606,7 +614,9 @@ export class ConstructionScheduleService {
 				!isScheduleItemDelayed(
 					{
 						plannedEnd: baseline.plannedEnd,
-						completionPercentage: budgetItem.completionPercentage,
+						completionPercentage: normalizePercentage(
+							Number(budgetItem.completionPercentage ?? 0),
+						),
 					},
 					new Date(),
 				)

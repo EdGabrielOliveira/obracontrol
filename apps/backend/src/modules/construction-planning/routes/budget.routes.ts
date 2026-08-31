@@ -24,9 +24,16 @@ export const budgetRoutes = new Elysia({
 	.use(requireWorkAccess("read"))
 	.get(
 		"/",
-		async ({ params, scope }) =>
-			budgetService.getBudget(scope.resourceOwnerId, params.workId),
-		{ detail: { tags: ["Budget"] } },
+		async ({ params, scope, query }) =>
+			budgetService.getBudget(scope.resourceOwnerId, params.workId, {
+				includePhysicalFinancial: query.includePhysicalFinancial !== "false",
+			}),
+		{
+			query: t.Object({
+				includePhysicalFinancial: t.Optional(t.String()),
+			}),
+			detail: { tags: ["Budget"] },
+		},
 	)
 	.get(
 		"/items/:itemId",

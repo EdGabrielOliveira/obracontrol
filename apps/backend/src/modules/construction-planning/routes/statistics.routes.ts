@@ -1,4 +1,5 @@
 import { Elysia, t } from "elysia";
+import { parseAsOfDate } from "../../../lib/as-of-date";
 import { requireWorkAccess } from "../../../lib/authorization-middleware";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { getWorkStatistics } from "../statistics/statistics.service";
@@ -13,6 +14,7 @@ export const statisticsRoutes = new Elysia({ name: "statistics-routes" })
 				scope.resourceOwnerId,
 				params.workId,
 				query.period ?? "monthly",
+				parseAsOfDate(query.asOfDate),
 			),
 		{
 			query: t.Object({
@@ -23,6 +25,7 @@ export const statisticsRoutes = new Elysia({ name: "statistics-routes" })
 						t.Literal("monthly"),
 					]),
 				),
+				asOfDate: t.Optional(t.String()),
 			}),
 		},
 	);

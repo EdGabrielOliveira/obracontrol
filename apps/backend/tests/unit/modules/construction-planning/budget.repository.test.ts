@@ -176,6 +176,33 @@ describe("budget repository", () => {
 		expect(getWorkMeasurementSummary).toHaveBeenCalledWith("owner-1", "work-1");
 	});
 
+	it("permite omitir o calculo fisico-financeiro na leitura inicial", async () => {
+		const { getBudgetView } = await import(
+			"../../../../src/modules/construction-planning/budget.repository"
+		);
+
+		const result = await getBudgetView("owner-1", "work-1", {
+			includePhysicalFinancial: false,
+		});
+
+		expect(getWorkById).toHaveBeenCalledWith("owner-1", "work-1", undefined, {
+			includeOperationalChildren: false,
+		});
+		expect(getPhysicalFinancialSchedule).not.toHaveBeenCalled();
+		expect(result?.physicalFinancial).toEqual({
+			stages: [],
+			totals: {
+				months: [],
+				plannedByMonth: [],
+				measuredByMonth: [],
+				actualByMonth: [],
+				plannedAccumulated: [],
+				measuredAccumulated: [],
+				actualAccumulated: [],
+			},
+		});
+	});
+
 	it("normalizes manual budget item date-only fields before persisting", async () => {
 		const { createBudgetItem } = await import(
 			"../../../../src/modules/construction-planning/budget.repository"

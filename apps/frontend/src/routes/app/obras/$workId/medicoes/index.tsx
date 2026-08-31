@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { exportMedicoes } from "@/api/export";
-import { governanceKeys, workKeys } from "@/api/query-keys";
+import { workKeys } from "@/api/query-keys";
 import {
 	deleteWorkMeasurement,
 	getWorkMeasurementMap,
@@ -28,35 +28,39 @@ import { PageContainer } from "@/atoms/page-container";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import { ImportBatchAction } from "@/components/organisms/imports/import-batch-action";
+import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { WorkMeasurementListTab } from "@/components/organisms/measurements/work-measurement-list-tab";
 import { WorkMeasurementMapTab } from "@/components/organisms/measurements/work-measurement-map-tab";
 import { WorkMeasurementReportsTab } from "@/components/organisms/measurements/work-measurement-reports-tab";
-import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { downloadBlob } from "@/lib/download";
 import { useAuth } from "@/lib/auth-context";
+import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import {
 	type MeasurementFilter,
 	measurementFilterSchema,
 } from "@/schemas/measurementFilter";
+import type {
+	MeasurementLifecycleStatus,
+	WorkMeasurement,
+} from "@/types/measurements";
 import { getErrorMessage } from "@/utils/api-error";
 import { formatCurrency, formatRatioAsPercentage } from "@/utils/format";
-import type { WorkMeasurement } from "@/types/measurements";
-import type { MeasurementLifecycleStatus } from "@/types/measurements";
 
 export const Route = createFileRoute("/app/obras/$workId/medicoes/")({
 	validateSearch: measurementFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
-	loader: async ({ params, deps }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params, deps }) => {
+		void queryClient.prefetchQuery({
 			queryKey: workKeys.measurementsList(
 				params.workId,
 				deps.search as Record<string, unknown>,
 			),
 			queryFn: () => listWorkMeasurements(params.workId, deps.search),
-		}),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [
@@ -116,31 +120,7 @@ function RouteComponent() {
 		mutationFn: (id: string) => deleteWorkMeasurement(workId, id),
 		onSuccess: () => {
 			toast.success("Medição excluída.");
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementsBase(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementSummary(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementMap(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementReports(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.budget(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.physicalFinancialBase(workId),
-			});
-			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
-			queryClient.invalidateQueries({
-				queryKey: workKeys.reports(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: governanceKeys.pendingApprovals(workId),
-			});
+			invalidateWorkMeasurementQueries(queryClient, workId);
 			setDeleteId(null);
 		},
 		onError: (error) =>
@@ -160,31 +140,7 @@ function RouteComponent() {
 		onSuccess: () => {
 			setStatusTarget(null);
 			toast.success("Status da medição atualizado.");
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementsBase(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementSummary(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementMap(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.measurementReports(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.budget(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: workKeys.physicalFinancialBase(workId),
-			});
-			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
-			queryClient.invalidateQueries({
-				queryKey: workKeys.reports(workId),
-			});
-			queryClient.invalidateQueries({
-				queryKey: governanceKeys.pendingApprovals(workId),
-			});
+			invalidateWorkMeasurementQueries(queryClient, workId);
 		},
 		onError: (error) =>
 			toast.error(
@@ -272,7 +228,7 @@ function RouteComponent() {
 							hasMeasurementData
 								? formatRatioAsPercentage(
 										summaryData?.totalMeasuredPercentage ?? 0,
-								)
+									)
 								: noInformation
 						}
 						tone="default"

@@ -117,9 +117,21 @@ export async function confirmBudgetVersionImport(
 	return data;
 }
 
-export async function getBudgetItems(workId: string) {
+export type BudgetReadOptions = {
+	includePhysicalFinancial?: boolean;
+};
+
+export async function getBudgetItems(
+	workId: string,
+	options: BudgetReadOptions = {},
+) {
+	const params =
+		options.includePhysicalFinancial === undefined
+			? undefined
+			: { includePhysicalFinancial: String(options.includePhysicalFinancial) };
 	const { data } = await api.get<BudgetViewResponse>(
 		`/construction/works/${workId}/budget`,
+		{ params },
 	);
 	return data;
 }

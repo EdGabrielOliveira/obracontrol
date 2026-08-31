@@ -49,8 +49,8 @@ import { formatDate, formatPercentage, formatQuantity } from "@/utils/format";
 export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/",
 )({
-	loader: async ({ params }) =>
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: contractKeys.measurementDetail(
 				params.workId,
 				params.contractId,
@@ -62,7 +62,8 @@ export const Route = createFileRoute(
 					params.contractId,
 					params.measurementId,
 				),
-		}),
+		}).catch(() => undefined);
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [

@@ -33,10 +33,12 @@ import { buildDataQualityIssues } from "./metrics-quality";
 function latestActualProgressDate(
 	items: DbItemCalculationInput[],
 	measurements: DbMeasurementInput[] = [],
+	dataDate?: Date,
 ): string | null {
 	const latestMeasurement = measurements
 		.map((measurement) => measurement.measurementDate)
 		.filter((date): date is Date => date instanceof Date)
+		.filter((date) => !dataDate || date.getTime() <= dataDate.getTime())
 		.reduce<Date | null>(
 			(current, date) => (!current || date > current ? date : current),
 			null,
@@ -49,6 +51,7 @@ function latestActualProgressDate(
 		.reduce<Date | null>((current, item) => {
 			const date = item.actualEnd ?? item.actualStart;
 			if (!date) return current;
+			if (dataDate && date.getTime() > dataDate.getTime()) return current;
 			return !current || date > current ? date : current;
 		}, null);
 
@@ -222,6 +225,9 @@ export function buildWorkBIFromMetrics(
 		summary: {
 			dataDate: metrics.dataDate,
 			activeBudget: metrics.activeBudget,
+			directBudget: metrics.directBudget,
+			bdiPercentage: metrics.bdiPercentage,
+			bdiValue: metrics.bdiValue,
 			ignoredBudget: metrics.ignoredBudget,
 			suspendedBudget: metrics.suspendedBudget,
 			plannedValue: metrics.plannedValue,
@@ -246,6 +252,7 @@ export function buildWorkBIFromMetrics(
 			lastProgressDate: latestActualProgressDate(
 				input.items,
 				input.measurements,
+				dataDate,
 			),
 			idc: metrics.idc,
 			idp: metrics.schedulePerformanceIndex,

@@ -79,3 +79,47 @@ describe("0010_finalize_construction_measurement_status migration", () => {
 		}
 	});
 });
+
+describe("0011_normalize_imported_measurement_status migration", () => {
+	test("normalizes legacy approved imports without changing other statuses", async () => {
+		const database = new Database(":memory:");
+		try {
+			database.exec(`
+				CREATE TABLE "ConstructionMeasurement" (
+					"id" TEXT NOT NULL PRIMARY KEY,
+					"status" TEXT NOT NULL
+				);
+				INSERT INTO "ConstructionMeasurement" ("id", "status") VALUES
+					('approved', 'APROVADA'),
+					('accepted', 'ACEITO'),
+					('draft', 'RASCUNHO'),
+					('rejected', 'RECUSADO');
+			`);
+
+			const migration = await readFile(
+				resolve(
+					import.meta.dir,
+					"../../../prisma/migrations/0011_normalize_imported_measurement_status.sql",
+				),
+				"utf8",
+			);
+			database.exec(migration);
+			database.exec(migration);
+
+			expect(
+				database
+					.query<StatusRow, []>(
+						'SELECT "id", "status" FROM "ConstructionMeasurement" ORDER BY "id"',
+					)
+					.all(),
+			).toEqual([
+				{ id: "accepted", status: "ACEITO" },
+				{ id: "approved", status: "ACEITO" },
+				{ id: "draft", status: "RASCUNHO" },
+				{ id: "rejected", status: "RECUSADO" },
+			]);
+		} finally {
+			database.close();
+		}
+	});
+});

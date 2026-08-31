@@ -533,7 +533,7 @@ async function createWorkData(
 				measuredPercentageAccumulated: money(work.factor * 100),
 				measuredQuantityAccumulated: money(item.quantity * work.factor),
 				measuredValue: money(item.total * work.factor),
-				status: "APROVADA",
+				status: "ACEITO",
 				notes: "Registro inicial do acompanhamento fisico-financeiro.",
 			},
 		});

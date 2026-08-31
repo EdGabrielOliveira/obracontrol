@@ -6,6 +6,7 @@ import { fillMonthGaps, monthKey } from "../../lib/month-utils";
 import { toFiniteNumber } from "../../lib/number-utils";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
+import { composeMeasurementInputs } from "./bi/execution-facts";
 import { toWorkMeasurementDto } from "./dto/financial-dto";
 import { nextMeasurementNumber } from "./measurement-common";
 import type {
@@ -54,9 +55,7 @@ async function getActiveBudgetImportId(ownerId: string, workId: string) {
 	// Obras antigas não tinham activeImportId preenchido. Nesse caso, a
 	// importação mais recente é a versão vigente usada pelo restante do BI.
 	const latestImport = await (
-		prisma.constructionImport as
-			| typeof prisma.constructionImport
-			| undefined
+		prisma.constructionImport as typeof prisma.constructionImport | undefined
 	)?.findFirst({
 		where: { ownerId, workId },
 		orderBy: { createdAt: "desc" },
@@ -201,6 +200,7 @@ export async function getLatestWorkMeasurementQuantities(
 				ownerId,
 				workId,
 				status: "ACEITO",
+				archivedAt: null,
 				...(excludeMeasurementId ? { id: { not: excludeMeasurementId } } : {}),
 			},
 		},
@@ -1063,7 +1063,7 @@ export async function getWorkMeasurementMapDetail(
 			orderBy: { sortOrder: "asc" },
 		}),
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId, status: "ACEITO" },
+			where: { ownerId, workId, status: "ACEITO", archivedAt: null },
 			include: {
 				items: {
 					include: {
@@ -1205,7 +1205,7 @@ export async function getWorkMeasurementReports(
 	const activeImportId = await getActiveBudgetImportId(ownerId, workId);
 	const [measurements, allBudgetItems, baselines] = await Promise.all([
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId, status: "ACEITO" },
+			where: { ownerId, workId, status: "ACEITO", archivedAt: null },
 			include: {
 				items: {
 					include: {
@@ -1380,9 +1380,31 @@ export async function getWorkMeasurementSummary(
 	workId: string,
 ) {
 	const activeImportId = await getActiveBudgetImportId(ownerId, workId);
-	const [measurements, budgetItems] = await Promise.all([
+	const importedMeasurementQuery = (
+		prisma.constructionMeasurement as
+			| typeof prisma.constructionMeasurement
+			| undefined
+	)?.findMany({
+		where: {
+			ownerId,
+			workId,
+			status: "ACEITO",
+			OR: [
+				...(activeImportId ? [{ importId: activeImportId }] : []),
+				{ importId: null },
+			],
+		},
+		select: {
+			budgetItemId: true,
+			measurementDate: true,
+			measuredValue: true,
+			measuredPercentageAccumulated: true,
+			measuredQuantityAccumulated: true,
+		},
+	});
+	const [measurements, importedMeasurements, budgetItems] = await Promise.all([
 		prisma.workMeasurement.findMany({
-			where: { ownerId, workId, status: "ACEITO" },
+			where: { ownerId, workId, status: "ACEITO", archivedAt: null },
 			include: {
 				items: {
 					select: {
@@ -1394,6 +1416,7 @@ export async function getWorkMeasurementSummary(
 			},
 			orderBy: { date: "desc" },
 		}),
+		importedMeasurementQuery ?? Promise.resolve([]),
 		prisma.constructionBudgetItem.findMany({
 			where: { ownerId, workId, importId: activeImportId },
 			select: { id: true, parentId: true, totalCost: true },
@@ -1401,14 +1424,19 @@ export async function getWorkMeasurementSummary(
 	]);
 
 	const totalBudgeted = sumLeafBudgetItems(budgetItems);
+	const canonicalMeasurements = composeMeasurementInputs(
+		importedMeasurements,
+		measurements,
+	);
 	const latestByBudgetItem = new Set<string>();
 	let totalMeasured = 0;
-	for (const m of measurements) {
-		for (const item of m.items) {
-			if (latestByBudgetItem.has(item.budgetItemId)) continue;
-			latestByBudgetItem.add(item.budgetItemId);
-			totalMeasured += Number(item.accumulatedValue ?? item.measuredValue ?? 0);
-		}
+	for (const item of [...canonicalMeasurements].reverse()) {
+		if (!item.budgetItemId || latestByBudgetItem.has(item.budgetItemId))
+			continue;
+		latestByBudgetItem.add(item.budgetItemId);
+		totalMeasured += Number(
+			item.measuredValueAccumulated ?? item.measuredValue ?? 0,
+		);
 	}
 	const normalizedTotalMeasured = roundCurrency(totalMeasured);
 
@@ -1418,8 +1446,14 @@ export async function getWorkMeasurementSummary(
 			totalBudgeted > 0 ? normalizedTotalMeasured / totalBudgeted : 0,
 		totalBudgeted,
 		balanceToMeasure: roundCurrency(totalBudgeted - normalizedTotalMeasured),
-		measurementCount: measurements.length,
-		lastMeasurementDate: measurements[0]?.date?.toISOString() ?? null,
+		measurementCount:
+			measurements.length > 0
+				? measurements.length
+				: importedMeasurements.length,
+		lastMeasurementDate:
+			canonicalMeasurements[
+				canonicalMeasurements.length - 1
+			]?.measurementDate?.toISOString() ?? null,
 	};
 }
 
@@ -1428,7 +1462,7 @@ export async function getWorkMeasurementsForBI(
 	workId: string,
 ) {
 	return prisma.workMeasurement.findMany({
-		where: { ownerId, workId, status: "ACEITO" },
+		where: { ownerId, workId, status: "ACEITO", archivedAt: null },
 		include: {
 			items: {
 				select: {
@@ -1450,7 +1484,12 @@ export async function getWorkMeasurementsForManyWorks(
 ): Promise<Map<string, Awaited<ReturnType<typeof getWorkMeasurementsForBI>>>> {
 	if (workIds.length === 0) return new Map();
 	const rows = await prisma.workMeasurement.findMany({
-		where: { ownerId, workId: { in: workIds }, status: "ACEITO" },
+		where: {
+			ownerId,
+			workId: { in: workIds },
+			status: "ACEITO",
+			archivedAt: null,
+		},
 		include: {
 			items: {
 				select: {

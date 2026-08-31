@@ -30,11 +30,11 @@ import type {
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/fornecedores/$supplierId/edit")({
-	loader: async ({ params }) => {
-		await queryClient.prefetchQuery({
+	loader: ({ params }) => {
+		void queryClient.prefetchQuery({
 			queryKey: supplierKeys.detail(params.supplierId),
 			queryFn: () => getSupplier(params.supplierId),
-		});
+		}).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

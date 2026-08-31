@@ -18,6 +18,9 @@ export type WorkSummary = {
 	costCenterId: string | null;
 	totalBudget: number;
 	activeBudget: number;
+	directBudget?: number;
+	bdiPercentage?: number;
+	bdiValue?: number;
 	ignoredBudget: number;
 	suspendedBudget: number;
 	plannedValue: number;

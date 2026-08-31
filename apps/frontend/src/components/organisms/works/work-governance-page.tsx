@@ -18,6 +18,7 @@ import { HistoryTab } from "@/components/organisms/works/history-tab";
 import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { canDecideSupervisorRequests } from "@/lib/role-permissions";
+import { invalidateWorkMeasurementQueries } from "@/lib/work-measurement-invalidation";
 import type { AuditLogEntry } from "@/types/audit";
 import { getErrorMessage } from "@/utils/api-error";
 
@@ -73,9 +74,7 @@ export function WorkGovernancePage({ mode }: WorkGovernancePageProps) {
 		}) => decideApproval(input),
 		onSuccess: () => {
 			toast.success("Decisão registrada.");
-			queryClient.invalidateQueries({
-				queryKey: governanceKeys.pendingApprovals(workId ?? ""),
-			});
+			invalidateWorkMeasurementQueries(queryClient, workId ?? "");
 		},
 		onError: (error) => {
 			toast.error(getErrorMessage(error, "Falha ao registrar decisão."));

@@ -43,5 +43,9 @@ export function normalizeWorkOperationalStatus(
 export function isOperationalPortfolioWork(
 	status: ConstructionItemStatus,
 ): boolean {
-	return status === "IN_PROGRESS";
+	// Obras em rascunho, não iniciadas ou suspensas continuam fazendo parte
+	// da visão do portfólio. Apenas concluídas e arquivadas deixam de compor
+	// os gráficos operacionais por padrão; filtros explícitos ainda permitem
+	// consultá-las.
+	return status !== "DONE" && status !== "IGNORED";
 }

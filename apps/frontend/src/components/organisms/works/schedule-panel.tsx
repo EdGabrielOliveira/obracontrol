@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Calendar, CalendarPlus, Plus } from "lucide-react";
+import { Calendar, CalendarPlus } from "lucide-react";
 import { useState } from "react";
 import type { CreateScheduleRevisionInput } from "@/api/schedule";
 import { EmptyStateCard } from "@/components/atoms/empty-state-card";
@@ -24,7 +24,7 @@ export function isReplanningEligible(
 	item: Pick<ScheduleItem, "plannedEnd" | "completionPercentage">,
 	referenceDate = new Date(),
 ) {
-	if (!item.plannedEnd || item.completionPercentage >= 100) return false;
+	if (!item.plannedEnd || item.completionPercentage >= 1) return false;
 	const plannedEnd = new Date(item.plannedEnd);
 	if (Number.isNaN(plannedEnd.getTime())) return false;
 	return (

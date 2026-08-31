@@ -92,8 +92,8 @@ const costColumnHelper = createColumnHelper<LegacyActualCost>();
 export const Route = createFileRoute("/app/obras/$workId/custos/")({
 	validateSearch: costFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
-	loader: async ({ params, deps }) => {
-		await Promise.allSettled([
+	loader: ({ params, deps }) => {
+		void Promise.allSettled([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costsList(
 					params.workId,
@@ -108,7 +108,8 @@ export const Route = createFileRoute("/app/obras/$workId/custos/")({
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workSupplierKeys.list(params.workId),

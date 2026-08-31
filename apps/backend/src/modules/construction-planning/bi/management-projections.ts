@@ -25,11 +25,12 @@ function measuredValueForItem(
 	measurement: NonNullable<
 		WorkMetricsSnapshot["input"]["measurements"]
 	>[number],
+	bdiFactor: number,
 ) {
-	const totalCost = toFiniteNumber(item.totalCost);
+	const totalCost = toFiniteNumber(item.totalCost) * bdiFactor;
 
 	if (measurement.measuredValueAccumulated != null) {
-		return toFiniteNumber(measurement.measuredValueAccumulated);
+		return toFiniteNumber(measurement.measuredValueAccumulated) * bdiFactor;
 	}
 
 	if (measurement.measuredPercentageAccumulated != null) {
@@ -57,6 +58,8 @@ export function projectPhysicalFinancialSchedule(
 	const measurements = snapshot.input.measurements ?? [];
 	const baselines = snapshot.input.baselineSchedules ?? [];
 	const actualCosts = snapshot.input.actualCosts ?? [];
+	const bdiFactor =
+		1 + Math.max(0, toFiniteNumber(snapshot.input.bdiPercentage)) / 100;
 	const allMonths = new Set<string>();
 
 	for (const baseline of baselines) {
@@ -100,6 +103,7 @@ export function projectPhysicalFinancialSchedule(
 						) {
 							planned +=
 								toFiniteNumber(item.totalCost) *
+								bdiFactor *
 								toFiniteNumber(baseline.plannedWeight);
 						}
 					}
@@ -109,7 +113,7 @@ export function projectPhysicalFinancialSchedule(
 						if (periodKeyOf(measurement.measurementDate, period) !== month)
 							continue;
 						if (!itemKeyMatches(item, measurement)) continue;
-						measured += measuredValueForItem(item, measurement);
+						measured += measuredValueForItem(item, measurement, bdiFactor);
 					}
 				}
 
@@ -236,7 +240,10 @@ export function projectWorkReport(
 		},
 		measurements: {
 			total: roundCurrency(metrics.earnedValue),
-			count: snapshot.manualMeasurements.length,
+			count:
+				(snapshot.input.measurements?.length ?? 0) > 0
+					? (snapshot.input.measurements?.length ?? 0)
+					: snapshot.manualMeasurements.length,
 			percentage: metrics.measuredPercentage,
 		},
 		costs: {

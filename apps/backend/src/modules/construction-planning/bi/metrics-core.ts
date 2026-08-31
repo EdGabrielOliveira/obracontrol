@@ -50,6 +50,7 @@ export type WorkMetricInput = {
 	createdAt: Date;
 	lastImportAt: Date | null;
 	areaM2?: number | null;
+	bdiPercentage?: number | Decimal | null;
 };
 
 export type MetricBaselineScheduleInput = {
@@ -69,6 +70,7 @@ export type MetricMeasurementInput = {
 	index?: string | null;
 	measurementDate?: Date | null;
 	measuredValueAccumulated?: number | Decimal | null;
+	measuredValue?: number | Decimal | null;
 	measuredPercentageAccumulated?: number | Decimal | null;
 	measuredQuantityAccumulated?: number | Decimal | null;
 };
@@ -143,6 +145,9 @@ export type ItemMetric = MetricItemInput & {
 export type WorkMetrics = {
 	dataDate: string;
 	activeBudget: number;
+	directBudget: number;
+	bdiPercentage: number;
+	bdiValue: number;
 	ignoredBudget: number;
 	suspendedBudget: number;
 	plannedBudget: number;
@@ -384,10 +389,29 @@ export function calculateWorkMetrics(
 	actualCosts: MetricActualCostInput[] = [],
 	asOf?: Date,
 ): WorkMetrics {
-	const dataDate = asOf ?? getDataDate(work);
-	const itemMetrics = items.map((item) =>
+	// The live view is always evaluated at today's date. Historical views pass
+	// an explicit asOf date and are therefore deterministic and reproducible.
+	const dataDate = asOf ?? new Date();
+	const rawItemMetrics = items.map((item) =>
 		calculateItemMetrics(item, dataDate, baselineSchedules, measurements),
 	);
+	const directBudget = rawItemMetrics.reduce(
+		(sum, item) => sum + item.activeBudget,
+		0,
+	);
+	const bdiPercentage = Math.max(0, toNum(work.bdiPercentage ?? 0));
+	const bdiFactor = bdiPercentage / 100;
+	const itemMetrics = rawItemMetrics.map((item) => {
+		if (!item.isBudgetItem || item.isIgnored || directBudget <= 0) return item;
+		const factor = 1 + bdiFactor;
+		return {
+			...item,
+			totalCost: item.totalCost * factor,
+			activeBudget: item.activeBudget * factor,
+			plannedValue: item.plannedValue * factor,
+			earnedValue: item.earnedValue * factor,
+		};
+	});
 	const activeBudget = itemMetrics.reduce(
 		(sum, item) => sum + item.activeBudget,
 		0,
@@ -520,6 +544,9 @@ export function calculateWorkMetrics(
 	return {
 		dataDate: dataDate.toISOString(),
 		activeBudget,
+		directBudget,
+		bdiPercentage,
+		bdiValue: activeBudget - directBudget,
 		ignoredBudget,
 		suspendedBudget,
 		plannedBudget,

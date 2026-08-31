@@ -24,8 +24,8 @@ import { useBreadcrumb } from "@/lib/use-breadcrumb";
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/multicentros/")({
 	beforeLoad: requireManagementAccess,
-	loader: async ({ params }) => {
-		await Promise.all([
+	loader: ({ params }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: organizationKeys.detail(params.orgId),
 				queryFn: () => getOrganization(params.orgId),
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/multicentros/")({
 				queryKey: biKeys.overview(params.orgId),
 				queryFn: () => getOrganizationBI(params.orgId),
 			}),
-		]);
+		]).catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

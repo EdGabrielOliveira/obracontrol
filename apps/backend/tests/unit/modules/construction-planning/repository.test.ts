@@ -18,6 +18,7 @@ const scheduleVersionCount = mock(async (): Promise<number> => 0);
 const measurementCount = mock(async (): Promise<number> => 0);
 const supplierLinkCount = mock(async (): Promise<number> => 0);
 const workMeasurementCount = mock(async (): Promise<number> => 0);
+const workMeasurementFindMany = mock(async (): Promise<unknown[]> => []);
 const contractCount = mock(async (): Promise<number> => 0);
 const membershipCount = mock(async (): Promise<number> => 0);
 const photoReportCount = mock(async (): Promise<number> => 0);
@@ -77,6 +78,7 @@ const userFindUnique = mock(async (): Promise<unknown | null> => null);
 const workMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 const costCenterMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 const organizationMembershipFindMany = mock(async (): Promise<unknown[]> => []);
+const companyMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 const transaction = mock(
 	async (callback: (tx: unknown) => Promise<unknown>): Promise<unknown> =>
 		callback(tx),
@@ -234,6 +236,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		},
 		workMeasurement: {
 			count: workMeasurementCount,
+			findMany: workMeasurementFindMany,
 		},
 		contract: {
 			count: contractCount,
@@ -264,6 +267,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		organizationMembership: {
 			findMany: organizationMembershipFindMany,
 		},
+		companyMembership: { findMany: companyMembershipFindMany },
 	},
 }));
 
@@ -1475,6 +1479,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		},
 		workMeasurement: {
 			count: workMeasurementCount,
+			findMany: workMeasurementFindMany,
 		},
 		contract: {
 			count: contractCount,
@@ -1504,6 +1509,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		organizationMembership: {
 			findMany: organizationMembershipFindMany,
 		},
+		companyMembership: { findMany: companyMembershipFindMany },
 	},
 }));
 describe("getWorksByCostCenter", () => {

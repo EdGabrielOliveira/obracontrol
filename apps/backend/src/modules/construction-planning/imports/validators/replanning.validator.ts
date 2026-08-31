@@ -110,7 +110,7 @@ export function normalizeScheduleRevisions(
 					plannedEnd: baseline.plannedEnd
 						? new Date(String(baseline.plannedEnd))
 						: null,
-					completionPercentage: completed ? 100 : 0,
+					completionPercentage: completed ? 1 : 0,
 				},
 				new Date(),
 			)

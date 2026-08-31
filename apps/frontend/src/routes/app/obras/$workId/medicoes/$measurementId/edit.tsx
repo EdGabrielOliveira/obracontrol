@@ -32,7 +32,8 @@ export const Route = createFileRoute(
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.budget(params.workId),
-				queryFn: () => getBudgetItems(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
 			}),
 		]);
 	},
@@ -57,7 +58,8 @@ function RouteComponent() {
 	});
 	const budgetQuery = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId),
+		queryFn: () =>
+			getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const coveragesQuery = useQuery({
 		queryKey: measurementCoverageKeys.list(workId),

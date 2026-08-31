@@ -1,11 +1,9 @@
 import { ConstructionError } from "../../../lib/errors";
-import { validateStatusTransition } from "../../../lib/status-machine";
 import * as workRepository from "../repository";
-import type { ConstructionWorksFilter } from "../schema";
 import {
-	normalizeWorkOperationalStatus,
-	WORK_OPERATIONAL_TRANSITIONS,
-} from "./work-operational-status";
+	type ConstructionWorksFilter,
+	constructionItemStatusEnum,
+} from "../schema";
 
 type WorkResult = Record<string, unknown>;
 type WorkRepository = Omit<
@@ -25,6 +23,15 @@ type WorkRepository = Omit<
 		workspaceId?: string | null,
 	) => Promise<WorkResult | null>;
 };
+
+function assertValidOperationalStatus(value: string): void {
+	if (constructionItemStatusEnum.safeParse(value).success) return;
+	throw new ConstructionError(
+		"INVALID_STATUS_TRANSITION",
+		"Status operacional invalido",
+		422,
+	);
+}
 
 export type StructuredAddressInput = {
 	zipCode: string;
@@ -157,7 +164,11 @@ export class ConstructionWorkService {
 		return this.repository.listWorks(ownerId, filter);
 	}
 
-	async get(ownerId: string, workId: string, ctx?: { workspaceId?: string | null }) {
+	async get(
+		ownerId: string,
+		workId: string,
+		ctx?: { workspaceId?: string | null },
+	) {
 		const work = ctx?.workspaceId
 			? await this.repository.getWorkById(ownerId, workId, ctx.workspaceId)
 			: await this.repository.getWorkById(ownerId, workId);
@@ -179,7 +190,11 @@ export class ConstructionWorkService {
 		if (input.plannedStart && input.plannedEnd) {
 			const start = new Date(input.plannedStart);
 			const end = new Date(input.plannedEnd);
-			if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+			if (
+				Number.isNaN(start.getTime()) ||
+				Number.isNaN(end.getTime()) ||
+				end < start
+			) {
 				throw new ConstructionError(
 					"INVALID_DATE_RANGE",
 					"A data final deve ser igual ou posterior à data inicial",
@@ -208,6 +223,7 @@ export class ConstructionWorkService {
 		}
 		let expectedOperationalStatus: string | undefined;
 		if (input.operationalStatus !== undefined) {
+			assertValidOperationalStatus(input.operationalStatus);
 			if (ctx?.role === "SUPERVISOR") {
 				throw new ConstructionError(
 					"FORBIDDEN",
@@ -221,18 +237,10 @@ export class ConstructionWorkService {
 			if (!current) {
 				throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 			}
-			const persistedStatus =
+			expectedOperationalStatus =
 				(
 					current as { operationalStatus?: string | null }
 				).operationalStatus?.trim() || "NOT_STARTED";
-			const currentStatus = normalizeWorkOperationalStatus(persistedStatus);
-			expectedOperationalStatus = persistedStatus;
-			validateStatusTransition(
-				"Obra",
-				WORK_OPERATIONAL_TRANSITIONS,
-				currentStatus,
-				input.operationalStatus,
-			);
 			if (
 				(input.operationalStatus === "SUSPENDED" ||
 					input.operationalStatus === "IGNORED") &&
