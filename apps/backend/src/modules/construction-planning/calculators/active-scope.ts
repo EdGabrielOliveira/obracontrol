@@ -2,6 +2,21 @@ import type { Prisma } from "@prisma/client";
 import { mapSequentialBatches } from "../../../lib/map-sequential-batches";
 import { prisma } from "../../../lib/prisma";
 
+export async function getActualCostImportIds(
+	ownerId: string,
+	workId: string,
+): Promise<string[]> {
+	const importedCosts = await prisma.constructionActualCost.findMany({
+		where: { ownerId, workId, importId: { not: null } },
+		select: { importId: true },
+	});
+	return [
+		...new Set(
+			importedCosts.flatMap((cost) => (cost.importId ? [cost.importId] : [])),
+		),
+	];
+}
+
 export function buildActiveImportWhere(
 	ownerId: string,
 	workId: string,
@@ -108,10 +123,15 @@ export async function loadActiveWorkChildren(
 		...(activeImportWhere ? [activeImportWhere] : []),
 		{ ownerId, workId, importId: null },
 	];
+	const actualCostImportIds = await getActualCostImportIds(ownerId, workId);
 	const measurementConditions =
 		baseOperationalConditions as Prisma.ConstructionMeasurementWhereInput[];
-	const costConditions =
-		baseOperationalConditions as Prisma.ConstructionActualCostWhereInput[];
+	const costConditions = [
+		...baseOperationalConditions,
+		...(actualCostImportIds.length > 0
+			? [{ ownerId, workId, importId: { in: actualCostImportIds } }]
+			: []),
+	] as Prisma.ConstructionActualCostWhereInput[];
 	const batchingIds = activeItemIds.length > 0 ? activeItemIds : ["__none__"];
 	const operationalBatches = await mapSequentialBatches(
 		batchingIds,

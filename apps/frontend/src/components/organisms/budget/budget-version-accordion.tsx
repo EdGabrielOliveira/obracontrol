@@ -3,8 +3,11 @@ import {
 	BadgeCheck,
 	ChevronDown,
 	ChevronRight,
+	ChevronsDownUp,
+	ChevronsUpDown,
 	FileClock,
 	Plus,
+	Search,
 	Send,
 } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
@@ -52,7 +55,8 @@ type Props = {
 };
 
 function versionKind(version: BudgetVersionSummary) {
-	return version.kind === "ADITIVO" || version.sourceVersionId
+	return version.kind === "ADITIVO" ||
+		typeof version.sourceVersionId === "string"
 		? "Aditivo"
 		: "Original";
 }
@@ -152,29 +156,70 @@ function VersionSummary({
 	version: BudgetVersionSummary;
 	detail: BudgetVersionDetail | null;
 }) {
+	const isAmendment =
+		version.kind === "ADITIVO" || typeof version.sourceVersionId === "string";
+
 	return (
-		<div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+		<div
+			className={
+				isAmendment
+					? "grid gap-2 text-xs text-muted-foreground sm:grid-cols-4"
+					: "grid gap-2 text-xs text-muted-foreground"
+			}
+		>
 			<span>
 				Total:{" "}
 				{formatCurrency(version.totalCost ?? detail?.totals.totalCost ?? 0)}
 			</span>
-			<span>
-				Acréscimo:{" "}
-				{version.acrescimoBruto == null
-					? "-"
-					: formatCurrency(version.acrescimoBruto)}
-			</span>
-			<span>
-				Supressão:{" "}
-				{version.supressao == null ? "-" : formatCurrency(version.supressao)}
-			</span>
-			<span>
-				Impacto:{" "}
-				{version.impactoLiquido == null
-					? "-"
-					: formatCurrency(version.impactoLiquido)}
-			</span>
+			{isAmendment ? (
+				<>
+					<span>
+						Acréscimo:{" "}
+						{version.acrescimoBruto == null
+							? "-"
+							: formatCurrency(version.acrescimoBruto)}
+					</span>
+					<span>
+						Supressão:{" "}
+						{version.supressao == null
+							? "-"
+							: formatCurrency(version.supressao)}
+					</span>
+					<span>
+						Impacto:{" "}
+						{version.impactoLiquido == null
+							? "-"
+							: formatCurrency(version.impactoLiquido)}
+					</span>
+				</>
+			) : null}
 		</div>
+	);
+}
+
+function filterVersionTree(
+	items: VersionItemNode[],
+	query: string,
+): VersionItemNode[] {
+	const normalizedQuery = query.trim().toLocaleLowerCase("pt-BR");
+	if (!normalizedQuery) return items;
+
+	return items.flatMap((item) => {
+		const matches = `${item.index} ${item.description}`
+			.toLocaleLowerCase("pt-BR")
+			.includes(normalizedQuery);
+		const children = filterVersionTree(item.children, query);
+		return matches || children.length > 0
+			? [{ ...item, children: matches ? item.children : children }]
+			: [];
+	});
+}
+
+function getExpandableIds(items: VersionItemNode[]): string[] {
+	return items.flatMap((item) =>
+		item.children.length > 0
+			? [item.id, ...getExpandableIds(item.children)]
+			: [],
 	);
 }
 
@@ -231,7 +276,13 @@ function VersionItems({
 	const sourceByIndex = new Map(
 		(sourceDetail?.items ?? []).map((item) => [item.index, item]),
 	);
-	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+	const [expandedIds, setExpandedIds] = useState<Set<string>>(
+		() =>
+			new Set(
+				roots.filter((item) => item.children.length > 0).map((item) => item.id),
+			),
+	);
+	const [searchQuery, setSearchQuery] = useState("");
 	const toggleExpand = useCallback((id: string) => {
 		setExpandedIds((previous) => {
 			const next = new Set(previous);
@@ -240,11 +291,17 @@ function VersionItems({
 			return next;
 		});
 	}, []);
+	const expandAll = useCallback(() => {
+		setExpandedIds(new Set(getExpandableIds(roots)));
+	}, [roots]);
+	const collapseAll = useCallback(() => setExpandedIds(new Set()), []);
+	const visibleRoots = filterVersionTree(roots, searchQuery);
 
 	const renderRows = (items: VersionItemNode[], depth: number): ReactNode[] =>
 		items.flatMap((item) => {
 			const hasChildren = item.children.length > 0;
-			const isExpanded = expandedIds.has(item.id);
+			const isExpanded =
+				expandedIds.has(item.id) || searchQuery.trim().length > 0;
 			const previous = sourceByIndex.get(item.index);
 			const aggregate = aggregatesByIndex.get(item.index);
 			const previousAggregate = sourceAggregatesByIndex.get(item.index);
@@ -252,7 +309,7 @@ function VersionItems({
 
 			const rows: ReactNode[] = [
 				<TableRow key={item.id} className={depth === 0 ? "bg-muted/50" : ""}>
-					<TableCell className="w-10">
+					<TableCell className="w-12 p-1">
 						<span
 							style={{ paddingLeft: `${depth * 1.5}rem` }}
 							className="flex items-center"
@@ -261,13 +318,13 @@ function VersionItems({
 								<button
 									type="button"
 									onClick={() => toggleExpand(item.id)}
-									className="rounded p-0.5 transition-colors"
+									className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									aria-label={`${isExpanded ? "Recolher" : "Expandir"} ${item.description}`}
 								>
 									{isExpanded ? (
-										<ChevronDown className="h-3.5 w-3.5 text-primary" />
+										<ChevronDown className="h-4 w-4 text-primary" />
 									) : (
-										<ChevronRight className="h-3.5 w-3.5 text-primary" />
+										<ChevronRight className="h-4 w-4 text-primary" />
 									)}
 								</button>
 							) : (
@@ -313,34 +370,85 @@ function VersionItems({
 		});
 
 	return (
-		<div className="overflow-x-auto">
-			<Table>
-				<TableHeader>
-					<TableRow>
-						<TableHead className="w-10" />
-						<TableHead>Índice</TableHead>
-						<TableHead>Descrição</TableHead>
-						<TableHead>Unidade</TableHead>
-						<TableHead className="text-right">Preço unitário</TableHead>
-						<TableHead className="text-right">Quantidade</TableHead>
-						<TableHead className="text-right">Valor total</TableHead>
-					</TableRow>
-				</TableHeader>
-				<TableBody>
-					{roots.length === 0 ? (
+		<div className="space-y-3">
+			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+				<div className="relative min-w-0 flex-1 sm:max-w-md">
+					<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						value={searchQuery}
+						onChange={(event) => setSearchQuery(event.target.value)}
+						placeholder="Buscar por índice ou descrição"
+						aria-label="Buscar itens do orçamento"
+						className="h-10 rounded-xl pl-9"
+					/>
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="mr-1 text-xs text-muted-foreground">
+						{visibleRoots.length} etapa{visibleRoots.length === 1 ? "" : "s"}
+					</span>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="rounded-xl"
+						onClick={expandAll}
+						title="Expandir todas as etapas"
+					>
+						<ChevronsDownUp className="h-4 w-4" />
+						<span className="hidden sm:inline">Expandir tudo</span>
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						className="rounded-xl"
+						onClick={collapseAll}
+						title="Recolher todas as etapas"
+					>
+						<ChevronsUpDown className="h-4 w-4" />
+						<span className="hidden sm:inline">Recolher tudo</span>
+					</Button>
+				</div>
+			</div>
+			<div className="overflow-x-auto">
+				<Table>
+					<TableHeader>
 						<TableRow>
-							<TableCell
-								colSpan={7}
-								className="py-8 text-center text-muted-foreground"
-							>
-								Nenhum item.
-							</TableCell>
+							<TableHead className="w-12" />
+							<TableHead>Índice</TableHead>
+							<TableHead>Descrição</TableHead>
+							<TableHead>Unidade</TableHead>
+							<TableHead className="text-right">Preço unitário</TableHead>
+							<TableHead className="text-right">Quantidade</TableHead>
+							<TableHead className="text-right">Valor total</TableHead>
 						</TableRow>
-					) : (
-						renderRows(roots, 0)
-					)}
-				</TableBody>
-			</Table>
+					</TableHeader>
+					<TableBody>
+						{visibleRoots.length === 0 ? (
+							<TableRow>
+								<TableCell
+									colSpan={7}
+									className="py-12 text-center text-muted-foreground"
+								>
+									<Search className="mx-auto mb-2 h-8 w-8 opacity-30" />
+									<p className="font-medium">
+										{searchQuery
+											? "Nenhum item corresponde à busca."
+											: "Nenhum item nesta versão."}
+									</p>
+									{searchQuery ? (
+										<p className="mt-1 text-xs">
+											Tente buscar por outro índice ou descrição.
+										</p>
+									) : null}
+								</TableCell>
+							</TableRow>
+						) : (
+							renderRows(visibleRoots, 0)
+						)}
+					</TableBody>
+				</Table>
+			</div>
 		</div>
 	);
 }
@@ -403,18 +511,28 @@ export function BudgetVersionAccordion({
 										<div className="min-w-0 space-y-2 text-left">
 											<div className="flex flex-wrap items-center gap-2">
 												<span className="font-medium">
-													{version.index} - Orçamento inicial
+													{version.index} -{" "}
+													{version.label ||
+														(versionKind(version) === "Aditivo"
+															? "Aditivo"
+															: "Orçamento inicial")}
 												</span>
-												<Badge variant="outline">{versionKind(version)}</Badge>
+												{versionKind(version) === "Aditivo" ? (
+													<Badge variant="outline">Aditivo</Badge>
+												) : null}
 												<StatusBadge
 													status={version.status}
 													map={BUDGET_VERSION_STATUS_MAP}
 												/>
-												{version.isActive ? (
-													<BadgeCheck
-														className="h-4 w-4 text-primary"
-														aria-label="Versão atual"
-													/>
+												{version.isActive &&
+												versionKind(version) === "Aditivo" ? (
+													<Badge
+														variant="outline"
+														className="border-primary/25 bg-primary/10 text-primary"
+													>
+														<BadgeCheck className="mr-1 h-3.5 w-3.5" />
+														Em uso
+													</Badge>
 												) : null}
 											</div>
 											<VersionSummary
@@ -430,6 +548,7 @@ export function BudgetVersionAccordion({
 											</p>
 										) : detail ? (
 											<VersionItems
+												key={version.id}
 												version={version}
 												detail={detail}
 												sourceDetail={

@@ -174,29 +174,31 @@ export type ActualCostAllocationInput = z.infer<
 	typeof actualCostAllocationSchema
 >;
 
-export const createActualCostSchema = z
-	.object({
-		costDate: z.string().min(1),
-		budgetVersionItemId: z.string().min(1).optional(),
-		budgetIndex: z.string().optional(),
-		category: actualCostCategorySchema,
-		categoryDetail: z.string().trim().optional(),
-		description: z.string().trim().optional(),
-		amount: z
-			.number()
-			.refine((val) => val !== 0, { message: "O valor não pode ser zero" }),
-		costType: actualCostTypeSchema,
-		sourceDocument: z.string().optional(),
-		supplierId: z.string().min(1).nullable().optional(),
-		supplierName: z.string().optional(),
-		costGroup: z.string().optional(),
-		paymentStatus: z.enum(["PAID", "OPEN"]).default("OPEN"),
-		allocations: z
-			.array(actualCostAllocationSchema)
-			.min(1, "Informe ao menos uma alocação de item de orçamento")
-			.optional(),
-	})
-	.superRefine((data, ctx) => {
+const createActualCostFieldsSchema = z.object({
+	title: z.string().trim().max(200).optional(),
+	costDate: z.string().min(1),
+	budgetVersionItemId: z.string().min(1).optional(),
+	budgetIndex: z.string().optional(),
+	category: actualCostCategorySchema,
+	categoryDetail: z.string().trim().optional(),
+	description: z.string().trim().optional(),
+	amount: z
+		.number()
+		.refine((val) => val !== 0, { message: "O valor não pode ser zero" }),
+	costType: actualCostTypeSchema,
+	sourceDocument: z.string().optional(),
+	supplierId: z.string().min(1).nullable().optional(),
+	supplierName: z.string().optional(),
+	costGroup: z.string().optional(),
+	paymentStatus: z.enum(["PAID", "OPEN"]).default("OPEN"),
+	allocations: z
+		.array(actualCostAllocationSchema)
+		.min(1, "Informe ao menos uma alocação de item de orçamento")
+		.optional(),
+});
+
+export const createActualCostSchema = createActualCostFieldsSchema.superRefine(
+	(data, ctx) => {
 		if (data.costType === "FUTURE" && data.paymentStatus !== "OPEN") {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
@@ -228,9 +230,59 @@ export const createActualCostSchema = z
 				message: "Informe o item da versao vigente ou uma alocacao legada",
 			});
 		}
-	});
+	},
+);
 
 export type CreateActualCostInput = z.infer<typeof createActualCostSchema>;
+
+// A cost is the aggregate shown to the user; each item is a financial line
+// associated with one budget item and keeps its own category and amount.
+export const createCostSchema = z.object({
+	title: z.string().trim().min(1, "Título do custo obrigatório").max(200),
+	items: z
+		.array(
+			createActualCostFieldsSchema
+				.omit({ title: true })
+				.superRefine((data, ctx) => {
+					if (data.costType === "FUTURE" && data.paymentStatus !== "OPEN") {
+						ctx.addIssue({
+							code: z.ZodIssueCode.custom,
+							path: ["paymentStatus"],
+							message:
+								"Custos futuros devem permanecer com pagamento em aberto",
+						});
+					}
+					if (data.category === "OUTROS" && !data.categoryDetail?.trim()) {
+						ctx.addIssue({
+							code: z.ZodIssueCode.custom,
+							path: ["categoryDetail"],
+							message: "Informe a categoria personalizada",
+						});
+					}
+					if (!data.description?.trim()) {
+						ctx.addIssue({
+							code: z.ZodIssueCode.custom,
+							path: ["description"],
+							message: "Descrição do custo obrigatória",
+						});
+					}
+					if (
+						!data.budgetVersionItemId &&
+						(!data.allocations || data.allocations.length === 0)
+					) {
+						ctx.addIssue({
+							code: z.ZodIssueCode.custom,
+							path: ["budgetVersionItemId"],
+							message:
+								"Informe o item da versao vigente ou uma alocacao legada",
+						});
+					}
+				}),
+		)
+		.min(1, "Informe ao menos um item de custo"),
+});
+
+export type CreateCostInput = z.infer<typeof createCostSchema>;
 
 export type ImportActualCostRow = Omit<CreateActualCostInput, "allocations"> & {
 	allocations?: ActualCostAllocationInput[];
@@ -238,6 +290,7 @@ export type ImportActualCostRow = Omit<CreateActualCostInput, "allocations"> & {
 
 export const updateActualCostSchema = z
 	.object({
+		title: z.string().trim().max(200).optional(),
 		costDate: z.string().optional(),
 		budgetVersionItemId: z.string().min(1).optional(),
 		budgetIndex: z.string().optional(),

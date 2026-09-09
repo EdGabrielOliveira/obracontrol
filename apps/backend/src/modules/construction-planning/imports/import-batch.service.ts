@@ -6,7 +6,7 @@ import {
 	type GovernanceMutationGuard,
 } from "../governance-guard";
 import { getWorkOrThrow } from "../repository";
-import type { WorkbookKind } from "../templates/workbook-contracts";
+import { isWorkbookKind } from "../templates/workbook-contracts";
 import type { ImportValidationError, ParsedWorkbookUnified } from "../types";
 import * as importBatchRepository from "./import-batch.repository";
 import type {
@@ -24,6 +24,7 @@ import {
 	DEFAULT_IMPORT_MEMORY_BUDGET,
 	defaultMemoryChecker,
 	importParseSemaphore,
+	readImportBytes,
 } from "./import-parser";
 import * as importRepository from "./import-repository";
 import { importIssueKey } from "./import-row-key";
@@ -39,6 +40,20 @@ export const IMPORT_MODEL_VERSION = "2";
 type SheetRow = {
 	rowNumber: number;
 } & Record<string, unknown>;
+
+function hasStructuralValidationError(errorSummary: unknown): boolean {
+	if (!errorSummary || typeof errorSummary !== "object") return false;
+	const errors = (errorSummary as { errors?: unknown }).errors;
+	return (
+		Array.isArray(errors) &&
+		errors.some(
+			(error) =>
+				typeof error === "object" &&
+				error !== null &&
+				(error as { row?: unknown }).row === undefined,
+		)
+	);
+}
 
 function issuesOf(error: ImportValidationError): ImportPreviewRow["issues"] {
 	return [
@@ -103,6 +118,13 @@ export class ConstructionImportBatchService {
 		actorId = ownerId,
 	): Promise<ImportPreviewPage> {
 		await this.assertContext(ownerId, workId, actorId);
+		if (!isWorkbookKind(input.model)) {
+			throw new ConstructionError(
+				"INVALID_KIND",
+				"Tipo de workbook invalido",
+				400,
+			);
+		}
 
 		if (!input.fileName.toLowerCase().endsWith(".xlsx")) {
 			throw new ConstructionError(
@@ -172,20 +194,16 @@ export class ConstructionImportBatchService {
 			});
 			batchId = created.id;
 
-			const buffer = await readAllChunks(stored.storageKey);
+			const buffer = await readImportBytes(importStorage, stored.storageKey);
 			await this.assertWorkbookShape(buffer);
 			await importParseSemaphore.acquire();
 			parsing = true;
 
-			const workbook = parseWorkbookByKind(
-				buffer,
-				input.fileName,
-				input.model as WorkbookKind,
-			);
+			const workbook = parseWorkbookByKind(buffer, input.fileName, input.model);
 			assertParsedWorkbookLimits(workbook);
 			const validation = validateWorkbookByKind(
 				workbook,
-				input.model as WorkbookKind,
+				input.model,
 				input.model === "medicao-obra"
 					? {
 							measurementBudgetIndexes:
@@ -292,6 +310,13 @@ export class ConstructionImportBatchService {
 				404,
 			);
 		}
+		if (hasStructuralValidationError(batch.errorSummary)) {
+			throw new ConstructionError(
+				"IMPORT_MODEL_INVALID",
+				"Planilha rejeitada: o arquivo nao segue o modelo padrao da plataforma",
+				422,
+			);
+		}
 		if (batch.status !== "READY" || batch.expiresAt <= new Date()) {
 			throw new ConstructionError(
 				"IMPORT_BATCH_NOT_READY",
@@ -351,18 +376,23 @@ export class ConstructionImportBatchService {
 				idempotencyKey: input.idempotencyKey,
 			});
 		} catch (error) {
-			await importBatchRepository
-				.updateImportBatch(input.batchId, {
-					status: "FAILED",
-					errorSummary: {
-						reason: "CONFIRM_FAILED",
-						message:
-							error instanceof Error
-								? error.message.slice(0, 500)
-								: "Falha na confirmacao",
-					},
-				})
-				.catch(() => undefined);
+			// Erros de validação/conflito são corrigíveis pelo usuário e o preview
+			// deve continuar disponível para uma nova tentativa. Só falhas reais de
+			// infraestrutura tornam o lote irrecuperável.
+			if (!(error instanceof ConstructionError) || error.status >= 500) {
+				await importBatchRepository
+					.updateImportBatch(input.batchId, {
+						status: "FAILED",
+						errorSummary: {
+							reason: "CONFIRM_FAILED",
+							message:
+								error instanceof Error
+									? error.message.slice(0, 500)
+									: "Falha na confirmacao",
+						},
+					})
+					.catch(() => undefined);
+			}
 			throw error;
 		}
 
@@ -465,6 +495,7 @@ export class ConstructionImportBatchService {
 			batchId: batch.id,
 			batchVersion: batch.batchVersion,
 			model: batch.model,
+			title: batch.title,
 			version: batch.version,
 			fileSha256: batch.fileSha256,
 			expiresAt: batch.expiresAt.toISOString(),
@@ -547,12 +578,15 @@ export class ConstructionImportBatchService {
 				404,
 			);
 		}
-		const buffer = await readAllChunks(batch.storageKey);
-		return buildRejectedSheet(
-			buffer,
-			batch.fileName,
-			batch.model as WorkbookKind,
-		);
+		const buffer = await readImportBytes(importStorage, batch.storageKey);
+		if (!isWorkbookKind(batch.model)) {
+			throw new ConstructionError(
+				"INVALID_KIND",
+				"Tipo de workbook invalido",
+				400,
+			);
+		}
+		return buildRejectedSheet(buffer, batch.fileName, batch.model);
 	}
 
 	/**
@@ -666,22 +700,6 @@ function toPreviewRow(row: {
 			? (row.issues as ImportPreviewRow["issues"])
 			: [],
 	};
-}
-
-async function readAllChunks(storageKey: string): Promise<Uint8Array> {
-	const parts: Uint8Array[] = [];
-	let total = 0;
-	for await (const part of importStorage.chunks(storageKey)) {
-		parts.push(part);
-		total += part.length;
-	}
-	const joined = new Uint8Array(total);
-	let offset = 0;
-	for (const part of parts) {
-		joined.set(part, offset);
-		offset += part.length;
-	}
-	return joined;
 }
 
 export const constructionImportBatchService =

@@ -451,6 +451,7 @@ function RouteComponent() {
 					description="Contratos da obra"
 				/>
 				{contractKpis}
+
 				<EmptyStateCard
 					icon={FolderOpen}
 					title="Nenhum contrato"
@@ -462,6 +463,7 @@ function RouteComponent() {
 						</Button>
 					}
 				/>
+
 				<ContractCreationModeDialog
 					open={creationModeOpen}
 					onOpenChange={setCreationModeOpen}

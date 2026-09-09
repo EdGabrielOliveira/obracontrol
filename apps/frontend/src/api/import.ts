@@ -107,6 +107,7 @@ export async function importWorkbookKind(
 
 export type ImportBatchUploadOptions = {
 	model?: ConstructionTemplateKind;
+	title?: string;
 	reprocessOfId?: string;
 	reason?: string;
 };
@@ -119,6 +120,7 @@ export async function uploadImportBatch(
 	const formData = new FormData();
 	formData.append("file", file);
 	if (options.model) formData.append("model", options.model);
+	if (options.title?.trim()) formData.append("title", options.title.trim());
 	if (options.reprocessOfId) {
 		formData.append("reprocessOfId", options.reprocessOfId);
 	}

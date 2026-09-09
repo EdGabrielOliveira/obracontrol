@@ -7,6 +7,7 @@ import {
 	CartesianGrid,
 	Cell,
 	Legend,
+	ReferenceLine,
 	ResponsiveContainer,
 	Tooltip,
 	XAxis,
@@ -15,6 +16,7 @@ import {
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import {
 	CHART_COLORS_ARRAY,
+	CHART_STATUS_COLORS,
 	CHART_THEME,
 	DEFAULT_MARGIN,
 } from "@/components/organisms/charts/chart-config";
@@ -25,11 +27,6 @@ import { formatCurrency, formatCurrencyTick } from "@/utils/format";
 
 type MeasurementDetailChartsProps = {
 	items: MeasurementTreeItem[];
-	totals: {
-		current: { measuredValue: number };
-		accumulated: { measuredValue: number };
-		balance: { value: number };
-	} | null;
 	budgetSummary: {
 		totalBudgeted: number;
 		totalMeasured: number;
@@ -42,32 +39,46 @@ export function MeasurementDetailCharts({
 	budgetSummary,
 }: MeasurementDetailChartsProps) {
 	const itemsList = items ?? [];
+	const flattenedItems = flattenMeasurementItems(itemsList);
 
-	const topItems = [...itemsList]
+	const topItems = flattenedItems
+		.filter((item) => item.children.length === 0)
 		.sort((a, b) => b.measuredAccumulated.value - a.measuredAccumulated.value)
 		.slice(0, 10);
 
 	const stageData = itemsList
-		.filter((item) => item.children && item.children.length > 0)
+		.filter((item) => !item.parentId)
 		.map((stage) => ({
-			name: stage.description.slice(0, 30),
+			name: `${stage.index} · ${stage.description}`.slice(0, 34),
 			orcado: stage.totalCost,
 			medido: stage.measuredAccumulated.value,
-			saldo: stage.balanceToMeasure.value,
 		}));
 
 	const topItemsData = topItems.map((item) => ({
-		name: (item.description || "").slice(0, 35),
+		name: `${item.index} · ${item.description || "Item sem descrição"}`.slice(
+			0,
+			38,
+		),
 		valor: item.measuredAccumulated.value,
 	}));
 
 	const balanceData = itemsList
-		.filter((item) => !item.parentId || item.children?.length > 0)
+		.filter((item) => !item.parentId)
 		.map((stage) => ({
-			name: (stage.description || "").slice(0, 25),
-			saldo: stage.balanceToMeasure.value,
+			name: `${stage.index} · ${stage.description || "Etapa sem descrição"}`,
+			saldo: Number(stage.balanceToMeasure.value),
 		}))
-		.filter((d) => d.saldo !== 0);
+		.filter((entry) => Number.isFinite(entry.saldo) && entry.saldo !== 0)
+		.sort((a, b) => Math.abs(b.saldo) - Math.abs(a.saldo))
+		.slice(0, 12);
+	const balanceMin = Math.min(0, ...balanceData.map((entry) => entry.saldo));
+	const balanceMax = Math.max(0, ...balanceData.map((entry) => entry.saldo));
+	const balancePadding = Math.max(Math.abs(balanceMax - balanceMin) * 0.1, 1);
+	const balanceDomain: [number, number] = [
+		balanceMin - balancePadding,
+		balanceMax + balancePadding,
+	];
+	const overrunCount = balanceData.filter((entry) => entry.saldo < 0).length;
 
 	const accumulatedEvolutionData = [
 		{ name: "Orçado", valor: budgetSummary.totalBudgeted },
@@ -312,61 +323,99 @@ export function MeasurementDetailCharts({
 					<CardHeaderWithIcon
 						icon={BarChart3}
 						title="Saldo por Etapa"
-						description="Saldo restante por etapa."
+						description="Valor ainda disponível para medir; valores negativos indicam excedente."
 					/>
 					<CardContent>
-						<ResponsiveContainer width="100%" height={250}>
-							<BarChart data={balanceData} margin={DEFAULT_MARGIN}>
-								<CartesianGrid
-									strokeDasharray="3 3"
-									stroke={CHART_THEME.gridColor}
-									vertical={false}
-								/>
-								<XAxis
-									dataKey="name"
-									tick={{ fill: CHART_THEME.textColor, fontSize: 11 }}
-									axisLine={false}
-									tickLine={false}
-									angle={-15}
-									textAnchor="end"
-									height={60}
-								/>
-								<YAxis
-									tickFormatter={formatCurrencyTick}
-									tick={{ fill: CHART_THEME.textColor, fontSize: 11 }}
-									axisLine={false}
-									tickLine={false}
-								/>
-								<Tooltip
-									content={
-										<ChartTooltip
-											formatter={(v: number) => [formatCurrency(v), ""]}
-										/>
-									}
-								/>
-								<Bar
-									dataKey="saldo"
-									fill={CHART_COLORS_ARRAY[4]}
-									radius={[4, 4, 0, 0]}
-									maxBarSize={32}
-									name="Saldo"
+						<div role="img" aria-label="Gráfico de saldo restante por etapa">
+							<ResponsiveContainer
+								width="100%"
+								height={Math.max(260, balanceData.length * 44)}
+							>
+								<BarChart
+									data={balanceData}
+									layout="vertical"
+									margin={{ top: 8, right: 12, bottom: 8, left: 0 }}
 								>
-									{balanceData.map((entry) => (
-										<Cell
-											key={entry.name}
-											fill={
-												entry.saldo >= 0
-													? CHART_COLORS_ARRAY[0]
-													: "var(--color-destructive)"
-											}
-										/>
-									))}
-								</Bar>
-							</BarChart>
-						</ResponsiveContainer>
+									<CartesianGrid
+										strokeDasharray="3 3"
+										stroke={CHART_THEME.gridColor}
+										horizontal={false}
+									/>
+									<XAxis
+										type="number"
+										domain={balanceDomain}
+										tickFormatter={formatCurrencyTick}
+										tick={{ fill: CHART_THEME.textColor, fontSize: 11 }}
+										axisLine={false}
+										tickLine={false}
+									/>
+									<YAxis
+										dataKey="name"
+										type="category"
+										tick={{ fill: CHART_THEME.textColor, fontSize: 11 }}
+										axisLine={false}
+										tickLine={false}
+										width={220}
+										interval={0}
+									/>
+									<ReferenceLine
+										x={0}
+										stroke={CHART_THEME.textColor}
+										strokeDasharray="4 4"
+										strokeOpacity={0.55}
+									/>
+									<Tooltip
+										content={
+											<ChartTooltip
+												formatter={(v: number) => [formatCurrency(v), ""]}
+											/>
+										}
+									/>
+									<Bar
+										dataKey="saldo"
+										fill={CHART_COLORS_ARRAY[0]}
+										radius={[0, 4, 4, 0]}
+										maxBarSize={28}
+										name="Saldo"
+									>
+										{balanceData.map((entry) => (
+											<Cell
+												key={entry.name}
+												fill={
+													entry.saldo >= 0
+														? CHART_STATUS_COLORS.healthy
+														: CHART_STATUS_COLORS.critical
+												}
+											/>
+										))}
+									</Bar>
+								</BarChart>
+							</ResponsiveContainer>
+						</div>
+						<div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+							<span className="inline-flex items-center gap-2">
+								<span className="h-2.5 w-2.5 rounded-sm bg-primary" />
+								Saldo disponível
+							</span>
+							{overrunCount > 0 && (
+								<span className="inline-flex items-center gap-2">
+									<span className="h-2.5 w-2.5 rounded-sm bg-destructive" />
+									{overrunCount} etapa(s) acima do orçamento
+								</span>
+							)}
+						</div>
 					</CardContent>
 				</Card>
 			)}
 		</div>
 	);
+}
+
+function flattenMeasurementItems(
+	items: MeasurementTreeItem[],
+): MeasurementTreeItem[] {
+	return items.flatMap((item) => [
+		item,
+		...flattenMeasurementItems(item.children),
+	]);
 }

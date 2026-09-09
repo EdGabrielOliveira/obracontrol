@@ -7,17 +7,17 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { getBudgetItems, getCurrentCostBudgetItems } from "@/api/budget";
-import { createActualCost } from "@/api/costs";
+import { createCost } from "@/api/costs";
 import { workKeys, workSupplierKeys } from "@/api/query-keys";
 import { listWorkSuppliers } from "@/api/work-suppliers";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
-import { ActualCostForm } from "@/components/organisms/costs/actual-cost-form";
+import { CostForm } from "@/components/organisms/costs/cost-form";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { queryClient } from "@/lib/query-client";
-import type { ActualCostFormValues } from "@/schemas/costs";
+import type { CostFormValues } from "@/schemas/costs";
 import { getErrorMessage } from "@/utils/api-error";
 import { parseCurrencyToNumber } from "@/utils/currency";
 
@@ -67,17 +67,20 @@ function RouteComponent() {
 		queryFn: () => listWorkSuppliers(workId),
 	});
 	const mutation = useMutation({
-		mutationFn: (values: ActualCostFormValues) =>
-			createActualCost(workId, {
-				budgetVersionItemId: values.budgetVersionItemId,
-				costDate: values.costDate,
-				category: values.category,
-				categoryDetail: values.categoryDetail,
-				description: values.description,
-				amount: parseCurrencyToNumber(values.amount) ?? 0,
-				costType: values.costType,
-				supplierId: values.supplierId || null,
-				paymentStatus: values.paymentStatus,
+		mutationFn: (values: CostFormValues) =>
+			createCost(workId, {
+				title: values.title,
+				items: values.items.map((item) => ({
+					budgetVersionItemId: item.budgetVersionItemId,
+					costDate: item.costDate,
+					category: item.category,
+					categoryDetail: item.categoryDetail,
+					description: item.description,
+					amount: parseCurrencyToNumber(item.amount) ?? 0,
+					costType: item.costType,
+					supplierId: item.supplierId || null,
+					paymentStatus: item.paymentStatus,
+				})),
 			}),
 		onSuccess: () => {
 			toast.success("Custo criado com sucesso!");
@@ -109,12 +112,11 @@ function RouteComponent() {
 			<PageHeader
 				eyebrow="Obra"
 				title="Novo custo"
-				description="Cadastre um custo associado às atividades do orçamento."
+				description="Crie um custo com um ou mais itens associados ao orçamento."
 			/>
 
-			<ActualCostForm
+			<CostForm
 				workId={workId}
-				budgetItems={budget.data?.items}
 				costBudgetItems={costBudget.data}
 				suppliers={suppliers.data}
 				submitting={submitting}

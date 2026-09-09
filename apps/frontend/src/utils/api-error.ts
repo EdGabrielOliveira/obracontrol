@@ -86,6 +86,12 @@ function isApiErrorField(value: unknown): value is ApiErrorField {
 	return typeof field.message === "string";
 }
 
+export function getApiErrorCode(error: unknown): string | undefined {
+	if (!axios.isAxiosError(error) || !error.response?.data) return undefined;
+	const data = error.response.data as ApiErrorResponse;
+	return typeof data.code === "string" ? data.code : undefined;
+}
+
 export function getApiErrorDetails(error: unknown): ApiErrorField[] {
 	if (!axios.isAxiosError(error) || !error.response?.data) return [];
 

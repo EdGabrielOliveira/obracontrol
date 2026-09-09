@@ -205,31 +205,41 @@ describe("generateMedicoesTemplate", () => {
 });
 
 describe("generateCustosTemplate", () => {
-	it("keeps the current separate custos sheet name", () => {
+	it("uses the canonical costs workbook structure", () => {
 		const wb = readWorkbook(generateCustosTemplate());
 
-		expect(wb.SheetNames).toEqual(["Custos"]);
+		expect(wb.SheetNames).toEqual(["Guia", "Custos Realizados"]);
 	});
 
 	it("has title in row 1", () => {
 		const buffer = generateCustosTemplate();
 		const wb = XLSX.read(buffer, { type: "buffer" });
-		const sheet = wb.Sheets[wb.SheetNames[0]];
+		const sheet = wb.Sheets.Guia;
 		const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
 		const row1 = data[0] as string[];
-		expect(row1[0]).toBe("PLANILHA DE CUSTOS REALIZADOS");
+		expect(row1[0]).toBe("Modelo de Importação - ObraControl");
 	});
 
 	it("has cost columns in row 2", () => {
-		expect(getHeaderRow(generateCustosTemplate())).toEqual([
-			"Índice",
-			"Data",
+		const wb = readWorkbook(generateCustosTemplate());
+		const sheet = wb.Sheets["Custos Realizados"];
+		const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+		expect(data[0]).toEqual([
+			"Data do lançamento",
+			"Índice apropriado",
+			"Nome do item do orçamento",
 			"Categoria",
 			"Descrição",
-			"Valor (R$)",
+			"Valor realizado",
 			"Tipo",
-			"Fornecedor",
-			"Status",
+			"Documento origem",
+			"Fornecedor/Favorecido",
+			"Grupo de custo",
+			"Situação do pagamento",
+			"Data de competência",
+			"Data de vencimento",
+			"Data de pagamento",
+			"Número do documento",
 		]);
 	});
 
@@ -250,12 +260,14 @@ describe("generateCustosTemplate", () => {
 		expect(ws["!merges"]?.[0].e.c).toBe(7);
 	});
 
-	it("has no example data rows", () => {
+	it("documents the canonical columns in the guide", () => {
 		const buffer = generateCustosTemplate();
 		const wb = XLSX.read(buffer, { type: "buffer" });
-		const sheet = wb.Sheets[wb.SheetNames[0]];
+		const sheet = wb.Sheets.Guia;
 		const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
-		expect(data.length).toBe(2);
+		expect(
+			data.some((row) => (row as string[])[0] === "Aba: Custos Realizados"),
+		).toBe(true);
 	});
 });
 
@@ -503,7 +515,7 @@ describe("WORKBOOK_DEFINITIONS", () => {
 			"Pagamentos",
 			"Custos Realizados",
 			"Mapa de Cotacao",
-			"Lista de Fornecedores",
+			"Fornecedores",
 		]);
 	});
 
@@ -567,7 +579,7 @@ describe("buildWorkbookTemplate", () => {
 			"Pagamentos",
 			"Custos Realizados",
 			"Mapa de Cotacao",
-			"Lista de Fornecedores",
+			"Fornecedores",
 		]);
 	});
 

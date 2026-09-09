@@ -833,6 +833,7 @@ describe("constructionPlanningController", () => {
 		expect(response.status).toBe(401);
 		expect(await response.json()).toEqual({
 			message: "Login obrigatorio",
+			code: "UNAUTHORIZED",
 			errors: [],
 		});
 		expect(listWorks).not.toHaveBeenCalled();
@@ -998,6 +999,7 @@ describe("constructionPlanningController", () => {
 		expect(response.status).toBe(400);
 		expect(await response.json()).toEqual({
 			message: "Parametros invalidos",
+			code: "INVALID_INPUT",
 			errors: [
 				{
 					field: "status",
@@ -1055,6 +1057,7 @@ describe("constructionPlanningController", () => {
 		expect(response.status).toBe(404);
 		expect(await response.json()).toEqual({
 			message: "Obra nao encontrada",
+			code: "NOT_FOUND",
 			errors: [],
 		});
 		expect(deleteSpy).toHaveBeenCalledWith("owner-1", "missing-work", {

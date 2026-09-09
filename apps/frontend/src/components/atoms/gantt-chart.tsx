@@ -19,6 +19,7 @@ type GanttRow = ScheduleItem & {
 interface GanttChartProps {
 	items: ScheduleItem[];
 	ganttMap: Map<string, GanttItem>;
+	showAmendmentComparison?: boolean;
 }
 
 const ROW_HEIGHT = 40;
@@ -42,6 +43,7 @@ function flattenWithCollapse(
 	items: ScheduleItem[],
 	collapsed: Set<string>,
 	ganttMap: Map<string, GanttItem>,
+	showAmendmentComparison: boolean,
 	depth = 0,
 ): Array<GanttRow & { visible: boolean }> {
 	const result: Array<GanttRow & { visible: boolean }> = [];
@@ -51,7 +53,11 @@ function flattenWithCollapse(
 		const hasChildren = children.length > 0;
 
 		if (isCollapsed && hasChildren) {
-			const childDates = collectChildDates(children, ganttMap);
+			const childDates = collectChildDates(
+				children,
+				ganttMap,
+				showAmendmentComparison,
+			);
 			const avgMeasured = item.completionPercentage;
 
 			result.push({
@@ -74,7 +80,13 @@ function flattenWithCollapse(
 
 		if (hasChildren && !isCollapsed) {
 			result.push(
-				...flattenWithCollapse(children, collapsed, ganttMap, depth + 1),
+				...flattenWithCollapse(
+					children,
+					collapsed,
+					ganttMap,
+					showAmendmentComparison,
+					depth + 1,
+				),
 			);
 		}
 	}
@@ -84,20 +96,25 @@ function flattenWithCollapse(
 function collectChildDates(
 	items: ScheduleItem[],
 	ganttMap: Map<string, GanttItem>,
+	showAmendmentComparison: boolean,
 ): { minStart: string | null; maxEnd: string | null } {
 	let minStart: string | null = null;
 	let maxEnd: string | null = null;
 
 	for (const item of items) {
 		const gantt = ganttMap.get(item.id);
-		const start = gantt?.baselineStart ?? item.plannedStart;
-		const end = gantt?.baselineEnd ?? item.plannedEnd;
+		const start = getScheduleStart(item, gantt, showAmendmentComparison);
+		const end = getScheduleEnd(item, gantt, showAmendmentComparison);
 
 		if (start && (!minStart || start < minStart)) minStart = start;
 		if (end && (!maxEnd || end > maxEnd)) maxEnd = end;
 
 		if (item.children) {
-			const childDates = collectChildDates(item.children, ganttMap);
+			const childDates = collectChildDates(
+				item.children,
+				ganttMap,
+				showAmendmentComparison,
+			);
 			if (childDates.minStart && (!minStart || childDates.minStart < minStart))
 				minStart = childDates.minStart;
 			if (childDates.maxEnd && (!maxEnd || childDates.maxEnd > maxEnd))
@@ -108,18 +125,40 @@ function collectChildDates(
 	return { minStart, maxEnd };
 }
 
+function getScheduleStart(
+	item: ScheduleItem,
+	gantt: GanttItem | undefined,
+	showAmendmentComparison: boolean,
+) {
+	return showAmendmentComparison
+		? (gantt?.baselineStart ?? item.plannedStart)
+		: (item.plannedStart ?? gantt?.baselineStart);
+}
+
+function getScheduleEnd(
+	item: ScheduleItem,
+	gantt: GanttItem | undefined,
+	showAmendmentComparison: boolean,
+) {
+	return showAmendmentComparison
+		? (gantt?.baselineEnd ?? item.plannedEnd)
+		: (item.plannedEnd ?? gantt?.baselineEnd);
+}
+
 function GanttBar({
 	row,
 	timelineStart,
 	dayWidth,
+	showAmendmentComparison,
 }: {
 	row: GanttRow;
 	timelineStart: Date;
 	dayWidth: number;
+	showAmendmentComparison: boolean;
 }) {
 	const gantt = row.gantt;
-	const start = gantt?.baselineStart ?? row.plannedStart;
-	const end = gantt?.baselineEnd ?? row.plannedEnd;
+	const start = getScheduleStart(row, gantt, showAmendmentComparison);
+	const end = getScheduleEnd(row, gantt, showAmendmentComparison);
 	const measured = gantt?.measuredPercentage ?? row.completionPercentage;
 	const status = gantt?.status ?? row.computedStatus;
 	const delayed = gantt?.delayed ?? row.delayed;
@@ -247,9 +286,15 @@ interface GanttTableProps {
 	flatItems: Array<GanttRow & { visible: boolean }>;
 	collapsed: Set<string>;
 	toggleCollapse: (id: string) => void;
+	showAmendmentComparison: boolean;
 }
 
-function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
+function GanttTable({
+	flatItems,
+	collapsed,
+	toggleCollapse,
+	showAmendmentComparison,
+}: GanttTableProps) {
 	return (
 		<div className="shrink-0" style={{ width: 760, minWidth: 760 }}>
 			<div
@@ -261,15 +306,19 @@ function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 				</div>
 				<div className="flex-1 px-3">Descrição</div>
 				<div className="w-16 px-2 text-right">Duração</div>
-				<div className="w-28 px-2 text-right">Início (base)</div>
-				<div className="w-28 px-2 text-right">Fim (base)</div>
+				<div className="w-28 px-2 text-right">
+					{showAmendmentComparison ? "Início (base)" : "Início previsto"}
+				</div>
+				<div className="w-28 px-2 text-right">
+					{showAmendmentComparison ? "Fim (base)" : "Fim previsto"}
+				</div>
 				<div className="w-28 px-2 text-right">Início real</div>
 				<div className="w-28 px-2 text-right">Fim real</div>
 			</div>
 
 			{flatItems.map((row) => {
-				const start = row.gantt?.baselineStart ?? row.plannedStart;
-				const end = row.gantt?.baselineEnd ?? row.plannedEnd;
+				const start = getScheduleStart(row, row.gantt, showAmendmentComparison);
+				const end = getScheduleEnd(row, row.gantt, showAmendmentComparison);
 				const days = start && end ? daysBetween(start, end) : 0;
 				const isStage = row.type === "STAGE";
 				const isCollapsedItem = collapsed.has(row.id);
@@ -348,6 +397,7 @@ interface GanttTimelineProps {
 	flatItems: Array<GanttRow & { visible: boolean }>;
 	showTodayLine: boolean;
 	todayOffset: number;
+	showAmendmentComparison: boolean;
 }
 
 function GanttTimeline({
@@ -358,6 +408,7 @@ function GanttTimeline({
 	flatItems,
 	showTodayLine,
 	todayOffset,
+	showAmendmentComparison,
 }: GanttTimelineProps) {
 	const headerWidths = useMemo(() => {
 		return monthHeaders.map((header) => {
@@ -440,6 +491,7 @@ function GanttTimeline({
 								row={row}
 								timelineStart={timelineStart}
 								dayWidth={dayWidth}
+								showAmendmentComparison={showAmendmentComparison}
 							/>
 						</div>
 					);
@@ -480,7 +532,11 @@ function GanttLegend() {
 	);
 }
 
-export function GanttChart({ items, ganttMap }: GanttChartProps) {
+export function GanttChart({
+	items,
+	ganttMap,
+	showAmendmentComparison = false,
+}: GanttChartProps) {
 	const [zoom, setZoom] = useState(1);
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -497,16 +553,21 @@ export function GanttChart({ items, ganttMap }: GanttChartProps) {
 	};
 
 	const flatItems = useMemo(() => {
-		return flattenWithCollapse(items, collapsed, ganttMap);
-	}, [items, ganttMap, collapsed]);
+		return flattenWithCollapse(
+			items,
+			collapsed,
+			ganttMap,
+			showAmendmentComparison,
+		);
+	}, [items, ganttMap, collapsed, showAmendmentComparison]);
 
 	const { timelineStart, totalDays } = useMemo(() => {
 		let minDate: Date | null = null;
 		let maxDate: Date | null = null;
 
 		for (const row of flatItems) {
-			const start = row.gantt?.baselineStart ?? row.plannedStart;
-			const end = row.gantt?.baselineEnd ?? row.plannedEnd;
+			const start = getScheduleStart(row, row.gantt, showAmendmentComparison);
+			const end = getScheduleEnd(row, row.gantt, showAmendmentComparison);
 			if (start) {
 				const d = new Date(start);
 				if (!minDate || d < minDate) minDate = d;
@@ -600,6 +661,7 @@ export function GanttChart({ items, ganttMap }: GanttChartProps) {
 					flatItems={flatItems}
 					collapsed={collapsed}
 					toggleCollapse={toggleCollapse}
+					showAmendmentComparison={showAmendmentComparison}
 				/>
 
 				<GanttTimeline
@@ -610,6 +672,7 @@ export function GanttChart({ items, ganttMap }: GanttChartProps) {
 					flatItems={flatItems}
 					showTodayLine={showTodayLine}
 					todayOffset={todayOffset}
+					showAmendmentComparison={showAmendmentComparison}
 				/>
 			</div>
 

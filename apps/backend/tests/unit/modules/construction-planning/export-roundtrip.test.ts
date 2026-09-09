@@ -2,6 +2,7 @@
 import * as XLSX from "xlsx";
 import { parseWorkbookByKind } from "../../../../src/modules/construction-planning/imports/parser";
 import { validateWorkbookByKind } from "../../../../src/modules/construction-planning/imports/validator";
+import { parseSupplierWorkbook } from "../../../../src/modules/construction-planning/suppliers/supplier-import.service";
 import { buildWorkbookTemplate } from "../../../../src/modules/construction-planning/templates/template-generator";
 import {
 	WORKBOOK_DEFINITIONS,
@@ -109,5 +110,56 @@ describe("export headers round-trip", () => {
 		);
 
 		expect(parsed.actualCostRows).toEqual([]);
+	});
+
+	test("exportacao de fornecedores usa o contrato aceito pelo importador", () => {
+		const supplierDefinition = WORKBOOK_DEFINITIONS.cotacao.sheets.find(
+			(sheet) => sheet.name === "Fornecedores",
+		);
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(
+			workbook,
+			XLSX.utils.aoa_to_sheet([
+				supplierDefinition?.headers ?? [],
+				[
+					"Fornecedor A",
+					"11.222.333/0001-81",
+					"Maria A",
+					"123.456.789-09",
+					"contato@fornecedor.com",
+				],
+			]),
+			"Fornecedores",
+		);
+
+		const parsed = parseSupplierWorkbook(
+			XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+		);
+
+		expect(parsed.errors).toEqual([]);
+		expect(parsed.rows[0]).toMatchObject({
+			name: "Fornecedor A",
+			document: "11222333000181",
+			responsibleName: "Maria A",
+		});
+	});
+
+	test("importador de fornecedores mantém compatibilidade com o nome antigo da aba", () => {
+		const workbook = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(
+			workbook,
+			XLSX.utils.aoa_to_sheet([
+				["Nome da empresa", "CNPJ"],
+				["Fornecedor A", "11.222.333/0001-81"],
+			]),
+			"Lista de Fornecedores",
+		);
+
+		const parsed = parseSupplierWorkbook(
+			XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+		);
+
+		expect(parsed.errors).toEqual([]);
+		expect(parsed.rows).toHaveLength(1);
 	});
 });

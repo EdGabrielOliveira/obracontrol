@@ -275,6 +275,7 @@ export type ActualCostAllocation = {
 export type LegacyActualCost = {
 	id: string;
 	workId: string;
+	title?: string | null;
 	costDate: string | null;
 	budgetIndex: string | null;
 	category: string;

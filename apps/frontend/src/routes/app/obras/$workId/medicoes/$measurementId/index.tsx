@@ -4,7 +4,7 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
-import { FileDown, Info, Layers, Pencil } from "lucide-react";
+import { ArrowLeft, FileDown, Info, Layers, Pencil } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { workKeys } from "@/api/query-keys";
@@ -114,12 +114,27 @@ function RouteComponent() {
 				number={measurement.number}
 				title={measurement.title}
 				date={measurement.date}
+				workLabel={`${data.work.code} · ${data.work.name}`}
 				totalMeasuredValue={measurement.totalMeasuredValue}
 				currentMeasuredValue={measurement.currentMeasuredValue}
+				accumulatedMeasuredValue={measurement.accumulatedMeasuredValue}
 				discountValue={measurement.discountValue}
 				retentionValue={measurement.retentionValue}
 				actions={
-					<>
+					<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() =>
+								navigate({
+									to: "/app/obras/$workId/medicoes",
+									params: { workId },
+								})
+							}
+						>
+							<ArrowLeft className="mr-2 h-4 w-4" />
+							Voltar
+						</Button>
 						<StatusBadge
 							status={measurement.status ?? "RASCUNHO"}
 							map={MEASUREMENT_STATUS_MAP}
@@ -131,6 +146,7 @@ function RouteComponent() {
 							<Button
 								variant="outline"
 								size="sm"
+								disabled={statusMutation.isPending}
 								onClick={() => setStatusOpen(true)}
 							>
 								Alterar status da medição
@@ -158,7 +174,7 @@ function RouteComponent() {
 							<Pencil className="mr-2 h-4 w-4" />
 							Editar
 						</Button>
-					</>
+					</div>
 				}
 			/>
 			<MeasurementStatusModal
@@ -257,11 +273,7 @@ function RouteComponent() {
 					</CardContent>
 				</Card>
 
-				<MeasurementDetailCharts
-					items={items}
-					totals={totals}
-					budgetSummary={budgetSummary}
-				/>
+				<MeasurementDetailCharts items={items} budgetSummary={budgetSummary} />
 			</div>
 		</PageContainer>
 	);

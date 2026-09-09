@@ -28,26 +28,50 @@ export const actualCostCategorySchema = z.enum([
 	"OUTROS",
 ]);
 
-export const actualCostSchema = z
-	.object({
-		budgetVersionItemId: z.string().min(1, "Item do orçamento obrigatório"),
-		costDate: z.string().min(1, "Data obrigatória"),
-		category: actualCostCategorySchema,
-		categoryDetail: z.string().trim().optional(),
-		description: z.string().trim().min(1, "Descrição obrigatória"),
-		amount: z
-			.string()
-			.trim()
-			.min(1, "Valor obrigatório")
-			.refine((value) => {
-				const normalized = value.replace(/\./g, "").replace(",", ".");
-				const amount = Number(normalized);
-				return Number.isFinite(amount) && amount > 0;
-			}, "O valor deve ser maior que zero"),
-		costType: actualCostTypeSchema,
-		supplierId: z.string().optional(),
-		paymentStatus: z.enum(["PAID", "OPEN"], "Status obrigatório"),
-	})
+const actualCostFieldsSchema = z.object({
+	title: z.string().trim().min(1, "Título obrigatório").max(200),
+	budgetVersionItemId: z.string().min(1, "Item do orçamento obrigatório"),
+	costDate: z.string().min(1, "Data obrigatória"),
+	category: actualCostCategorySchema,
+	categoryDetail: z.string().trim().optional(),
+	description: z.string().trim().min(1, "Descrição obrigatória"),
+	amount: z
+		.string()
+		.trim()
+		.min(1, "Valor obrigatório")
+		.refine((value) => {
+			const normalized = value.replace(/\./g, "").replace(",", ".");
+			const amount = Number(normalized);
+			return Number.isFinite(amount) && amount > 0;
+		}, "O valor deve ser maior que zero"),
+	costType: actualCostTypeSchema,
+	supplierId: z.string().optional(),
+	paymentStatus: z.enum(["PAID", "OPEN"], "Status obrigatório"),
+});
+
+export const actualCostSchema = actualCostFieldsSchema.superRefine(
+	(data, ctx) => {
+		if (data.costType === "FUTURE" && data.paymentStatus !== "OPEN") {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["paymentStatus"],
+				message: "Custos futuros devem permanecer com pagamento em aberto",
+			});
+		}
+		if (data.category === "OUTROS" && !data.categoryDetail?.trim()) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				path: ["categoryDetail"],
+				message: "Informe a categoria personalizada",
+			});
+		}
+	},
+);
+
+export type ActualCostFormValues = z.infer<typeof actualCostSchema>;
+
+export const costItemSchema = actualCostFieldsSchema
+	.omit({ title: true })
 	.superRefine((data, ctx) => {
 		if (data.costType === "FUTURE" && data.paymentStatus !== "OPEN") {
 			ctx.addIssue({
@@ -65,4 +89,11 @@ export const actualCostSchema = z
 		}
 	});
 
-export type ActualCostFormValues = z.infer<typeof actualCostSchema>;
+export const costSchema = z.object({
+	title: z.string().trim().min(1, "Título obrigatório").max(200),
+	items: z
+		.array(costItemSchema)
+		.min(1, "Selecione ao menos um item do orçamento"),
+});
+
+export type CostFormValues = z.infer<typeof costSchema>;

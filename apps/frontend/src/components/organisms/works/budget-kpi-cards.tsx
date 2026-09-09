@@ -20,7 +20,7 @@ export function BudgetKpiCards({
 	return (
 		<KpiGrid>
 			<KpiCard
-				title="Total orcado"
+				title="Total orçado"
 				value={formatCurrency(effectiveTotal ?? summary.totalBudgeted)}
 				tone="default"
 				tooltip="Soma dos valores dos itens da versão de orçamento efetiva."

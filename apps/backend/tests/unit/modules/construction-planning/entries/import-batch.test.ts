@@ -24,6 +24,7 @@ const createActualCost = mock(async () => ({
 	id: "cost-1",
 	workId: "work-1",
 }));
+const createCost = mock(async () => ({ id: "cost-parent-1" }));
 const transaction = mock(
 	async (callback: (tx: never) => Promise<unknown>): Promise<unknown> =>
 		callback(tx),
@@ -40,6 +41,7 @@ const tx = {
 	},
 	constructionMeasurement: { create: createMeasurement },
 	constructionActualCost: { create: createActualCost },
+	constructionCost: { create: createCost },
 } as never;
 
 mock.module("../../../../../src/lib/prisma", () => ({
@@ -51,6 +53,7 @@ mock.module("../../../../../src/lib/prisma", () => ({
 		},
 		constructionMeasurement: { create: createMeasurement },
 		constructionActualCost: { create: createActualCost },
+		constructionCost: { create: createCost },
 	},
 }));
 
@@ -99,6 +102,7 @@ describe("importMeasurements", () => {
 		findBudgetItems.mockClear();
 		createMeasurement.mockClear();
 		createActualCost.mockClear();
+		createCost.mockClear();
 		transaction.mockClear();
 		findWork.mockImplementation(async () => ({ activeImportId: "import-1" }));
 		findBudgetItems.mockImplementation(budgetItemsForBatch);
@@ -244,6 +248,7 @@ describe("importActualCosts", () => {
 		findBudgetItems.mockClear();
 		createMeasurement.mockClear();
 		createActualCost.mockClear();
+		createCost.mockClear();
 		transaction.mockClear();
 		findWork.mockImplementation(async () => ({ activeImportId: "import-1" }));
 		findBudgetItems.mockImplementation(budgetItemsForBatch);
@@ -255,12 +260,17 @@ describe("importActualCosts", () => {
 
 	it("applies the whole batch inside a single transaction", async () => {
 		const results = await importActualCosts("owner-1", "work-1", [
-			costRow(),
-			costRow({ budgetIndex: "1.2", amount: 300 }),
+			costRow({ title: "Custos da fundação" }),
+			costRow({
+				title: "Custos da fundação",
+				budgetIndex: "1.2",
+				amount: 300,
+			}),
 		]);
 
 		expect(transaction).toHaveBeenCalledTimes(1);
 		expect(createActualCost).toHaveBeenCalledTimes(2);
+		expect(createCost).toHaveBeenCalledTimes(1);
 		expect(results).toHaveLength(2);
 		expect(createActualCost).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -268,6 +278,7 @@ describe("importActualCosts", () => {
 					ownerId: "owner-1",
 					budgetIndex: "1.2",
 					amount: 300,
+					title: "Custos da fundação",
 					import: {
 						connect: { id: "import-1", ownerId: "owner-1", workId: "work-1" },
 					},

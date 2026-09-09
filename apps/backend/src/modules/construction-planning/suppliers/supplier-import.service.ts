@@ -5,11 +5,17 @@ import { prisma } from "../../../lib/prisma";
 import { normalizeText } from "../../../lib/text-utils";
 import type { ImportValidationError } from "../types";
 import { isValidCnpj, normalizeSupplierDocument } from "./supplier-document";
+import {
+	SUPPLIER_SHEET_ALIASES,
+	SUPPLIER_SHEET_NAME,
+} from "./supplier-workbook-contract";
 
 export type NormalizedSupplierImportRow = {
 	rowNumber: number;
 	name: string;
 	document: string;
+	responsibleName: string | null;
+	responsibleDocument: string | null;
 	contact: string | null;
 	pixKey: string | null;
 	pixKeyType: string | null;
@@ -44,6 +50,11 @@ function cnpj(value: unknown): string | null {
 	return digits && isValidCnpj(digits) ? digits : null;
 }
 
+function digits(value: unknown): string | null {
+	const normalized = normalizeSupplierDocument(optionalText(value));
+	return normalized;
+}
+
 function rowValue(row: Record<string, unknown>, aliases: string[]) {
 	const values = new Map(
 		Object.entries(row).map(([key, value]) => [normalizeText(key), value]),
@@ -72,13 +83,15 @@ export function parseSupplierWorkbook(
 	}
 
 	const workbook = XLSX.read(bytes, { type: "buffer" });
-	const sheetName = workbook.SheetNames.find(
-		(name) => normalizeText(name) === normalizeText("Fornecedores"),
+	const sheetName = workbook.SheetNames.find((name) =>
+		SUPPLIER_SHEET_ALIASES.some(
+			(alias) => normalizeText(name) === normalizeText(alias),
+		),
 	);
 	if (!sheetName) {
 		throw new ConstructionError(
 			"INVALID_WORKBOOK",
-			"Aba Fornecedores nao encontrada",
+			`Aba ${SUPPLIER_SHEET_NAME} nao encontrada`,
 			400,
 		);
 	}
@@ -161,6 +174,12 @@ export function parseSupplierWorkbook(
 			rowNumber,
 			name,
 			document,
+			responsibleName: optionalText(
+				rowValue(row, ["Responsável", "Responsavel"]),
+			),
+			responsibleDocument: digits(
+				rowValue(row, ["CPF do responsável", "CPF do responsavel"]),
+			),
 			contact: optionalText(rowValue(row, ["Contato"])),
 			pixKey: optionalText(rowValue(row, ["Chave PIX"])),
 			pixKeyType: pixKeyType?.toUpperCase() ?? null,
@@ -245,6 +264,8 @@ function supplierData(row: NormalizedSupplierImportRow): SupplierData {
 	return {
 		name: row.name,
 		document: row.document,
+		responsibleName: row.responsibleName,
+		responsibleDocument: row.responsibleDocument,
 		contact: row.contact,
 		pixKey: row.pixKey,
 		pixKeyType: row.pixKeyType,

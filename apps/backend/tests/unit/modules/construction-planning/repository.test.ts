@@ -1107,6 +1107,34 @@ describe("construction repository imports", () => {
 		expect(actualCostCount).toHaveBeenCalled();
 	});
 
+	it("lists costs from a standalone costs import without changing the active budget", async () => {
+		findFirst.mockResolvedValueOnce({ activeImportId: "import-budget" });
+		actualCostFindMany.mockResolvedValueOnce([{ importId: "import-costs" }]);
+		actualCostCount.mockResolvedValueOnce(0);
+		const { listActualCosts } = await import(
+			"../../../../src/modules/construction-planning/repository"
+		);
+
+		await listActualCosts("owner-a", "work-owned-by-owner-a");
+
+		expect(actualCostFindMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: {
+					AND: [
+						{ ownerId: "owner-a", workId: "work-owned-by-owner-a" },
+						{
+							OR: [
+								{ importId: "import-budget" },
+								{ importId: null },
+								{ importId: { in: ["import-costs"] } },
+							],
+						},
+					],
+				},
+			}),
+		);
+	});
+
 	it("lists only manual actual costs when the work has no active import", async () => {
 		findFirst.mockResolvedValueOnce({ activeImportId: null });
 		actualCostCount.mockResolvedValueOnce(0);

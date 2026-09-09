@@ -122,6 +122,8 @@ export const CATEGORY_LABEL: Record<string, string> = {
 	MATERIAL: "Material",
 	MAO_DE_OBRA: "Mão de obra",
 	EQUIPAMENTO: "Equipamento",
+	TRANSPORTE: "Transporte",
+	SERVICO: "Serviço",
 	OUTROS: "Outros",
 	LABOR: "Mão de obra",
 	EQUIPMENT: "Equipamento",

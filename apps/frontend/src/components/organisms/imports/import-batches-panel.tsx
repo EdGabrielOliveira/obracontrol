@@ -46,6 +46,11 @@ export function ImportBatchesPanel({
 			) : (
 				<DataTable
 					columns={[
+						batchColumnHelper.accessor("title", {
+							header: "Título",
+							cell: ({ getValue }) => getValue() || "Sem título",
+							meta: { mobileLabel: "Título" },
+						}),
 						batchColumnHelper.accessor("fileName", {
 							header: "Arquivo",
 							meta: { mobileLabel: "Arquivo" },

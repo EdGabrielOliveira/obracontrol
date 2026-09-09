@@ -205,6 +205,108 @@ function actualSheetName(
 	);
 }
 
+const GUIDE_TITLE = normalizeText("Modelo de Importação - ObraControl");
+
+/**
+ * Real uploads carry the first row of every sheet in `sheetHeaders`. The
+ * in-memory fixtures intentionally do not, so structural checks are limited
+ * to uploaded workbooks and cannot weaken the domain validators.
+ */
+function validateWorkbookStructure(
+	workbook: ParsedWorkbook,
+	kind: WorkbookKind,
+	errors: ImportValidationError[],
+) {
+	// `obra-completa` is also the compatibility parser for historical files
+	// that intentionally contain only a subset of the unified sheets. The
+	// dedicated import models, however, must match their downloaded template.
+	if (!workbook.sheetHeaders || kind === "obra-completa") return;
+
+	const definition = WORKBOOK_DEFINITIONS[kind];
+	const expectedSheets = new Map(
+		definition.sheets.map((sheet) => [normalizeText(sheet.name), sheet]),
+	);
+	const matchedSheets = new Set<string>();
+
+	for (const sheet of definition.sheets) {
+		const actualName = actualSheetName(workbook, sheet.name);
+		if (!actualName) {
+			errors.push({
+				sheet: sheet.name,
+				field: sheet.name,
+				code: "MISSING_REQUIRED_SHEET",
+				message: `Aba obrigatoria "${sheet.name}" nao encontrada no modelo ${kind}`,
+			});
+			continue;
+		}
+		matchedSheets.add(normalizeText(actualName));
+
+		if (sheet.name === "Guia") {
+			const title = workbook.sheetHeaders[actualName]?.[0];
+			if (normalizeText(title ?? "") !== GUIDE_TITLE) {
+				errors.push({
+					sheet: actualName,
+					field: "Guia",
+					code: "INVALID_GUIDE_SHEET",
+					message: 'A aba "Guia" nao pertence ao modelo oficial da plataforma',
+				});
+			}
+		}
+
+		if (!sheet.isDataSheet) continue;
+		const headers = workbook.sheetHeaders[actualName] ?? [];
+		if (headers.length === 0) continue;
+		const actualHeaders = headers.map(normalizeText);
+		const expectedHeaders = sheet.headers.map(normalizeText);
+		const actualHeaderSet = new Set(actualHeaders);
+		const expectedHeaderSet = new Set(expectedHeaders);
+
+		for (const column of sheet.columns) {
+			if (actualHeaderSet.has(normalizeText(column.header))) continue;
+			if (column.required) continue;
+			errors.push({
+				sheet: actualName,
+				field: column.header,
+				code: "MISSING_MODEL_COLUMN",
+				message: `Coluna do modelo "${column.header}" nao encontrada na aba "${actualName}"`,
+			});
+		}
+
+		for (const header of headers) {
+			if (expectedHeaderSet.has(normalizeText(header))) continue;
+			errors.push({
+				sheet: actualName,
+				field: header,
+				code: "UNEXPECTED_COLUMN",
+				message: `Coluna "${header}" nao pertence ao modelo da aba "${actualName}"`,
+			});
+		}
+
+		if (
+			actualHeaders.length === expectedHeaders.length &&
+			actualHeaders.some((header, index) => header !== expectedHeaders[index])
+		) {
+			errors.push({
+				sheet: actualName,
+				field: sheet.name,
+				code: "COLUMN_ORDER_MISMATCH",
+				message: `A ordem das colunas da aba "${actualName}" nao corresponde ao modelo oficial`,
+			});
+		}
+	}
+
+	for (const actualName of workbook.sheetNames) {
+		if (matchedSheets.has(normalizeText(actualName))) continue;
+		if (expectedSheets.has(normalizeText(actualName))) continue;
+		errors.push({
+			sheet: actualName,
+			field: actualName,
+			code: "UNEXPECTED_SHEET",
+			message: `Aba "${actualName}" nao pertence ao modelo "${kind}"`,
+		});
+	}
+}
+
 function validateSheetHeaders(
 	workbook: ParsedWorkbook,
 	kind: WorkbookKind,
@@ -362,6 +464,7 @@ export function validateWorkbookByKind(
 
 	const errors: ImportValidationError[] = [];
 	const warnings: ImportValidationError[] = [];
+	validateWorkbookStructure(workbook, kind, errors);
 	validateSheetHeaders(workbook, kind, errors);
 
 	const dataSheetNames = definition.sheets
@@ -524,6 +627,20 @@ export function validateWorkbookByKind(
 	const actualCosts = hasCustosRealizados
 		? normalizeActualCosts(workbook, errors, costBudgetIndexes)
 		: [];
+	if (
+		kind === "custos" &&
+		hasCustosRealizados &&
+		hasRequiredSheet(workbook.sheetNames, getAliases("Custos Realizados")) &&
+		(workbook.actualCostRows ?? []).length === 0
+	) {
+		errors.push({
+			sheet: "Custos Realizados",
+			field: "Custos Realizados",
+			code: "NO_DATA",
+			message:
+				'A aba "Custos Realizados" nao possui nenhuma linha de custo para importar',
+		});
+	}
 	warnNegativeActualCosts(actualCosts, warnings);
 
 	const hasContractSheets = kind === "medicao-contrato";

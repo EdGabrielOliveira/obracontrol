@@ -83,5 +83,6 @@ export type ApiErrorField = {
 
 export type ApiErrorResponse = {
 	message: string;
+	code?: string;
 	errors?: Record<string, string[] | string> | ApiErrorField[];
 };

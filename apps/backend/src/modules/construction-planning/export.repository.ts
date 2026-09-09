@@ -1,4 +1,5 @@
 import { prisma } from "../../lib/prisma";
+import { getActualCostImportIds } from "./calculators/active-scope";
 
 /** @deprecated Exports now use the live operational source directly. */
 export type ExportSourceResolution = { mode: "LIVE"; persisted: null };
@@ -161,6 +162,44 @@ export async function getMeasurementsWithBudgetItemForExport(
 	workId: string,
 	asOfDate?: Date,
 ) {
+	const workMeasurements = await prisma.workMeasurement.findMany({
+		where: {
+			ownerId,
+			workId,
+			status: "ACEITO",
+			...(asOfDate ? { date: { lte: asOfDate } } : {}),
+		},
+		orderBy: [{ date: "asc" }, { number: "asc" }],
+		include: {
+			items: {
+				include: {
+					budgetItem: { select: { index: true, description: true } },
+				},
+			},
+		},
+	});
+	if (workMeasurements.length > 0) {
+		return workMeasurements.flatMap((measurement) =>
+			measurement.items.map((item) => ({
+				budgetItem: item.budgetItem,
+				measurementDate: measurement.date,
+				// WorkMeasurement stores percentages in the 0..100 scale;
+				// the spreadsheet contract accepts the Excel 0..1 fraction too.
+				measuredPercentageAccumulated:
+					item.accumulatedPercentage != null
+						? Number(item.accumulatedPercentage) / 100
+						: null,
+				measuredQuantityAccumulated:
+					item.accumulatedQuantity != null
+						? Number(item.accumulatedQuantity)
+						: null,
+				notes: measurement.notes,
+			})),
+		);
+	}
+
+	// Keep legacy imports exportable for works that have not migrated to the
+	// WorkMeasurement aggregate yet.
 	const budgetItemIds = await getActiveBudgetItemIds(ownerId, workId);
 	return prisma.constructionMeasurement.findMany({
 		where: {
@@ -183,11 +222,15 @@ export async function getActualCostsForExport(
 	asOfDate?: Date,
 ) {
 	const budgetItemIds = await getActiveBudgetItemIds(ownerId, workId);
+	const actualCostImportIds = await getActualCostImportIds(ownerId, workId);
 	return prisma.constructionActualCost.findMany({
 		where: {
 			OR: [
 				{ ownerId, workId, budgetItemId: { in: budgetItemIds } },
 				{ ownerId, workId, budgetItemId: null },
+				...(actualCostImportIds.length > 0
+					? [{ ownerId, workId, importId: { in: actualCostImportIds } }]
+					: []),
 			],
 			...(asOfDate ? { costDate: { lte: asOfDate } } : {}),
 		},
@@ -238,6 +281,13 @@ export async function getContractsSimpleForExport(
 export async function getWorkInfoForExport(ownerId: string, workId: string) {
 	return prisma.constructionWork.findFirst({
 		where: { id: workId, ownerId },
-		select: { code: true, name: true },
+		select: {
+			code: true,
+			name: true,
+			clientName: true,
+			baseDate: true,
+			plannedStart: true,
+			plannedEnd: true,
+		},
 	});
 }

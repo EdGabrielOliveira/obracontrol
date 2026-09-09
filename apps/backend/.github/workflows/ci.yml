@@ -16,10 +16,24 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        env:
+          POSTGRES_DB: obracontrol
+          POSTGRES_USER: obracontrol
+          POSTGRES_PASSWORD: obracontrol_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U obracontrol -d obracontrol"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       NODE_ENV: test
-      DATABASE_URL: file:./prisma/dev.db
-      TEST_DATABASE_URL: file:./prisma/test.db
+      DATABASE_URL: postgresql://obracontrol:obracontrol_ci@localhost:5432/obracontrol?schema=public
+      TEST_DATABASE_URL: postgresql://obracontrol:obracontrol_ci@localhost:5432/obracontrol_test?schema=public
       OBJECT_STORAGE_DIR: .local-objects
       BETTER_AUTH_SECRET: ci-only-secret-for-obracontrol-tests-0123456789abcdef
       ADMIN_REGISTRATION_KEY: ci-only-admin-registration-key-0123456789

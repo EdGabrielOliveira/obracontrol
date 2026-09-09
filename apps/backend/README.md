@@ -289,7 +289,12 @@ timeout. Os helpers de snapshot sem provedor foram removidos do frontend; o
 backend continua expondo apenas os metadados de snapshot que fazem parte dos
 DTOs de BI vigentes.
 
-Existem migrations locais ainda não rastreadas (`20260805100000_supplier_approval_state`, `20260805110000_budget_version_approval_state`) e o `prisma/schema.prisma` local está à frente do `HEAD`; versionar e aplicar de forma controlada antes de qualquer deploy.
+As migrations PostgreSQL versionadas ficam em `prisma/migrations-postgresql` e
+o deploy aplica somente migrations pendentes com `prisma migrate deploy`.
+Uma migration de schema não copia dados de uma base SQLite antiga: a
+transferência de dados legados deve ser executada por um procedimento de
+importação/reconciliação separado, com backup e validação de contagens antes e
+depois.
 
 As próximas tasks prioritárias devem ser derivadas do estado validado em
 [contratos backend x frontend e validação](../docs/architecture/07-backend-frontend-contracts-and-validation.md),

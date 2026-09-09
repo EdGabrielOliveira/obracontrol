@@ -80,6 +80,7 @@ function RouteComponent() {
 	const mutation = useMutation({
 		mutationFn: (values: ActualCostFormValues) =>
 			updateActualCost(workId, costId, {
+				title: values.title,
 				budgetVersionItemId: values.budgetVersionItemId,
 				costDate: values.costDate,
 				category: values.category,

@@ -8,9 +8,14 @@ import type { ExportSourceResolution } from "./export.repository";
 import * as exportRepo from "./export.repository";
 import { getWorkStatistics } from "./statistics/statistics.service";
 import {
+	SUPPLIER_SHEET_NAME,
+	SUPPLIER_WORKBOOK_HEADERS,
+} from "./suppliers/supplier-workbook-contract";
+import {
 	buildGuiaSheet,
 	buildWorkbookTemplate,
 } from "./templates/template-generator";
+import { WORKBOOK_DEFINITIONS } from "./templates/workbook-contracts";
 
 export type ExportActor = { id: string; name?: string | null };
 export type ExportMode = "raw" | "report";
@@ -93,6 +98,21 @@ function toDateString(value: unknown): string {
 }
 
 type CanonicalRow = Record<string, unknown>;
+
+function sheetWithContractHeaders(
+	rows: CanonicalRow[],
+	sheetName: string,
+	kind: keyof typeof WORKBOOK_DEFINITIONS = "obra-completa",
+): XLSX.WorkSheet {
+	if (rows.length > 0) return XLSX.utils.json_to_sheet(rows);
+	const definition = WORKBOOK_DEFINITIONS[kind].sheets.find(
+		(sheet) => sheet.name === sheetName,
+	);
+	const emptyRow = Object.fromEntries(
+		(definition?.headers ?? []).map((header) => [header, ""]),
+	);
+	return XLSX.utils.json_to_sheet([emptyRow]);
+}
 
 function budgetItemRow(
 	item: { index: string; type: string; description: string },
@@ -831,11 +851,27 @@ export class ExportService {
 		kind: string;
 		fileName:
 			| string
-			| ((work: { code: string; name: string } | null) => string);
+			| ((
+					work: {
+						code: string;
+						name: string;
+						clientName: string | null;
+						baseDate: Date | null;
+						plannedStart: Date | null;
+						plannedEnd: Date | null;
+					} | null,
+			  ) => string);
 		opts?: ExportOptions;
 		buildSheets: (
 			wb: XLSX.WorkBook,
-			work: { code: string; name: string } | null,
+			work: {
+				code: string;
+				name: string;
+				clientName: string | null;
+				baseDate: Date | null;
+				plannedStart: Date | null;
+				plannedEnd: Date | null;
+			} | null,
 		) => Promise<void>;
 	}): Promise<Response> {
 		const opts = input.opts ?? {};
@@ -1175,8 +1211,38 @@ export class ExportService {
 				status: true,
 			},
 		});
+		const supplierRows = suppliers.length
+			? suppliers.map((supplier) => ({
+					"Nome da empresa": supplier.name,
+					CNPJ: supplier.document ?? "",
+					Responsável: supplier.responsibleName ?? "",
+					"CPF do responsável": supplier.responsibleDocument ?? "",
+					Contato: supplier.contact ?? "",
+					"Tipo PIX": supplier.pixKeyType ?? "",
+					"Chave PIX": supplier.pixKey ?? "",
+					"Codigo do banco": supplier.bankCode ?? "",
+					Banco: supplier.bankName ?? "",
+					Agencia: supplier.bankBranch ?? "",
+					Conta: supplier.bankAccount ?? "",
+					"Tipo de conta": supplier.bankAccountType ?? "",
+					CEP: supplier.addressZipCode ?? "",
+					Logradouro: supplier.addressStreet ?? "",
+					Numero: supplier.addressNumber ?? "",
+					Complemento: supplier.addressComplement ?? "",
+					Bairro: supplier.addressDistrict ?? "",
+					Cidade: supplier.addressCity ?? "",
+					UF: supplier.addressState ?? "",
+					Observacoes: supplier.notes ?? "",
+				}))
+			: [
+					Object.fromEntries(
+						SUPPLIER_WORKBOOK_HEADERS.map((header) => [header, ""]),
+					),
+				];
 		const response = buildSimpleWorkbook(
-			{ Fornecedores: suppliers },
+			{
+				[SUPPLIER_SHEET_NAME]: supplierRows,
+			},
 			"fornecedores.xlsx",
 		);
 		await this.logStandaloneExport({
@@ -1297,6 +1363,19 @@ export class ExportService {
 					XLSX.utils.json_to_sheet([
 						{ Campo: "Nome da obra", Valor: work.name },
 						{ Campo: "Código da obra", Valor: work.code },
+						{
+							Campo: "Cliente / empreendimento",
+							Valor: work.clientName ?? "",
+						},
+						{ Campo: "Data base", Valor: toDateString(work.baseDate) },
+						{
+							Campo: "Início planejado original",
+							Valor: toDateString(work.plannedStart),
+						},
+						{
+							Campo: "Fim planejado original",
+							Valor: toDateString(work.plannedEnd),
+						},
 					]),
 					"Obra",
 				);
@@ -1329,32 +1408,47 @@ export class ExportService {
 
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(items),
+					sheetWithContractHeaders(items, "Orcamento"),
 					"Orcamento",
 				);
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(schedules),
+					sheetWithContractHeaders(schedules, "Cronograma Original"),
 					"Cronograma Original",
+				);
+				const replanningRows = schedules.map((row) => ({
+					Índice: row.Índice ?? row.index ?? "",
+					"Versão do replanejamento":
+						row["Versão replanejamento"] ?? row.replanning_version ?? "",
+					"Início replanejado":
+						row["Início replanejado"] ?? row.replanned_start ?? "",
+					"Fim replanejado": row["Fim replanejado"] ?? row.replanned_end ?? "",
+					"Data da revisão": row["Data da revisão"] ?? row.revision_date ?? "",
+					Motivo: row["Motivo da revisão"] ?? row.revision_reason ?? "",
+				}));
+				XLSX.utils.book_append_sheet(
+					wb,
+					sheetWithContractHeaders(replanningRows, "Replanejamento"),
+					"Replanejamento",
 				);
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(versionRows),
+					sheetWithContractHeaders(versionRows, "Orcamento"),
 					"Versoes Orcamento",
 				);
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(measurements),
+					sheetWithContractHeaders(measurements, "Medicoes Obra"),
 					"Medicoes Obra",
 				);
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(costs),
+					sheetWithContractHeaders(costs, "Custos Realizados"),
 					"Custos Realizados",
 				);
 				XLSX.utils.book_append_sheet(
 					wb,
-					XLSX.utils.json_to_sheet(contractRows),
+					sheetWithContractHeaders(contractRows, "Contrato"),
 					"Contrato",
 				);
 			},

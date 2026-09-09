@@ -3,6 +3,7 @@ model ConstructionImport {
   ownerId          String
   workspaceId       String?
   workId           String?
+  title            String?
   fileName         String
   sheetName        String
   rowCount         Int
@@ -19,12 +20,31 @@ model ConstructionImport {
   scheduleRevisions ConstructionScheduleRevision[]
   measurements      ConstructionMeasurement[]
   actualCosts       ConstructionActualCost[]
+  costs             ConstructionCost[]
   workspace          Workspace?               @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([ownerId])
   @@index([workId])
   @@index([createdAt])
   @@index([ownerId, workId, reprocessOfId])
+}
+
+model ConstructionCost {
+  id        String   @id @default(uuid())
+  ownerId   String
+  workId    String
+  importId  String?
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  work   ConstructionWork       @relation(fields: [workId], references: [id], onDelete: Cascade)
+  import ConstructionImport?    @relation(fields: [importId], references: [id], onDelete: Cascade)
+  items  ConstructionActualCost[]
+
+  @@index([ownerId, workId])
+  @@index([workId, importId])
+  @@index([importId])
 }
 
 model ImportBatch {

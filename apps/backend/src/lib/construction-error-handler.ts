@@ -98,6 +98,7 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 		return new Response(
 			JSON.stringify({
 				message: error.message,
+				code: error.code,
 				errors: error.details ?? [],
 			}),
 			{ status: error.status, headers: { "Content-Type": "application/json" } },

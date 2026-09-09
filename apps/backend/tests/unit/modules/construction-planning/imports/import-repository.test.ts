@@ -37,6 +37,7 @@ const baselineCreateMany = mock(async () => ({ count: 1 }));
 const revisionCreateMany = mock(async () => ({ count: 1 }));
 const measurementCreateMany = mock(async () => ({ count: 1 }));
 const actualCostCreateMany = mock(async () => ({ count: 1 }));
+const costCreate = mock(async () => ({ id: "cost-parent-1" }));
 
 const tx = {
 	constructionWork: {
@@ -71,6 +72,7 @@ const tx = {
 	constructionActualCost: {
 		createMany: actualCostCreateMany,
 	},
+	constructionCost: { create: costCreate },
 };
 
 const transaction = mock(
@@ -112,6 +114,7 @@ mock.module("../../../../../src/lib/prisma", () => ({
 		constructionActualCost: {
 			createMany: actualCostCreateMany,
 		},
+		constructionCost: { create: costCreate },
 	},
 }));
 
@@ -798,6 +801,48 @@ describe("replaceWorkWithImport", () => {
 		);
 	});
 
+	it("returns a client error when an actual cost cannot bind to the budget", async () => {
+		actualCostCreateMany.mockClear();
+		budgetItemFindMany.mockResolvedValue([]);
+		const { replaceWorkWithImport } = await import(
+			"../../../../../src/modules/construction-planning/imports/import-repository"
+		);
+
+		await expect(
+			replaceWorkWithImport(
+				"owner-1",
+				"work-1",
+				{
+					code: "OBRA-001",
+					name: "Obra",
+					clientName: null,
+					baseDate: null,
+					plannedStart: null,
+					plannedEnd: null,
+					areaM2: null,
+					operationalStatus: null,
+					responsibleName: null,
+					fileName: "teste.xlsx",
+					sheetName: "Obra",
+					importedSections: ["Obra", "Custos Realizados"],
+				},
+				[],
+				{
+					itens: [],
+					baselineSchedules: [],
+					scheduleRevisions: [],
+					measurements: [],
+					actualCosts: [actualCost("9.9")],
+					rowCount: 1,
+				},
+			),
+		).rejects.toMatchObject({
+			code: "IMPORT_BUDGET_INDEX_UNRESOLVED",
+			status: 422,
+		});
+		expect(actualCostCreateMany).not.toHaveBeenCalled();
+	});
+
 	it("rejects instead of silently discarding measurement rows without a bindable budget item", async () => {
 		workUpdate.mockClear();
 		budgetItemCreate.mockClear();
@@ -841,6 +886,56 @@ describe("replaceWorkWithImport", () => {
 });
 
 describe("createWorkWithImport reprocess metadata", () => {
+	it("creates one parent cost for all imported cost items", async () => {
+		importCreate.mockClear();
+		actualCostCreateMany.mockClear();
+		costCreate.mockClear();
+		const { createWorkWithImport } = await import(
+			"../../../../../src/modules/construction-planning/imports/import-repository"
+		);
+
+		await createWorkWithImport(
+			"owner-1",
+			{
+				code: "OBRA-001",
+				name: "Obra",
+				clientName: null,
+				baseDate: null,
+				plannedStart: null,
+				plannedEnd: null,
+				areaM2: null,
+				operationalStatus: null,
+				responsibleName: null,
+				fileName: "custos.xlsx",
+				sheetName: "Custos Realizados",
+				importedSections: ["Custos Realizados"],
+			},
+			"cc-1",
+			[],
+			{
+				actualCosts: [actualCost(null)],
+				rowCount: 1,
+				title: "Custos da fundação",
+			},
+		);
+
+		expect(importCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ title: "Custos da fundação" }),
+			}),
+		);
+		expect(costCreate).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({ title: "Custos da fundação" }),
+			}),
+		);
+		expect(actualCostCreateMany).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: [expect.objectContaining({ costId: "cost-parent-1" })],
+			}),
+		);
+	});
+
 	it("persists status, reprocessOfId and errorSummary on the import record", async () => {
 		importCreate.mockClear();
 		const { createWorkWithImport } = await import(

@@ -11,21 +11,20 @@ import { constructionImportBatchService } from "../imports/import-batch.service"
 import { IMPORT_LIMITS, parseImportPagination } from "../imports/import-limits";
 import { getImportById, listImports } from "../imports/import-repository";
 import {
-	WORKBOOK_KINDS,
+	isWorkbookKind,
 	type WorkbookKind,
 } from "../templates/workbook-contracts";
 import { assertValidXlsxUpload } from "./upload-guards";
 
 function resolveKind(value: string | undefined): WorkbookKind {
-	const kind = value as WorkbookKind | undefined;
-	if (!kind || kind === "obra-completa" || !WORKBOOK_KINDS.includes(kind)) {
+	if (!value || value === "obra-completa" || !isWorkbookKind(value)) {
 		throw new ConstructionError(
 			"INVALID_KIND",
 			"Tipo de workbook invalido",
 			400,
 		);
 	}
-	return kind;
+	return value;
 }
 
 export const importRoutes = new Elysia({
@@ -176,6 +175,7 @@ export const importBatchRoutes = new Elysia({
 				{
 					fileName: body.file.name,
 					model,
+					title: body.title?.trim() || null,
 					file: body.file.stream(),
 					reprocessOfId: body.reprocessOfId ?? null,
 					reason: body.reason ?? null,
@@ -191,6 +191,7 @@ export const importBatchRoutes = new Elysia({
 			body: t.Object({
 				file: t.File(),
 				model: t.String(),
+				title: t.Optional(t.String({ maxLength: 200 })),
 				reprocessOfId: t.Optional(t.String()),
 				reason: t.Optional(t.String()),
 			}),

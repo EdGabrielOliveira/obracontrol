@@ -85,8 +85,11 @@ export function ImportBatchDetailModal({
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-3xl">
 				<DialogHeader>
-					<DialogTitle>{batch?.fileName ?? "Importação"}</DialogTitle>
+					<DialogTitle>
+						{batch?.title || batch?.fileName || "Importação"}
+					</DialogTitle>
 					<DialogDescription>
+						{batch?.title && batch.fileName ? `${batch.fileName} · ` : ""}
 						Status:{" "}
 						<span className="font-medium text-foreground">
 							{batch?.status ?? "—"}

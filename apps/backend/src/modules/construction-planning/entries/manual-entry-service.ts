@@ -22,6 +22,7 @@ import type * as constructionRepository from "../repository";
 import * as constructionRepositoryModule from "../repository";
 import type {
 	CreateActualCostInput,
+	CreateCostInput,
 	CreateMeasurementInput,
 	ImportActualCostRow,
 	UpdateActualCostInput,
@@ -64,11 +65,15 @@ type ManualEntryRepository = Pick<
 	| "listMeasurements"
 	| "deleteMeasurement"
 	| "createActualCost"
+	| "createCost"
 	| "importActualCosts"
 	| "listActualCosts"
+	| "listCosts"
 	| "getActualCostById"
+	| "getCostById"
 	| "updateActualCost"
 	| "deleteActualCost"
+	| "deleteCost"
 >;
 
 export class ConstructionManualEntryService {
@@ -418,10 +423,149 @@ export class ConstructionManualEntryService {
 		ownerId: string,
 		workId: string,
 		rows: ImportActualCostRow[],
+		title?: string,
 	) {
 		await this.getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId, "WORK_COSTS");
-		return this.repository.importActualCosts(ownerId, workId, rows);
+		return this.repository.importActualCosts(ownerId, workId, rows, title);
+	}
+
+	async createCost(
+		ownerId: string,
+		workId: string,
+		input: CreateCostInput,
+		ctx?: { userId: string },
+	) {
+		await this.getWorkOrThrow(ownerId, workId);
+		await this.assertWritable(ownerId, workId, "WORK_COSTS");
+		const normalizedItems = await Promise.all(
+			input.items.map(async (item) => {
+				assertFutureCostPaymentStatus(item.costType, item.paymentStatus);
+				assertOtherCategoryDetail(item.category, item.categoryDetail);
+				if (!item.description?.trim()) {
+					throw new ConstructionError(
+						"INVALID_INPUT",
+						"Descricao do item de custo obrigatoria",
+						422,
+					);
+				}
+				const effective = await this.normalizeCostItem(ownerId, workId, item);
+				if (effective.supplierId) {
+					await this.supplierScope.assertLinkedToWork(
+						ownerId,
+						workId,
+						effective.supplierId,
+					);
+				}
+				return {
+					input: effective,
+					normalized: normalizeCostAllocations(
+						new Decimal(effective.amount),
+						effective.allocations,
+					),
+				};
+			}),
+		);
+
+		const created = await withSerializableRetry(async (tx) => {
+			const cost = await this.repository.createCost(
+				ownerId,
+				workId,
+				input.title,
+				null,
+				tx,
+			);
+			for (const item of normalizedItems) {
+				if (item.input.sourceDocument) {
+					await this.assertSourceDocumentUnique(
+						ownerId,
+						workId,
+						item.input.sourceDocument,
+						tx,
+					);
+				}
+				const createdItem = await this.repository.createActualCost(
+					ownerId,
+					workId,
+					null,
+					item.input,
+					tx,
+					item.normalized,
+					cost.id,
+				);
+				await this.applyGeneralCostImpact(
+					ownerId,
+					workId,
+					createdItem.id,
+					item.input,
+					item.normalized,
+					tx,
+				);
+				await this.emitGeneralCostEvents(
+					ownerId,
+					workId,
+					createdItem,
+					tx,
+					item.input.allocations?.[0]?.budgetItemId ?? null,
+				);
+			}
+			return this.repository.getCostById(ownerId, workId, cost.id, tx);
+		});
+		if (!created) {
+			throw new ConstructionError("INTERNAL_ERROR", "Custo nao criado", 500);
+		}
+
+		if (ctx) {
+			const { submitApproval } = await import(
+				"../../governance/approval.service"
+			);
+			for (const item of created.items) {
+				await submitApproval({
+					actorId: ctx.userId,
+					resourceType: "ACTUAL_COST",
+					resourceId: item.id,
+					effectAction: "COST_APPROVE",
+					payload: {
+						workId,
+						actualCostId: item.id,
+						description: item.description ?? null,
+					},
+					expectedVersion: 1,
+					idempotencyKey: `actual-cost-create-${item.id}`,
+				});
+			}
+		}
+		return created;
+	}
+
+	listCosts(
+		ownerId: string,
+		workId: string,
+		filters: Partial<import("../schema").ActualCostFilter> = {},
+	) {
+		return this.repository.listCosts(ownerId, workId, filters);
+	}
+
+	async getCost(ownerId: string, workId: string, costId: string) {
+		const result = await this.repository.getCostById(ownerId, workId, costId);
+		if (!result) {
+			throw new ConstructionError("NOT_FOUND", "Custo nao encontrado", 404);
+		}
+		return result;
+	}
+
+	async deleteCost(ownerId: string, workId: string, costId: string) {
+		await this.assertWritable(ownerId, workId, "WORK_COSTS");
+		const cost = await this.getCost(ownerId, workId, costId);
+		for (const item of cost.items) {
+			await this.governance.assertWritable(ownerId, "COST_STATUS", item.id);
+		}
+		return withSerializableRetry(async (tx) => {
+			for (const item of cost.items) {
+				await this.revokeGeneralCostImpacts(ownerId, workId, item.id, tx);
+			}
+			return this.repository.deleteCost(ownerId, workId, costId, tx);
+		});
 	}
 
 	listActualCosts(

@@ -82,7 +82,7 @@ export function createImportParser(options: ImportParserOptions = {}): {
 
 	return {
 		async *rows(storageKey, limits) {
-			const buffer = await readAllChunks(storage, storageKey);
+			const buffer = await readImportBytes(storage, storageKey);
 			if (buffer.byteLength > limits.maxFileMb * MB) {
 				throw new ConstructionError(
 					"IMPORT_FILE_TOO_LARGE",
@@ -118,7 +118,7 @@ export function createImportParser(options: ImportParserOptions = {}): {
 
 export const importParser = createImportParser();
 
-async function readAllChunks(
+export async function readImportBytes(
 	storage: ImportStorage,
 	storageKey: string,
 ): Promise<Uint8Array> {

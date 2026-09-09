@@ -8,23 +8,33 @@ interface ScheduleBaselineTabProps {
 	items: ScheduleItem[];
 	ganttMap: Map<string, GanttItem>;
 	actionButton?: React.ReactNode;
+	hasAmendment?: boolean;
 }
 
 export function ScheduleBaselineTab({
 	items,
 	ganttMap,
 	actionButton,
+	hasAmendment = false,
 }: ScheduleBaselineTabProps) {
 	return (
 		<Card>
 			<CardHeaderWithIcon
 				icon={CalendarDays}
-				title="Cronograma Original"
-				description="Linha de base do cronograma da obra."
+				title={hasAmendment ? "Cronograma e revisões" : "Cronograma atual"}
+				description={
+					hasAmendment
+						? "Linha de base e revisões do cronograma da obra."
+						: "Planejamento e execução atual da obra."
+				}
 				actions={actionButton}
 			/>
 			<CardContent>
-				<GanttChart items={items} ganttMap={ganttMap} />
+				<GanttChart
+					items={items}
+					ganttMap={ganttMap}
+					showAmendmentComparison={hasAmendment}
+				/>
 			</CardContent>
 		</Card>
 	);

@@ -100,22 +100,6 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
 					</div>
 				))}
 			</div>
-			{value.latitude != null && value.longitude != null && (
-				<div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-					<span>
-						Coordenadas: {value.latitude.toFixed(6)},{" "}
-						{value.longitude.toFixed(6)}
-					</span>
-					<a
-						href={`https://www.google.com/maps?q=${value.latitude},${value.longitude}`}
-						target="_blank"
-						rel="noreferrer"
-						className="font-medium text-primary hover:underline"
-					>
-						Abrir no mapa
-					</a>
-				</div>
-			)}
 		</div>
 	);
 }

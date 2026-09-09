@@ -4,9 +4,9 @@ services:
   postgres:
     image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-obracontrol}
-      POSTGRES_USER: ${POSTGRES_USER:-obracontrol}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-obracontrol_dev}
+      POSTGRES_DB: obracontrol
+      POSTGRES_USER: obracontrol
+      POSTGRES_PASSWORD: obracontrol_dev
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -22,26 +22,47 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
+      target: development
+    command: bun --watch src/index.ts
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 7001
-      DATABASE_URL: ${DATABASE_URL:-postgresql://obracontrol:obracontrol_dev@postgres:5432/obracontrol?schema=public}
+      DATABASE_URL: postgresql://obracontrol:obracontrol_dev@postgres:5432/obracontrol?schema=public
       OBJECT_STORAGE_DIR: /data/objects
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-only-change-this-secret-0123456789abcdef}
-      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:-dev-only-admin-key-0123456789}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:7001}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:7000}
-      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://localhost:7000}
-      TRUSTED_PROXY: ${TRUSTED_PROXY:-127.0.0.1,::1}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      LOG_LEVEL: ${LOG_LEVEL:-debug}
-      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
-      PDF_CONVERSION_TIMEOUT_SECONDS: ${PDF_CONVERSION_TIMEOUT_SECONDS:-45}
-      PDF_CONVERSION_QUEUE_LIMIT: ${PDF_CONVERSION_QUEUE_LIMIT:-2}
+      BETTER_AUTH_SECRET: dev-only-change-this-secret-0123456789abcdef
+      ADMIN_REGISTRATION_KEY: dev-only-admin-key-0123456789
+      BETTER_AUTH_URL: http://localhost:7001
+      FRONTEND_ORIGIN: http://localhost:7000
+      AUTH_TRUSTED_ORIGINS: http://localhost:7000
+      TRUSTED_PROXY: 127.0.0.1,::1
+      SENTRY_DSN: ""
+      LOG_LEVEL: debug
+      AUDIT_LOG_RETENTION_DAYS: 180
+      PDF_CONVERSION_TIMEOUT_SECONDS: 45
+      PDF_CONVERSION_QUEUE_LIMIT: 2
     ports:
       - "127.0.0.1:${BACKEND_PORT:-7001}:7001"
     volumes:
+      # Keep source on the host so Bun can restart after backend changes.
+      # Mount only mutable paths; generated Prisma code and node_modules stay
+      # from the Linux image, avoiding host/Container binary mismatches.
+      - type: bind
+        source: ./apps/backend/src
+        target: /app/src
+        consistency: delegated
+      - type: bind
+        source: ./apps/backend/prisma
+        target: /app/prisma
+        consistency: delegated
+      - type: bind
+        source: ./apps/backend/scripts
+        target: /app/scripts
+        consistency: delegated
+      - type: bind
+        source: ./apps/backend/prisma.config.ts
+        target: /app/prisma.config.ts
+        consistency: delegated
       - obracontrol_development_api_data:/data
     restart: unless-stopped
     depends_on:
@@ -62,9 +83,9 @@ services:
     command: npm run dev -- --host 0.0.0.0
     environment:
       VITE_BACKEND_TARGET: http://backend:7001
-      VITE_USE_POLLING: "${VITE_USE_POLLING:-true}"
-      CHOKIDAR_USEPOLLING: "${CHOKIDAR_USEPOLLING:-true}"
-      VITE_POLLING_INTERVAL: "${VITE_POLLING_INTERVAL:-250}"
+      VITE_USE_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_POLLING_INTERVAL: "250"
       VITE_HMR_CLIENT_PORT: "${FRONTEND_PORT:-7000}"
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-7000}:7000"

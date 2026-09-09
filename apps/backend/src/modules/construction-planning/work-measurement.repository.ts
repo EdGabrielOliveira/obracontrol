@@ -837,14 +837,25 @@ export async function getWorkMeasurementDetail(
 				where: { measurement: { ownerId, workId, status: "ACEITO" } },
 				include: {
 					measurement: { select: { id: true, number: true, date: true } },
+					budgetItem: { select: { index: true } },
 				},
 			}),
 		]);
 
 	if (!work || !measurement) return null;
 
+	const activeBudgetItemIdByIndex = new Map(
+		budgetItems.map((item) => [item.index, item.id]),
+	);
+	const resolveActiveBudgetItemId = (
+		budgetItemId: string,
+		index: string | null | undefined,
+	) => activeBudgetItemIdByIndex.get(index ?? "") ?? budgetItemId;
+
 	const measuredBudgetItemIds = new Set(
-		measurement.items.map((item) => item.budgetItemId),
+		measurement.items.map((item) =>
+			resolveActiveBudgetItemId(item.budgetItemId, item.budgetItem?.index),
+		),
 	);
 	const budgetItemById = new Map(budgetItems.map((bi) => [bi.id, bi]));
 	const visibleIds = new Set<string>();
@@ -864,19 +875,31 @@ export async function getWorkMeasurementDetail(
 		{ quantity: number; value: number; percentage: number }
 	>();
 	for (const row of measurement.items) {
-		currentByBudgetItem.set(row.budgetItemId, {
+		const budgetItemId = resolveActiveBudgetItemId(
+			row.budgetItemId,
+			row.budgetItem?.index,
+		);
+		currentByBudgetItem.set(budgetItemId, {
 			quantity: Number(row.measuredQuantity ?? 0),
 			value: Number(row.measuredValue ?? 0),
 			percentage: Number(row.measuredPercentage ?? 0),
 		});
 	}
 
-	const eligibleMeasurementItems = allMeasurementItems.filter((row) =>
-		isMeasurementEligibleForAccumulated(row.measurement, {
-			date: measurement.date,
-			number: measurement.number,
-		}),
-	);
+	const eligibleMeasurementItems = allMeasurementItems
+		.filter((row) =>
+			isMeasurementEligibleForAccumulated(row.measurement, {
+				date: measurement.date,
+				number: measurement.number,
+			}),
+		)
+		.map((row) => ({
+			...row,
+			effectiveBudgetItemId: resolveActiveBudgetItemId(
+				row.budgetItemId,
+				row.budgetItem?.index,
+			),
+		}));
 
 	const accumulatedByBudgetItem = new Map<
 		string,
@@ -884,9 +907,9 @@ export async function getWorkMeasurementDetail(
 	>();
 	const rowsByBudgetItem = new Map<string, typeof eligibleMeasurementItems>();
 	for (const row of eligibleMeasurementItems) {
-		const rows = rowsByBudgetItem.get(row.budgetItemId) ?? [];
+		const rows = rowsByBudgetItem.get(row.effectiveBudgetItemId) ?? [];
 		rows.push(row);
-		rowsByBudgetItem.set(row.budgetItemId, rows);
+		rowsByBudgetItem.set(row.effectiveBudgetItemId, rows);
 	}
 	for (const [budgetItemId, rows] of rowsByBudgetItem) {
 		const last = [...rows].sort((a, b) => {

@@ -8,7 +8,9 @@ type MeasurementDetailHeaderProps = {
 	number: number;
 	title: string;
 	date: string;
+	workLabel?: string;
 	totalMeasuredValue: number;
+	accumulatedMeasuredValue?: number;
 
 	currentMeasuredValue?: number;
 	discountValue: number | null;
@@ -20,7 +22,9 @@ export function MeasurementDetailHeader({
 	number,
 	title,
 	date,
+	workLabel,
 	totalMeasuredValue,
+	accumulatedMeasuredValue,
 	currentMeasuredValue,
 	discountValue,
 	retentionValue,
@@ -31,14 +35,19 @@ export function MeasurementDetailHeader({
 			<PageHeader
 				eyebrow={`Medição #${number}`}
 				title={title}
-				description={formatDate(date)}
+				description={[workLabel, formatDate(date)].filter(Boolean).join(" · ")}
 				actions={actions}
 			/>
 			<KpiGrid>
 				<KpiCard
-					title="Total Medido"
+					title="Nesta medição"
 					value={formatCurrency(currentMeasuredValue ?? totalMeasuredValue)}
 					tone="success"
+				/>
+				<KpiCard
+					title="Acumulado"
+					value={formatCurrency(accumulatedMeasuredValue ?? totalMeasuredValue)}
+					tone="default"
 				/>
 				<KpiCard
 					title="Desconto"

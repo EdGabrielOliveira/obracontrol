@@ -70,6 +70,7 @@ COPY --chown=bun:bun --from=prisma-build /app/prisma/scripts /app/prisma/scripts
 COPY --chown=bun:bun apps/backend/prisma.config.ts /app/prisma.config.ts
 COPY --chown=bun:bun apps/backend/prisma/seed.ts /app/prisma/seed.ts
 COPY --chown=bun:bun apps/backend/src /app/src
+COPY --chown=bun:bun apps/backend/scripts/verify-prisma.ts /app/scripts/verify-prisma.ts
 COPY --chown=bun:bun apps/backend/scripts/convert-docx-to-pdf.py /app/scripts/convert-docx-to-pdf.py
 COPY --chown=bun:bun apps/backend/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 
@@ -84,3 +85,19 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["bun", "src/index.ts"]
+
+# Development keeps the complete dependency tree so the application can run in
+# watch mode. Production continues to use the pruned dependency stage above.
+FROM production AS development
+
+ENV NODE_ENV=development
+
+COPY --chown=bun:bun --from=prisma-build /app/node_modules /app/node_modules
+COPY --chown=bun:bun apps/backend/package.json /app/package.json
+COPY --chown=bun:bun apps/backend/tsconfig.json /app/tsconfig.json
+COPY --chown=bun:bun apps/backend/prisma.config.ts /app/prisma.config.ts
+COPY --chown=bun:bun apps/backend/prisma /app/prisma
+COPY --chown=bun:bun apps/backend/src /app/src
+COPY --chown=bun:bun apps/backend/scripts /app/scripts
+
+CMD ["bun", "--watch", "src/index.ts"]

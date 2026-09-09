@@ -126,6 +126,7 @@ async function createUnifiedChildren(
 		scheduleRevisions?: NormalizedScheduleRevision[];
 		measurements?: NormalizedMeasurement[];
 		actualCosts?: NormalizedActualCost[];
+		title?: string | null;
 		measurementsAsWorkMeasurements?: boolean;
 	},
 ) {
@@ -205,6 +206,15 @@ async function createUnifiedChildren(
 	}
 
 	if (data.actualCosts?.length) {
+		const cost = await tx.constructionCost.create({
+			data: {
+				ownerId,
+				workId,
+				importId,
+				title: data.title?.trim() || "Custos importados",
+			},
+			select: { id: true },
+		});
 		await tx.constructionActualCost.createMany({
 			data: data.actualCosts.map((row) => {
 				let budgetItemId: string | null = null;
@@ -214,9 +224,9 @@ async function createUnifiedChildren(
 						ancestorIndexIdFor(row.budgetIndex, indexToId);
 					if (!budgetItemId) {
 						throw new ConstructionError(
-							"INTERNAL_ERROR",
+							"IMPORT_BUDGET_INDEX_UNRESOLVED",
 							`Custo do indice ${row.budgetIndex} sem item de orcamento vinculavel`,
-							500,
+							422,
 						);
 					}
 				}
@@ -225,7 +235,9 @@ async function createUnifiedChildren(
 					ownerId,
 					workId,
 					importId,
+					costId: cost.id,
 					budgetItemId,
+					title: data.title ?? null,
 					rowNumber: row.rowNumber,
 					costDate: row.costDate,
 					budgetIndex: row.budgetIndex,
@@ -246,6 +258,27 @@ async function createUnifiedChildren(
 			}),
 		});
 	}
+}
+
+async function getCurrentBudgetImportId(
+	ownerId: string,
+	workId: string,
+): Promise<string | null> {
+	const work = await prisma.constructionWork.findFirst({
+		where: { ownerId, id: workId },
+		select: { activeImportId: true },
+	});
+	if (work?.activeImportId) return work.activeImportId;
+
+	// Obras legadas podem não ter o ponteiro da versão ativa preenchido.
+	// Nesse caso, use a importação mais recente que realmente possui orçamento.
+	// Uma importação somente de custos não pode virar a fonte de itens do orçamento.
+	const latestImport = await prisma.constructionImport.findFirst({
+		where: { ownerId, workId, status: "IMPORTED", items: { some: {} } },
+		orderBy: { createdAt: "desc" },
+		select: { id: true },
+	});
+	return latestImport?.id ?? null;
 }
 
 /**
@@ -475,11 +508,8 @@ export async function activeBudgetIndexes(
 	ownerId: string,
 	workId: string,
 ): Promise<Set<string>> {
-	const work = await prisma.constructionWork.findFirst({
-		where: { ownerId, id: workId },
-		select: { activeImportId: true },
-	});
-	if (!work?.activeImportId) return new Set();
+	const currentImportId = await getCurrentBudgetImportId(ownerId, workId);
+	if (!currentImportId) return new Set();
 
 	// A referência pode apontar para qualquer nível da árvore vigente:
 	// 1, 1.1 ou 1.1.1. A regra de item operacional é aplicada depois,
@@ -488,7 +518,7 @@ export async function activeBudgetIndexes(
 		where: {
 			ownerId,
 			workId,
-			importId: work.activeImportId,
+			importId: currentImportId,
 		},
 		select: { index: true },
 	});
@@ -504,17 +534,14 @@ async function activeBudgetItemsByIndex(
 	ownerId: string,
 	workId: string,
 ): Promise<Map<string, { id: string; description: string }>> {
-	const work = await prisma.constructionWork.findFirst({
-		where: { ownerId, id: workId },
-		select: { activeImportId: true },
-	});
-	if (!work?.activeImportId) return new Map();
+	const currentImportId = await getCurrentBudgetImportId(ownerId, workId);
+	if (!currentImportId) return new Map();
 
 	const items = await prisma.constructionBudgetItem.findMany({
 		where: {
 			ownerId,
 			workId,
-			importId: work.activeImportId,
+			importId: currentImportId,
 		},
 		select: { id: true, index: true, description: true },
 	});
@@ -711,6 +738,7 @@ export async function createWorkWithImport(
 		scheduleRevisions?: NormalizedScheduleRevision[];
 		measurements?: NormalizedMeasurement[];
 		actualCosts?: NormalizedActualCost[];
+		title?: string | null;
 		measurementsAsWorkMeasurements?: boolean;
 		rowCount: number;
 		reprocessOfId?: string | null;
@@ -763,6 +791,7 @@ export async function createWorkWithImport(
 				importedSections: work.importedSections,
 				rowCount: options.rowCount,
 				status: "IMPORTED",
+				title: options.title ?? null,
 				reprocessOfId: options.reprocessOfId ?? null,
 				errorSummary: options.errorSummary ?? Prisma.JsonNull,
 			},
@@ -820,6 +849,7 @@ export async function replaceWorkWithImport(
 		scheduleRevisions?: NormalizedScheduleRevision[];
 		measurements?: NormalizedMeasurement[];
 		actualCosts?: NormalizedActualCost[];
+		title?: string | null;
 		measurementsAsWorkMeasurements?: boolean;
 		rowCount: number;
 		reprocessOfId?: string | null;
@@ -849,6 +879,7 @@ async function replaceWorkWithImportInTx(
 		scheduleRevisions?: NormalizedScheduleRevision[];
 		measurements?: NormalizedMeasurement[];
 		actualCosts?: NormalizedActualCost[];
+		title?: string | null;
 		measurementsAsWorkMeasurements?: boolean;
 		rowCount: number;
 		reprocessOfId?: string | null;
@@ -873,6 +904,17 @@ async function replaceWorkWithImportInTx(
 		where: { id: workId, ownerId },
 		data: workData,
 	});
+	const currentBudgetImportId = options.measurementsAsWorkMeasurements
+		? (updatedWork.activeImportId ??
+			(
+				await tx.constructionImport.findFirst({
+					where: { ownerId, workId, status: "IMPORTED" },
+					orderBy: { createdAt: "desc" },
+					select: { id: true },
+				})
+			)?.id ??
+			null)
+		: null;
 
 	const imp = await tx.constructionImport.create({
 		data: {
@@ -884,13 +926,18 @@ async function replaceWorkWithImportInTx(
 			rowCount: options.rowCount,
 			status: "IMPORTED",
 			workspaceId: updatedWork.workspaceId,
+			title: options.title ?? null,
 			reprocessOfId: options.reprocessOfId ?? null,
 			errorSummary: options.errorSummary ?? Prisma.JsonNull,
 		},
 	});
 
 	const existingItems = await tx.constructionBudgetItem.findMany({
-		where: { ownerId, workId: updatedWork.id },
+		where: {
+			ownerId,
+			workId: updatedWork.id,
+			...(currentBudgetImportId ? { importId: currentBudgetImportId } : {}),
+		},
 		select: { id: true, index: true },
 	});
 	const existingIndexToId = new Map(

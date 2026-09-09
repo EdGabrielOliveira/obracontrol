@@ -31,6 +31,8 @@ model ConstructionActualCost {
   ownerId             String
   workId              String
   importId            String?
+  costId              String?
+  title               String?
   budgetItemId        String?
   budgetVersionItemId String?
   rowNumber           Int?
@@ -56,6 +58,7 @@ model ConstructionActualCost {
 
   work                ConstructionWork        @relation(fields: [workId], references: [id], onDelete: Cascade)
   import              ConstructionImport?     @relation(fields: [importId], references: [id], onDelete: Cascade)
+  cost                ConstructionCost?       @relation(fields: [costId], references: [id], onDelete: Cascade)
   budgetItem          ConstructionBudgetItem? @relation(fields: [budgetItemId], references: [id], onDelete: SetNull)
   budgetVersionItem   BudgetVersionItem?      @relation(fields: [budgetVersionItemId], references: [id], onDelete: SetNull)
   supplier            ConstructionSupplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
@@ -66,6 +69,7 @@ model ConstructionActualCost {
   @@index([ownerId, workId])
   @@index([workId, importId])
   @@index([importId])
+  @@index([costId])
   @@index([budgetItemId])
   @@index([budgetVersionItemId])
 }

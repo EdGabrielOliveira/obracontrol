@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -27,6 +28,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { downloadBlob } from "@/lib/download";
 import { importConfirmationQueryKeys } from "@/lib/import-invalidation";
 import {
@@ -39,7 +41,11 @@ import type {
 	ConstructionTemplateKind,
 	ImportPreviewRow,
 } from "@/types/import";
-import { getErrorMessage, normalizePortugueseText } from "@/utils/api-error";
+import {
+	getApiErrorCode,
+	getErrorMessage,
+	normalizePortugueseText,
+} from "@/utils/api-error";
 import { createIdempotencyKey } from "@/utils/idempotency-key";
 
 const PREVIEW_PAGE_SIZE = 100;
@@ -57,8 +63,10 @@ export function ImportBatchModal({
 	workId,
 	model,
 }: ImportBatchModalProps) {
+	const isCostImport = model === "custos";
 	const queryClient = useQueryClient();
 	const [file, setFile] = useState<File | null>(null);
+	const [title, setTitle] = useState("");
 	const [batchId, setBatchId] = useState<string | null>(null);
 	const [page, setPage] = useState(1);
 	const [downloadingTemplate, setDownloadingTemplate] = useState(false);
@@ -81,9 +89,26 @@ export function ImportBatchModal({
 		enabled: open && batchId !== null,
 	});
 
+	const returnToUpload = () => {
+		const staleBatchId = batchId;
+		if (staleBatchId) {
+			queryClient.removeQueries({
+				queryKey: ["import-batches", "preview", workId, staleBatchId],
+			});
+			void cancelImportBatch(workId, staleBatchId).catch(() => undefined);
+		}
+		setBatchId(null);
+		setFile(null);
+		setPage(1);
+		setSelectedRowIds(new Set());
+	};
+
 	const uploadMutation = useMutation({
 		mutationFn: async (selectedFile: File) => {
-			const preview = await uploadImportBatch(workId, selectedFile, { model });
+			const preview = await uploadImportBatch(workId, selectedFile, {
+				model,
+				...(isCostImport ? { title: title.trim() } : {}),
+			});
 			const selectedRowIds = await getSelectableImportRowIds(
 				workId,
 				preview.batchId,
@@ -120,6 +145,42 @@ export function ImportBatchModal({
 			}
 		},
 		onError: (error) => {
+			const status = axios.isAxiosError(error)
+				? error.response?.status
+				: undefined;
+			const code = getApiErrorCode(error);
+			const message = getErrorMessage(error, "").toLowerCase();
+
+			if (status === 409 || code === "IMPORT_BATCH_CONFLICT") {
+				void previewQuery.refetch();
+				toast.info(
+					"O preview foi atualizado. Revise as linhas e tente novamente.",
+				);
+				return;
+			}
+
+			if (
+				code === "IMPORT_MODEL_INVALID" ||
+				(status === 422 && message.includes("planilha rejeitada"))
+			) {
+				toast.error(
+					"O modelo da planilha foi rejeitado. Baixe o modelo oficial e envie o arquivo novamente.",
+				);
+				return;
+			}
+
+			if (
+				status === 404 ||
+				code === "NOT_FOUND" ||
+				code === "IMPORT_BATCH_NOT_READY"
+			) {
+				returnToUpload();
+				toast.error(
+					"Este lote não está mais disponível. Envie a planilha novamente para gerar um novo preview.",
+				);
+				return;
+			}
+
 			toast.error(getErrorMessage(error, "Falha ao confirmar a importação."));
 		},
 	});
@@ -159,6 +220,7 @@ export function ImportBatchModal({
 	useEffect(() => {
 		if (!open) {
 			setFile(null);
+			setTitle("");
 			setBatchId(null);
 			setPage(1);
 			setSelectedRowIds(new Set());
@@ -174,6 +236,7 @@ export function ImportBatchModal({
 	const summary = previewQuery.data?.summary;
 	const validationErrors = previewQuery.data?.errors ?? [];
 	const validationWarnings = previewQuery.data?.warnings ?? [];
+	const modelInvalid = validationErrors.length > 0;
 
 	const paginationMeta = useMemo(() => {
 		const total = summary?.total ?? 0;
@@ -220,6 +283,14 @@ export function ImportBatchModal({
 								<p className="text-sm text-muted-foreground">
 									Os dados da planilha foram aplicados à obra.
 								</p>
+								{previewQuery.data?.title && (
+									<p className="text-sm font-medium text-foreground">
+										{previewQuery.data.title}
+									</p>
+								)}
+								<p className="text-sm text-muted-foreground">
+									A listagem de custos foi atualizada.
+								</p>
 							</>
 						) : (
 							<>
@@ -234,6 +305,30 @@ export function ImportBatchModal({
 					</div>
 				) : !batchId ? (
 					<div className="space-y-4 py-2">
+						{isCostImport && (
+							<div className="space-y-2">
+								<label
+									htmlFor="cost-import-title"
+									className="text-sm font-medium text-foreground"
+								>
+									Título da importação
+								</label>
+								<Input
+									id="cost-import-title"
+									value={title}
+									onChange={(event) => setTitle(event.target.value)}
+									placeholder="Ex: Custos da fundação — janeiro"
+									maxLength={200}
+									aria-describedby="cost-import-title-help"
+								/>
+								<p
+									id="cost-import-title-help"
+									className="text-xs text-muted-foreground"
+								>
+									Todos os itens da planilha serão registrados sob este título.
+								</p>
+							</div>
+						)}
 						<div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 p-3 text-sm">
 							<div>
 								<p className="font-medium">
@@ -257,6 +352,12 @@ export function ImportBatchModal({
 						</div>
 						<FileDropzone
 							onFileSelect={(selectedFile) => {
+								if (isCostImport && !title.trim()) {
+									toast.error(
+										"Informe o título da importação antes de enviar.",
+									);
+									return;
+								}
 								setFile(selectedFile);
 								uploadMutation.mutate(selectedFile);
 							}}
@@ -292,6 +393,11 @@ export function ImportBatchModal({
 											{summary.warnings}
 										</span>{" "}
 										com aviso
+										{modelInvalid && (
+											<span className="ml-2 font-medium text-destructive">
+												modelo rejeitado
+											</span>
+										)}
 									</>
 								) : (
 									"carregando preview..."
@@ -365,7 +471,8 @@ export function ImportBatchModal({
 							disabled={
 								confirmMutation.isPending ||
 								selectedRowIds.size === 0 ||
-								previewQuery.isLoading
+								previewQuery.isLoading ||
+								modelInvalid
 							}
 						>
 							{confirmMutation.isPending ? (

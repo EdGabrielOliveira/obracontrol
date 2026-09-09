@@ -45,6 +45,7 @@ export type ConstructionImportRecord = {
 	id: string;
 	ownerId: string;
 	workId: string | null;
+	title: string | null;
 	fileName: string;
 	sheetName: string | null;
 	rowCount: number;
@@ -81,6 +82,7 @@ export type ImportBatchRecord = {
 	ownerId: string;
 	workId: string | null;
 	model: string;
+	title: string | null;
 	version: string;
 	fileName: string;
 	fileSha256: string;
@@ -134,6 +136,7 @@ export type ImportPreviewPage = {
 	batchId: string;
 	batchVersion: number;
 	model: string;
+	title: string | null;
 	version: string;
 	fileSha256: string;
 	expiresAt: string;

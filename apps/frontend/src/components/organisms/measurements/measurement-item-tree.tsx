@@ -37,7 +37,7 @@ export function MeasurementItemTree({
 
 	return (
 		<div className="overflow-x-auto">
-			<Table>
+			<Table className="min-w-[860px]">
 				<TableHeader>
 					<TableRow>
 						<TableHead className="w-10" />
@@ -66,7 +66,7 @@ export function MeasurementItemTree({
 				</TableBody>
 			</Table>
 			{totals && (
-				<div className="mt-4 grid grid-cols-3 gap-4 rounded-lg border p-4">
+				<div className="mt-4 grid grid-cols-1 gap-4 rounded-xl border border-border bg-muted/20 p-4 sm:grid-cols-3">
 					<div>
 						<p className="text-xs text-muted-foreground">
 							Atual (esta medição)
@@ -115,7 +115,13 @@ function renderDetailTreeRows(
 							<button
 								type="button"
 								onClick={() => onToggleExpand(item.id)}
-								className="rounded p-0.5 transition-colors"
+								className="rounded-xl p-1 transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								aria-label={
+									isExpanded
+										? `Recolher ${item.description}`
+										: `Expandir ${item.description}`
+								}
+								aria-expanded={isExpanded}
 							>
 								{isExpanded ? (
 									<ChevronDown className="h-3.5 w-3.5 text-primary" />

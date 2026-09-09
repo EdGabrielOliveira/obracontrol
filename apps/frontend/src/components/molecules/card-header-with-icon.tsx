@@ -30,7 +30,7 @@ export function CardHeaderWithIcon({
 			data-slot="card-header-with-icon"
 			className={cn("flex items-start gap-4 px-6", className)}
 		>
-			<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary/10">
+			<div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
 				<Icon className="h-5 w-5 text-primary" />
 			</div>
 			<div className="flex min-w-0 flex-1 items-start justify-between gap-4">

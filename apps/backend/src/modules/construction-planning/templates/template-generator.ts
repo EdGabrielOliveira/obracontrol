@@ -157,19 +157,10 @@ export function generateMedicoesTemplate(): Uint8Array {
 }
 
 export function generateCustosTemplate(): Uint8Array {
-	const title = "PLANILHA DE CUSTOS REALIZADOS";
-	const headers = [
-		"Índice",
-		"Data",
-		"Categoria",
-		"Descrição",
-		"Valor (R$)",
-		"Tipo",
-		"Fornecedor",
-		"Status",
-	];
-
-	return createWorkbook("Custos", title, headers);
+	// Keep the legacy export entry point aligned with the canonical model used
+	// by the import flow. Previously it generated a different, eight-column
+	// workbook that the permissive validator accepted as if it were standard.
+	return buildWorkbookTemplate("custos");
 }
 
 const OBRA_FIELDS = [

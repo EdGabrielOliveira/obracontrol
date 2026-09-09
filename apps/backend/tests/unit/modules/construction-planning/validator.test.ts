@@ -93,6 +93,7 @@ function makeParsedUnifiedWorkbook(
 			}
 		>;
 		sheetNames?: string[];
+		sheetHeaders?: Record<string, string[]>;
 		work?: Partial<ParsedWorkSheet>;
 	} = {},
 ): ParsedWorkbook {
@@ -236,6 +237,7 @@ function makeParsedUnifiedWorkbook(
 			"Medicoes",
 			"Custos Realizados",
 		],
+		sheetHeaders: overrides.sheetHeaders,
 	};
 }
 
@@ -1469,6 +1471,114 @@ describe("validateWorkbook", () => {
 	});
 
 	describe("validateWorkbookByKind", () => {
+		it("rejects a costs workbook that does not follow the platform model", () => {
+			const result = validateWorkbookByKind(
+				makeParsedUnifiedWorkbook({
+					sheetNames: ["Guia", "Custos"],
+					sheetHeaders: {
+						Guia: ["Modelo de Importação - ObraControl"],
+						Custos: ["Índice", "Descrição", "Valor"],
+					},
+				}),
+				"custos",
+			);
+
+			expect(result.valid).toBe(false);
+			expect(result.errors).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						code: "MISSING_REQUIRED_SHEET",
+						sheet: "Custos Realizados",
+					}),
+					expect.objectContaining({
+						code: "UNEXPECTED_SHEET",
+						sheet: "Custos",
+					}),
+				]),
+			);
+		});
+
+		it("rejects a costs workbook with a non-canonical header contract", () => {
+			const result = validateWorkbookByKind(
+				makeParsedUnifiedWorkbook({
+					sheetNames: ["Guia", "Custos Realizados"],
+					sheetHeaders: {
+						Guia: ["Modelo de Importação - ObraControl"],
+						"Custos Realizados": [
+							"Descrição",
+							"Data do lançamento",
+							"Índice apropriado",
+							"Valor realizado",
+							"Nome do item do orçamento",
+							"Tipo",
+							"Documento origem",
+							"Fornecedor/Favorecido",
+							"Grupo de custo",
+							"Situação do pagamento",
+							"Data de competência",
+							"Data de vencimento",
+							"Data de pagamento",
+							"Número do documento",
+							"Categoria antiga",
+						],
+					},
+				}),
+				"custos",
+			);
+
+			expect(result.valid).toBe(false);
+			expect(result.errors).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						code: "MISSING_MODEL_COLUMN",
+						field: "Categoria",
+					}),
+					expect.objectContaining({
+						code: "COLUMN_ORDER_MISMATCH",
+						sheet: "Custos Realizados",
+					}),
+				]),
+			);
+		});
+
+		it("rejects a costs workbook without importable rows", () => {
+			const result = validateWorkbookByKind(
+				makeParsedUnifiedWorkbook({
+					actualCostRows: [],
+					sheetNames: ["Guia", "Custos Realizados"],
+					sheetHeaders: {
+						Guia: ["Modelo de Importação - ObraControl"],
+						"Custos Realizados": [
+							"Data do lançamento",
+							"Índice apropriado",
+							"Nome do item do orçamento",
+							"Categoria",
+							"Descrição",
+							"Valor realizado",
+							"Tipo",
+							"Documento origem",
+							"Fornecedor/Favorecido",
+							"Grupo de custo",
+							"Situação do pagamento",
+							"Data de competência",
+							"Data de vencimento",
+							"Data de pagamento",
+							"Número do documento",
+						],
+					},
+				}),
+				"custos",
+			);
+
+			expect(result.valid).toBe(false);
+			expect(result.errors).toContainEqual(
+				expect.objectContaining({
+					code: "NO_DATA",
+					sheet: "Custos Realizados",
+				}),
+			);
+		});
+
 		it("obra-completa validates all sheets", () => {
 			const result = validateWorkbookByKind(
 				makeParsedUnifiedWorkbook({

@@ -60,9 +60,11 @@ docker compose -f docker-compose.development.yml up -d --build
 - Banco: PostgreSQL persistido no volume Docker `obracontrol_postgres_data`
 - Arquivos e anexos: volume Docker `obracontrol_api_data`
 
-O Compose de desenvolvimento inicia o Vite, monta `apps/frontend` no container e ativa
-polling para o Docker Desktop/Windows. Ele é destinado ao desenvolvimento e
-não deve ser usado como stack de produção.
+O Compose de desenvolvimento inicia o Vite e o backend em modo watch. Ele monta
+`apps/frontend` e os diretórios editáveis de `apps/backend` no container; o
+frontend usa polling para o Docker Desktop/Windows e o Bun reinicia a API ao
+detectar mudanças no backend. Ele é destinado ao desenvolvimento e não deve ser
+usado como stack de produção.
 
 ```bash
 docker compose -f docker-compose.development.yml up -d --build

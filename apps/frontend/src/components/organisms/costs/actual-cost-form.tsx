@@ -64,6 +64,7 @@ export function ActualCostForm({
 	const form = useForm<ActualCostFormValues>({
 		resolver: zodResolver(actualCostSchema) as Resolver<ActualCostFormValues>,
 		defaultValues: {
+			title: cost?.title ?? "",
 			budgetVersionItemId: cost?.budgetVersionItem?.versionItemId ?? "",
 			costDate:
 				toDateInputValue(cost?.costDate) ||
@@ -153,6 +154,18 @@ export function ActualCostForm({
 					description="Informações básicas do registro de custo"
 				/>
 				<CardContent className="space-y-4">
+					<Controller
+						name="title"
+						control={form.control}
+						render={({ field, fieldState }) => (
+							<InputFormField
+								label="Título do custo"
+								placeholder="Ex: Compra de materiais da fundação"
+								field={field}
+								fieldState={fieldState}
+							/>
+						)}
+					/>
 					<div className="grid grid-cols-2 gap-3">
 						<Controller
 							name="costDate"

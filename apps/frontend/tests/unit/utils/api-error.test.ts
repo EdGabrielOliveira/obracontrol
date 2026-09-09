@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import axios from "axios";
-import { getErrorMessage, normalizePortugueseText } from "@/utils/api-error";
+import {
+	getApiErrorCode,
+	getErrorMessage,
+	normalizePortugueseText,
+} from "@/utils/api-error";
 
 describe("normalizePortugueseText", () => {
 	it("corrige mensagens legadas sem alterar identificadores técnicos", () => {
@@ -64,5 +68,28 @@ describe("getErrorMessage", () => {
 		expect(getErrorMessage(error, "Falha ao salvar")).toBe(
 			"Não foi possível obter resposta da API. Verifique o endereço público e o proxy do servidor.",
 		);
+	});
+});
+
+describe("getApiErrorCode", () => {
+	it("lê o código estruturado retornado pela API", () => {
+		const error = new axios.AxiosError(
+			"Request failed",
+			"ERR_BAD_REQUEST",
+			undefined,
+			undefined,
+			{
+				status: 422,
+				statusText: "Unprocessable Entity",
+				data: {
+					message: "Lote não está pronto",
+					code: "IMPORT_BATCH_NOT_READY",
+				},
+				headers: {},
+				config: {} as never,
+			},
+		);
+
+		expect(getApiErrorCode(error)).toBe("IMPORT_BATCH_NOT_READY");
 	});
 });

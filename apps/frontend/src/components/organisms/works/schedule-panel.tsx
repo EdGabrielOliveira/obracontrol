@@ -18,6 +18,7 @@ interface SchedulePanelProps {
 	scheduleData?: ScheduleResponse;
 	onCreateRevision?: (values: CreateScheduleRevisionInput) => void;
 	canEditManualSchedule?: boolean;
+	hasBudgetAmendment?: boolean;
 }
 
 export function isReplanningEligible(
@@ -46,6 +47,7 @@ export function SchedulePanel({
 	scheduleData,
 	onCreateRevision,
 	canEditManualSchedule = false,
+	hasBudgetAmendment = false,
 }: SchedulePanelProps) {
 	const [revisionModalOpen, setRevisionModalOpen] = useState(false);
 
@@ -84,6 +86,7 @@ export function SchedulePanel({
 					}
 					items={scheduleData.items}
 					ganttMap={ganttMap}
+					hasAmendment={hasBudgetAmendment}
 				/>
 			)}
 

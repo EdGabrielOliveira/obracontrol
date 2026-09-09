@@ -34,6 +34,7 @@ model ConstructionWork {
   scheduleRevisions      ConstructionScheduleRevision[]
   measurements           ConstructionMeasurement[]
   actualCosts            ConstructionActualCost[]
+  costs                  ConstructionCost[]
   workMeasurements       WorkMeasurement[]
   photoReports           PhotoReport[]
   contracts              Contract[]

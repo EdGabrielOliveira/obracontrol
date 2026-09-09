@@ -9,6 +9,11 @@
 	| "cotacao"
 	| "quotation-map";
 
+import {
+	SUPPLIER_SHEET_NAME,
+	SUPPLIER_WORKBOOK_HEADERS,
+} from "../suppliers/supplier-workbook-contract";
+
 export const WORKBOOK_KINDS: WorkbookKind[] = [
 	"obra-completa",
 	"orcamento",
@@ -20,6 +25,10 @@ export const WORKBOOK_KINDS: WorkbookKind[] = [
 	"cotacao",
 	"quotation-map",
 ];
+
+export function isWorkbookKind(value: string): value is WorkbookKind {
+	return WORKBOOK_KINDS.includes(value as WorkbookKind);
+}
 
 export type ColumnFormat = "text" | "number" | "currency" | "date" | "percent";
 
@@ -635,29 +644,75 @@ export const SHEET_DEFINITIONS = {
 		},
 	),
 	FORNECEDORES: defineSheet(
-		"Lista de Fornecedores",
+		SUPPLIER_SHEET_NAME,
 		[
 			text(
-				"CNPJ/Documento",
-				true,
-				"Documento do fornecedor",
-				"11.222.333/0001-81",
-			),
-			text(
-				"Razão Social",
+				SUPPLIER_WORKBOOK_HEADERS[0],
 				true,
 				"Nome empresarial ou nome do fornecedor",
 				"Construtora Modelo Ltda.",
 			),
 			text(
-				"Contato",
+				SUPPLIER_WORKBOOK_HEADERS[1],
+				true,
+				"CNPJ do fornecedor",
+				"11.222.333/0001-81",
+			),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[2],
+				false,
+				"Nome do responsável",
+				"Maria Modelo",
+			),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[3],
+				false,
+				"CPF do responsável",
+				"123.456.789-09",
+			),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[4],
 				false,
 				"Telefone ou e-mail principal",
 				"contato@modelo.com.br",
 			),
-			text("Status", false, "Status cadastral do fornecedor", "ATIVO"),
+			text(SUPPLIER_WORKBOOK_HEADERS[5], false, "Tipo da chave PIX", "EMAIL"),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[6],
+				false,
+				"Chave PIX",
+				"contato@modelo.com.br",
+			),
+			text(SUPPLIER_WORKBOOK_HEADERS[7], false, "Código do banco", "001"),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[8],
+				false,
+				"Nome do banco",
+				"Banco do Brasil",
+			),
+			text(SUPPLIER_WORKBOOK_HEADERS[9], false, "Agência bancária", "1234"),
+			text(SUPPLIER_WORKBOOK_HEADERS[10], false, "Conta bancária", "12345-6"),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[11],
+				false,
+				"Tipo de conta bancária",
+				"CHECKING",
+			),
+			text(SUPPLIER_WORKBOOK_HEADERS[12], false, "CEP", "01310-100"),
+			text(SUPPLIER_WORKBOOK_HEADERS[13], false, "Logradouro", "Av. Paulista"),
+			text(SUPPLIER_WORKBOOK_HEADERS[14], false, "Número", "1000"),
+			text(SUPPLIER_WORKBOOK_HEADERS[15], false, "Complemento", "Sala 10"),
+			text(SUPPLIER_WORKBOOK_HEADERS[16], false, "Bairro", "Bela Vista"),
+			text(SUPPLIER_WORKBOOK_HEADERS[17], false, "Cidade", "São Paulo"),
+			text(SUPPLIER_WORKBOOK_HEADERS[18], false, "UF", "SP"),
+			text(
+				SUPPLIER_WORKBOOK_HEADERS[19],
+				false,
+				"Observações",
+				"Fornecedor homologado",
+			),
 		],
-		{ formats: ["text", "text", "text", "text"] },
+		{ formats: SUPPLIER_WORKBOOK_HEADERS.map(() => "text") },
 	),
 	SERVICOS: defineSheet(
 		"Servicos",

@@ -505,6 +505,7 @@ const IMPORT_CONFIRM: ApprovalEffectHandler = {
 			parsed,
 			{
 				kind: payload.model as never,
+				title: batch.title,
 				reprocessOfId: batch.reprocessOfId,
 				errorSummary: batch.errorSummary,
 				db: tx,

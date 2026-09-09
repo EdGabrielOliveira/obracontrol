@@ -147,8 +147,14 @@ function RouteComponent() {
 	const { data: versionHistory, isLoading: versionHistoryLoading } = useQuery({
 		queryKey: budgetVersionKeys.history(workId),
 		queryFn: () => listBudgetVersions(workId),
-		enabled: tab === "itens",
+		enabled: tab === "itens" || tab === "cronograma",
 	});
+	const hasBudgetAmendment =
+		versionHistory?.some(
+			(version) =>
+				version.kind === "ADITIVO" ||
+				typeof version.sourceVersionId === "string",
+		) ?? false;
 
 	const [expandedVersionId, setExpandedVersionId] = useState<string | null>(
 		null,
@@ -596,6 +602,7 @@ function RouteComponent() {
 										: undefined
 								}
 								canEditManualSchedule={canWrite}
+								hasBudgetAmendment={hasBudgetAmendment}
 							/>
 						)}
 					</TabsContent>

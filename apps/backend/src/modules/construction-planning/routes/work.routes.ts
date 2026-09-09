@@ -30,6 +30,7 @@ import { ConstructionScheduleService } from "../schedule/schedule-service";
 import {
 	constructionWorksFilterSchema,
 	createActualCostSchema,
+	createCostSchema,
 	updateActualCostSchema,
 } from "../schema";
 import {
@@ -168,6 +169,119 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					"Retorna um custo realizado específico da obra, incluindo sua apropriação e situação financeira.",
 			},
 		},
+	)
+	.get(
+		"/:workId/costs",
+		async ({ params, query, scope }) => {
+			const { actualCostFilterSchema } = await import("../schema");
+			const parsed = actualCostFilterSchema.safeParse(query);
+			return constructionManualEntryService.listCosts(
+				scope.resourceOwnerId,
+				params.workId,
+				parsed.success ? parsed.data : {},
+			);
+		},
+		{
+			detail: {
+				tags: ["Works"],
+				summary: "Listar custos agregados da obra",
+			},
+		},
+	)
+	.get(
+		"/:workId/costs/:id",
+		async ({ params, scope }) =>
+			constructionManualEntryService.getCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			),
+		{ detail: { tags: ["Works"], summary: "Detalhar custo" } },
+	)
+	.post(
+		"/:workId/costs",
+		async ({ params, body, user, scope }) => {
+			const parsed = createCostSchema.safeParse(body);
+			if (!parsed.success) throwInvalidInput(parsed.error);
+			const result = await constructionManualEntryService.createCost(
+				scope.resourceOwnerId,
+				params.workId,
+				parsed.data,
+				{ userId: user.id },
+			);
+			auditService.log({
+				userId: user.id,
+				ownerId: scope.resourceOwnerId,
+				action: "CREATE",
+				entityType: "COST",
+				entityId: result.id,
+				entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
+				newState: result as unknown as Record<string, unknown>,
+			});
+			return result;
+		},
+		{
+			body: t.Object({
+				title: t.String({ minLength: 1, maxLength: 200 }),
+				items: t.Array(
+					t.Object({
+						costDate: t.String(),
+						budgetVersionItemId: t.Optional(t.String({ minLength: 1 })),
+						budgetIndex: t.Optional(t.String()),
+						category: t.String(),
+						categoryDetail: t.Optional(t.String()),
+						description: t.String({ minLength: 1 }),
+						amount: t.Number(),
+						costType: t.String(),
+						sourceDocument: t.Optional(t.String()),
+						supplierId: t.Optional(t.Nullable(t.String())),
+						supplierName: t.Optional(t.String()),
+						costGroup: t.Optional(t.String()),
+						paymentStatus: t.Optional(t.String()),
+						allocations: t.Optional(
+							t.Array(
+								t.Object({
+									budgetItemId: t.String({ minLength: 1 }),
+									percentage: t.Optional(
+										t.Number({ minimum: 0, maximum: 100 }),
+									),
+									value: t.Optional(t.Number({ minimum: 0 })),
+								}),
+								{ minItems: 1 },
+							),
+						),
+					}),
+					{ minItems: 1 },
+				),
+			}),
+			detail: { tags: ["Works"], summary: "Criar custo com itens" },
+		},
+	)
+	.delete(
+		"/:workId/costs/:id",
+		async ({ params, user, scope }) => {
+			const old = await constructionManualEntryService.getCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
+			await constructionManualEntryService.deleteCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
+			auditService.log({
+				userId: user.id,
+				ownerId: scope.resourceOwnerId,
+				action: "DELETE",
+				entityType: "COST",
+				entityId: params.id,
+				entityDescription: `Custo ${old.title} (${old.items.length} itens)`,
+				previousState: old as unknown as Record<string, unknown>,
+			});
+			return new Response(null, { status: 204 });
+		},
+		{ detail: { tags: ["Works"], summary: "Excluir custo e seus itens" } },
 	)
 	.get(
 		"/:workId/schedule",
@@ -564,6 +678,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		},
 		{
 			body: t.Object({
+				title: t.Optional(t.String({ maxLength: 200 })),
 				costDate: t.String(),
 				budgetVersionItemId: t.Optional(t.String({ minLength: 1 })),
 				budgetIndex: t.Optional(t.String()),
@@ -634,6 +749,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		},
 		{
 			body: t.Object({
+				title: t.Optional(t.String({ maxLength: 200 })),
 				costDate: t.Optional(t.String()),
 				budgetVersionItemId: t.Optional(t.String({ minLength: 1 })),
 				budgetIndex: t.Optional(t.String()),
@@ -971,6 +1087,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 						costGroup: row.costGroup ?? undefined,
 						paymentStatus: row.paymentStatus,
 					})),
+					body.title ?? body.file.name,
 				);
 				imported = results.length;
 			}
@@ -988,7 +1105,10 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			};
 		},
 		{
-			body: t.Object({ file: t.File() }),
+			body: t.Object({
+				file: t.File(),
+				title: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
+			}),
 			detail: { tags: ["Works"] },
 		},
 	);

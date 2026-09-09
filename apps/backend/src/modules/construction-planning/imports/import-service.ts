@@ -261,6 +261,7 @@ export class ConstructionImportService {
 		replaceExisting = true,
 		options: {
 			kind?: WorkbookKind;
+			title?: string | null;
 			reprocessOfId?: string | null;
 			reason?: string | null;
 			fileName?: string | null;
@@ -353,6 +354,7 @@ export class ConstructionImportService {
 				scheduleRevisions: resolved.acceptedRevisions,
 				measurements: resolved.acceptedMeasurements,
 				actualCosts: resolved.acceptedActualCosts,
+				title: options.title ?? null,
 				measurementsAsWorkMeasurements: kind === "medicao-obra",
 				rowCount: resolved.importedCount,
 				reprocessOfId,
@@ -500,6 +502,7 @@ export class ConstructionImportService {
 		workbook: ParsedWorkbook,
 		options: {
 			kind?: WorkbookKind;
+			title?: string | null;
 			reprocessOfId?: string | null;
 			errorSummary?: Prisma.InputJsonValue | null;
 			audit?: (

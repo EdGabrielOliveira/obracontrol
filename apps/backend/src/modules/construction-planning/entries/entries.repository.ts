@@ -4,6 +4,7 @@ import { buildPaginatedResponse } from "../../../lib/pagination";
 import { pickDefined } from "../../../lib/pick-defined";
 import { prisma } from "../../../lib/prisma";
 import type { NormalizedAllocation } from "../budget-control/budget-control.types";
+import { getActualCostImportIds } from "../calculators/active-scope";
 import { ancestorIndexesOf } from "../imports/index-helpers";
 import { normalizeCostType } from "../imports/normalizers";
 import type {
@@ -23,6 +24,7 @@ type CostClient = Pick<
 	Prisma.TransactionClient,
 	| "constructionWork"
 	| "constructionBudgetItem"
+	| "constructionCost"
 	| "constructionActualCost"
 	| "budgetVersionItem"
 >;
@@ -218,6 +220,7 @@ function actualCostCreateData(
 	budgetItemId: string | null,
 	input: ImportActualCostRow,
 	normalized?: NormalizedAllocation[],
+	costId?: string | null,
 ): Prisma.ConstructionActualCostCreateInput {
 	const allocations = input.allocations;
 	const hasAllocations = allocations !== undefined && allocations.length > 0;
@@ -226,12 +229,14 @@ function actualCostCreateData(
 	return {
 		ownerId,
 		work: { connect: { id: workId, ownerId } },
+		title: input.title?.trim() || input.description?.trim() || null,
 		...(input.budgetVersionItemId
 			? { budgetVersionItem: { connect: { id: input.budgetVersionItemId } } }
 			: {}),
 		...(importId
 			? { import: { connect: { id: importId, ownerId, workId } } }
 			: {}),
+		...(costId ? { cost: { connect: { id: costId } } } : {}),
 		...(budgetItemId
 			? { budgetItem: { connect: { id: budgetItemId, ownerId, workId } } }
 			: {}),
@@ -417,6 +422,7 @@ export async function createActualCost(
 	input: CreateActualCostInput,
 	client: CostClient = prisma,
 	normalized?: NormalizedAllocation[],
+	costId?: string | null,
 ) {
 	let budgetItemId: string | null = null;
 	if (input.budgetIndex) {
@@ -463,6 +469,7 @@ export async function createActualCost(
 			budgetItemId,
 			input,
 			normalized,
+			costId,
 		),
 		include: { allocations: true },
 	});
@@ -472,6 +479,7 @@ export async function importActualCosts(
 	ownerId: string,
 	workId: string,
 	rows: ImportActualCostRow[],
+	title = "Custos importados",
 ) {
 	return prisma.$transaction(async (tx) => {
 		const work = await tx.constructionWork.findFirst({
@@ -481,6 +489,15 @@ export async function importActualCosts(
 		if (!work) {
 			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
 		}
+		const cost = await tx.constructionCost.create({
+			data: {
+				ownerId,
+				workId,
+				importId: work.activeImportId,
+				title: title.trim() || "Custos importados",
+			},
+			select: { id: true },
+		});
 
 		const indexToId = await findBudgetItemIds(
 			tx,
@@ -525,6 +542,8 @@ export async function importActualCosts(
 						work.activeImportId,
 						budgetItemId,
 						input,
+						undefined,
+						cost.id,
 					),
 					include: { allocations: true },
 				}),
@@ -543,10 +562,21 @@ export async function listActualCosts(
 		where: { id: workId, ownerId },
 		select: { activeImportId: true },
 	});
+	const actualCostImportIds = await getActualCostImportIds(ownerId, workId);
+	const standaloneCostImportIds = actualCostImportIds.filter(
+		(id) => id !== work?.activeImportId,
+	);
+	const importConditions: Prisma.ConstructionActualCostWhereInput[] = [
+		...(work?.activeImportId ? [{ importId: work.activeImportId }] : []),
+		{ importId: null },
+		...(standaloneCostImportIds.length > 0
+			? [{ importId: { in: standaloneCostImportIds } }]
+			: []),
+	];
 	const conditions: Prisma.ConstructionActualCostWhereInput[] = [
 		{ ownerId, workId },
-		work?.activeImportId
-			? { OR: [{ importId: work.activeImportId }, { importId: null }] }
+		work?.activeImportId || standaloneCostImportIds.length > 0
+			? { OR: importConditions }
 			: { importId: null },
 	];
 
@@ -653,6 +683,149 @@ const actualCostInclude = {
 	supplier: { select: { id: true, name: true } },
 } satisfies Prisma.ConstructionActualCostInclude;
 
+const costAggregateInclude = {
+	items: {
+		orderBy: [{ costDate: "asc" }, { createdAt: "asc" }],
+		include: {
+			...actualCostInclude,
+			budgetItem: {
+				select: {
+					id: true,
+					index: true,
+					description: true,
+					unit: true,
+					parent: { select: { index: true, description: true } },
+				},
+			},
+			budgetVersionItem: {
+				select: {
+					id: true,
+					index: true,
+					description: true,
+					unit: true,
+					parentVersion: { select: { index: true, description: true } },
+				},
+			},
+		},
+	},
+} satisfies Prisma.ConstructionCostInclude;
+
+type CostAggregate = Prisma.ConstructionCostGetPayload<{
+	include: typeof costAggregateInclude;
+}>;
+
+function toCostAggregateView(cost: CostAggregate) {
+	return {
+		...cost,
+		itemCount: cost.items.length,
+		amount: cost.items.reduce((sum, item) => sum + Number(item.amount), 0),
+		categories: [...new Set(cost.items.map((item) => item.category))],
+	};
+}
+
+export async function createCost(
+	ownerId: string,
+	workId: string,
+	title: string,
+	importId: string | null = null,
+	client: CostClient = prisma,
+) {
+	return client.constructionCost.create({
+		data: {
+			ownerId,
+			workId,
+			importId,
+			title: title.trim(),
+		},
+	});
+}
+
+export async function listCosts(
+	ownerId: string,
+	workId: string,
+	filters: Partial<ActualCostFilter> = {},
+) {
+	const page = filters.page ?? 1;
+	const limit = filters.limit ?? 10;
+	const conditions: Prisma.ConstructionActualCostWhereInput[] = [
+		{ ownerId, workId },
+	];
+	if (filters.category) conditions.push({ category: filters.category });
+	if (filters.supplierName)
+		conditions.push({ supplierName: { contains: filters.supplierName } });
+	if (filters.status) conditions.push({ paymentStatus: filters.status });
+	if (filters.costType) {
+		const normalizedCostType = normalizeCostType(filters.costType);
+		if (normalizedCostType) conditions.push({ costType: normalizedCostType });
+	}
+	if (filters.startDate || filters.endDate) {
+		const costDate: Record<string, Date> = {};
+		if (filters.startDate) costDate.gte = new Date(filters.startDate);
+		if (filters.endDate) costDate.lte = new Date(filters.endDate);
+		conditions.push({ costDate });
+	}
+
+	const where: Prisma.ConstructionCostWhereInput = {
+		ownerId,
+		workId,
+		items: { some: { AND: conditions } },
+		...(filters.q
+			? {
+					OR: [
+						{ title: { contains: filters.q } },
+						{ items: { some: { description: { contains: filters.q } } } },
+						{ items: { some: { supplierName: { contains: filters.q } } } },
+					],
+				}
+			: {}),
+	};
+	const [data, total] = await Promise.all([
+		prisma.constructionCost.findMany({
+			where,
+			orderBy: { createdAt: "desc" },
+			skip: (page - 1) * limit,
+			take: limit,
+			include: costAggregateInclude,
+		}),
+		prisma.constructionCost.count({ where }),
+	]);
+
+	return buildPaginatedResponse(
+		data.map(toCostAggregateView),
+		total,
+		page,
+		limit,
+	);
+}
+
+export async function getCostById(
+	ownerId: string,
+	workId: string,
+	costId: string,
+	client: Pick<Prisma.TransactionClient, "constructionCost"> = prisma,
+) {
+	const cost = await client.constructionCost.findFirst({
+		where: { id: costId, ownerId, workId },
+		include: costAggregateInclude,
+	});
+	return cost ? toCostAggregateView(cost) : null;
+}
+
+export async function deleteCost(
+	ownerId: string,
+	workId: string,
+	costId: string,
+	client: Pick<Prisma.TransactionClient, "constructionCost"> = prisma,
+) {
+	const cost = await client.constructionCost.findFirst({
+		where: { id: costId, ownerId, workId },
+		select: { id: true },
+	});
+	if (!cost) return null;
+	await client.constructionCost.delete({ where: { id: cost.id } });
+	return cost;
+}
+
 export async function deleteActualCost(
 	ownerId: string,
 	workId: string,
@@ -696,6 +869,7 @@ export async function updateActualCost(
 	if (!existing) return null;
 
 	const updateData = pickDefined(input, [
+		"title",
 		"costDate",
 		"budgetIndex",
 		"category",
