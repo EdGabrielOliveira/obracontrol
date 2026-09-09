@@ -2,6 +2,30 @@ import { beforeEach, describe, expect, it, mock } from "bun:test";
 import type { ConstructionError } from "../../../../src/lib/errors";
 import { hashApprovalPayload } from "../../../../src/modules/governance/approval.types";
 
+describe("hashApprovalPayload", () => {
+	it("produces the same hash when JSON object keys are reordered", () => {
+		expect(
+			hashApprovalPayload({
+				batchId: "batch-1",
+				payload: { selectedRowIds: ["row-1"], expectedBatchVersion: 1 },
+			}),
+		).toBe(
+			hashApprovalPayload({
+				payload: { expectedBatchVersion: 1, selectedRowIds: ["row-1"] },
+				batchId: "batch-1",
+			}),
+		);
+	});
+
+	it("changes when a payload value changes", () => {
+		expect(
+			hashApprovalPayload({ batchId: "batch-1", expectedBatchVersion: 1 }),
+		).not.toBe(
+			hashApprovalPayload({ batchId: "batch-1", expectedBatchVersion: 2 }),
+		);
+	});
+});
+
 const approvalRequestFindUnique = mock(
 	async (): Promise<Record<string, unknown> | null> => null,
 );

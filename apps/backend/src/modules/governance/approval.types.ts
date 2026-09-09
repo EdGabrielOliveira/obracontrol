@@ -103,7 +103,24 @@ export type ApprovalDecision = {
 };
 
 export function hashApprovalPayload(payload: unknown): string {
-	return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+	const serializedPayload =
+		JSON.stringify(payload, (_key, value) => {
+			if (
+				value !== null &&
+				typeof value === "object" &&
+				!Array.isArray(value)
+			) {
+				return Object.fromEntries(
+					Object.entries(value as Record<string, unknown>).sort(
+						([left], [right]) => (left < right ? -1 : left > right ? 1 : 0),
+					),
+				);
+			}
+
+			return value;
+		}) ?? "undefined";
+
+	return createHash("sha256").update(serializedPayload).digest("hex");
 }
 
 /**
