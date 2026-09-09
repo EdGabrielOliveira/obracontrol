@@ -60,7 +60,10 @@ export function normalizePortugueseText(value: string): string {
 		["unica", "única"],
 		["Unica", "Única"],
 		["CNPJ deve conter 14 digitos", "CNPJ deve conter 14 dígitos"],
-		["CPF ou CNPJ deve conter 11 ou 14 digitos", "CPF ou CNPJ deve conter 11 ou 14 dígitos"],
+		[
+			"CPF ou CNPJ deve conter 11 ou 14 digitos",
+			"CPF ou CNPJ deve conter 11 ou 14 dígitos",
+		],
 		["versao", "versão"],
 		["Versao", "Versão"],
 		["aprovacao", "aprovação"],

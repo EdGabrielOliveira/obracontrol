@@ -61,7 +61,11 @@ function approvalDescription(payloadJson: unknown): string | null {
 	const payload = payloadJson as {
 		description?: unknown;
 		title?: unknown;
-		contract?: { objectDescription?: unknown; title?: unknown; supplierName?: unknown };
+		contract?: {
+			objectDescription?: unknown;
+			title?: unknown;
+			supplierName?: unknown;
+		};
 	} | null;
 	const description =
 		payload?.description ??
@@ -102,7 +106,11 @@ function approvalTarget(row: ApprovalRequestViewRow) {
 			path: `/app/obras/${encodedWorkId}/custos/${encodedResourceId}`,
 		};
 	}
-	if (row.effectAction === "CONTRACT_REQUEST_FINALIZE" && encodedWorkId && encodedResourceId) {
+	if (
+		row.effectAction === "CONTRACT_REQUEST_FINALIZE" &&
+		encodedWorkId &&
+		encodedResourceId
+	) {
 		return {
 			label: "Comparativo do contrato",
 			path: `/app/obras/${encodedWorkId}/contratos/${encodedResourceId}/comparativo`,

@@ -42,7 +42,7 @@ export function FinancialAnalysisSection({
 					<CardHeaderWithIcon
 						icon={Users}
 						title="Curva ABC de Fornecedores"
-						description="Classificação Pareto por volume de custo realizado"
+						description="Classificação Pareto por volume de custo realizado. A inclui o fornecedor que cruza o corte de 80%; B vai até 95% e C cobre o restante."
 					/>
 					<CardContent>
 						<Table>

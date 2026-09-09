@@ -11,13 +11,16 @@ export function assertResetConfirmed(value: string | undefined): void {
 
 export async function truncateAllTables(): Promise<void> {
 	const rows: Array<{ name: string }> = await prisma.$queryRaw`
-		SELECT name FROM sqlite_master
-		WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		SELECT tablename AS name
+		FROM pg_catalog.pg_tables
+		WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
 	`;
-	for (const row of rows) {
-		if (row.name === "_prisma_migrations") continue;
+	const tableNames = rows
+		.map((row) => `"${row.name.replaceAll('"', '""')}"`)
+		.join(", ");
+	if (tableNames) {
 		await prisma.$executeRawUnsafe(
-			`DELETE FROM "${row.name.replaceAll('"', '""')}"`,
+			`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE`,
 		);
 	}
 }

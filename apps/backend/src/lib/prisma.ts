@@ -1,10 +1,9 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 
-type DatabaseMode = "unconfigured" | "sqlite-local";
+type DatabaseMode = "unconfigured" | "postgresql";
 
 let configuredClient: PrismaClient | undefined;
 let configuredDatabaseMode: DatabaseMode = "unconfigured";
-let transactionWarningLogged = false;
 
 function getActiveClient(): PrismaClient | undefined {
 	return configuredClient;
@@ -12,7 +11,7 @@ function getActiveClient(): PrismaClient | undefined {
 
 export function configureLocalPrisma(client: unknown): void {
 	configuredClient = client as PrismaClient;
-	configuredDatabaseMode = "sqlite-local";
+	configuredDatabaseMode = "postgresql";
 }
 
 export function getDatabaseMode(): DatabaseMode {
@@ -28,25 +27,10 @@ export const prisma = new Proxy(Object.create(null) as PrismaClient, {
 			);
 		}
 		if (property === "$transaction") {
-			if (!transactionWarningLogged) {
-				transactionWarningLogged = true;
-				console.warn(
-					"database.transaction_compatibility: Prisma transaction callbacks are sequential on SQLite; use the libsql adapter transaction for atomic multi-statement writes.",
-				);
-			}
-			return async (operation: unknown): Promise<unknown> => {
-				if (Array.isArray(operation)) {
-					const results: unknown[] = [];
-					for (const query of operation) results.push(await query);
-					return results;
-				}
-				if (typeof operation !== "function") {
-					throw new TypeError(
-						"A operacao de transacao deve ser uma funcao ou uma lista de queries",
-					);
-				}
-				return operation(activeClient);
-			};
+			// Preserve Prisma's real transaction implementation. The previous
+			// compatibility wrapper executed callbacks against the root client,
+			// making multi-write operations non-atomic.
+			return activeClient.$transaction.bind(activeClient);
 		}
 		const value = Reflect.get(activeClient, property, activeClient);
 		return typeof value === "function" ? value.bind(activeClient) : value;

@@ -1,10 +1,7 @@
 import { createHash } from "node:crypto";
 import { Prisma } from "../../../generated/prisma/client";
 import type { AuthorizationRole } from "../../lib/authorization";
-import {
-	isAuthorizationRole,
-	normalizeRole,
-} from "../../lib/authorization";
+import { isAuthorizationRole, normalizeRole } from "../../lib/authorization";
 import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { prisma } from "../../lib/prisma";
@@ -36,7 +33,10 @@ async function assertActorCanInvite(
 	if (!actor) {
 		throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 	}
-	if (targetWorkspaceId !== undefined && actor?.workspaceId !== targetWorkspaceId) {
+	if (
+		targetWorkspaceId !== undefined &&
+		actor?.workspaceId !== targetWorkspaceId
+	) {
 		throw new ConstructionError(
 			"FORBIDDEN",
 			"Convite fora do workspace do usuario",
@@ -194,10 +194,30 @@ async function assertScopeResourcesInWorkspace(
 			: Promise.resolve([]),
 	]);
 	const checks = [
-		[companies.length, (scope.companyIds ?? []).length, "INVALID_COMPANY", "Empresa selecionada no convite nao existe"],
-		[organizations.length, scope.organizationIds.length, "INVALID_ORGANIZATION", "Organizacao selecionada no convite nao existe"],
-		[costCenters.length, scope.costCenterIds.length, "INVALID_COST_CENTER", "Centro de custo selecionado no convite nao existe"],
-		[works.length, scope.workIds.length, "INVALID_WORK", "Obra selecionada no convite nao existe"],
+		[
+			companies.length,
+			(scope.companyIds ?? []).length,
+			"INVALID_COMPANY",
+			"Empresa selecionada no convite nao existe",
+		],
+		[
+			organizations.length,
+			scope.organizationIds.length,
+			"INVALID_ORGANIZATION",
+			"Organizacao selecionada no convite nao existe",
+		],
+		[
+			costCenters.length,
+			scope.costCenterIds.length,
+			"INVALID_COST_CENTER",
+			"Centro de custo selecionado no convite nao existe",
+		],
+		[
+			works.length,
+			scope.workIds.length,
+			"INVALID_WORK",
+			"Obra selecionada no convite nao existe",
+		],
 	] as const;
 	for (const [found, expected, code, message] of checks) {
 		if (found !== expected) {
@@ -413,12 +433,7 @@ export const invitationService = {
 			costCenterIds: [],
 			workIds: [],
 		};
-		await assertActorCanInvite(
-			actorId,
-			role,
-			scope,
-			invitation.workspaceId,
-		);
+		await assertActorCanInvite(actorId, role, scope, invitation.workspaceId);
 		await assertScopeResourcesInWorkspace(scope, invitation.workspaceId);
 		if (invitation.acceptedAt) {
 			throw new ConstructionError(
@@ -490,12 +505,7 @@ export const invitationService = {
 			costCenterIds: [],
 			workIds: [],
 		};
-		await assertActorCanInvite(
-			actorId,
-			role,
-			scope,
-			invitation.workspaceId,
-		);
+		await assertActorCanInvite(actorId, role, scope, invitation.workspaceId);
 		await assertScopeResourcesInWorkspace(scope, invitation.workspaceId);
 		if (invitation.acceptedAt) {
 			throw new ConstructionError(

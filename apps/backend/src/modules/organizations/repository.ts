@@ -491,4 +491,60 @@ export async function getOrganizationReport(ownerId: string, orgId: string) {
 	};
 }
 
+export async function getCompanyIdsForUser(
+	userId: string,
+	workspaceId?: string | null,
+) {
+	const [memberships, organizationMemberships] = await Promise.all([
+		prisma.companyMembership.findMany({
+			where: {
+				userId,
+				revokedAt: null,
+				company: workspaceId ? { workspaceId } : { workspaceId: null },
+			},
+			select: { companyId: true },
+		}),
+		prisma.organizationMembership.findMany({
+			where: {
+				userId,
+				revokedAt: null,
+				organization: workspaceId ? { workspaceId } : { workspaceId: null },
+			},
+			select: { organization: { select: { companyId: true } } },
+		}),
+	]);
+	return [
+		...new Set([
+			...memberships.map((membership) => membership.companyId),
+			...organizationMemberships.flatMap((membership) =>
+				membership.organization.companyId
+					? [membership.organization.companyId]
+					: [],
+			),
+		]),
+	];
+}
+
+export async function getCompanyManagementContext(
+	userId: string,
+	companyId: string,
+	workspaceId?: string | null,
+) {
+	const company = await prisma.company.findFirst({
+		where: { id: companyId, workspaceId: workspaceId ?? null },
+		select: { organizations: { select: { id: true } } },
+	});
+	if (!company) return null;
+	const directMembership = await prisma.companyMembership.findFirst({
+		where: { companyId, userId, revokedAt: null },
+		select: { id: true },
+	});
+	return {
+		organizationIds: company.organizations.map(
+			(organization) => organization.id,
+		),
+		hasDirectMembership: Boolean(directMembership),
+	};
+}
+
 export { getCCReport as getCostCenterReport };

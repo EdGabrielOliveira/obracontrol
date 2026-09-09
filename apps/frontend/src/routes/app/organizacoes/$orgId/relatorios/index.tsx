@@ -25,10 +25,12 @@ export const Route = createFileRoute("/app/organizacoes/$orgId/relatorios/")({
 		],
 	}),
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: organizationKeys.report(params.orgId),
-			queryFn: () => getOrgReport(params.orgId),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: organizationKeys.report(params.orgId),
+				queryFn: () => getOrgReport(params.orgId),
+			})
+			.catch(() => undefined);
 	},
 });
 

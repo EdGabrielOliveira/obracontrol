@@ -56,8 +56,7 @@ function RouteComponent() {
 	const [submitting, setSubmitting] = useState(false);
 	const budget = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () =>
-			getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const costBudget = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
@@ -82,6 +81,13 @@ function RouteComponent() {
 			}),
 		onSuccess: () => {
 			toast.success("Custo criado com sucesso!");
+			// The costs page keeps its result fresh for two minutes. Invalidate it
+			// before navigating so a newly created cost is visible immediately.
+			queryClient.invalidateQueries({ queryKey: workKeys.costs(workId) });
+			queryClient.invalidateQueries({ queryKey: workKeys.costsList(workId) });
+			queryClient.invalidateQueries({ queryKey: workKeys.bi(workId) });
+			queryClient.invalidateQueries({ queryKey: workKeys.management(workId) });
+			queryClient.invalidateQueries({ queryKey: workKeys.reports(workId) });
 			navigate({ to: "/app/obras/$workId/custos", params: { workId } });
 		},
 		onError: (error) =>

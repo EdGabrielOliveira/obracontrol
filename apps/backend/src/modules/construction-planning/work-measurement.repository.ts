@@ -783,7 +783,8 @@ function deriveWorkMeasurementItemValues(item: {
 		quantity: measuredQuantity,
 		value: roundCurrency(measuredValue),
 		percentage:
-			measuredPercentage || (budgetValue > 0 ? measuredValue / budgetValue : 0),
+			measuredPercentage ||
+			(budgetValue > 0 ? (measuredValue / budgetValue) * 100 : 0),
 	};
 }
 

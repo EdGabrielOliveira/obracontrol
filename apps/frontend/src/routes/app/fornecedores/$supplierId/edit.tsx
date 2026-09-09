@@ -31,10 +31,12 @@ import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/fornecedores/$supplierId/edit")({
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: supplierKeys.detail(params.supplierId),
-			queryFn: () => getSupplier(params.supplierId),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: supplierKeys.detail(params.supplierId),
+				queryFn: () => getSupplier(params.supplierId),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

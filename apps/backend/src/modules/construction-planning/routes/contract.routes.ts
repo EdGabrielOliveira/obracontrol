@@ -4,6 +4,7 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { binaryResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { parseInput, parseQuery } from "../../../lib/zod-validation";
@@ -154,12 +155,11 @@ export const contractRoutes = new Elysia({
 			if (!artifact.bytes) {
 				throw new Error("Arquivo do instrumento contratual nao encontrado");
 			}
-			return new Response(new Blob([artifact.bytes.buffer as ArrayBuffer]), {
-				headers: {
-					"content-type": artifact.contentType,
-					"content-disposition": `attachment; filename="${artifact.filename}"`,
-				},
-			});
+			return binaryResponse(
+				artifact.bytes,
+				artifact.contentType,
+				artifact.filename,
+			);
 		},
 		{
 			detail: {

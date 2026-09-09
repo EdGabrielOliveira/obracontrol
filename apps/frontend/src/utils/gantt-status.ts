@@ -14,6 +14,11 @@ const STATUS_CONFIG = {
 		border: "border-border",
 		ghost: "bg-muted/50",
 	},
+	DELAYED: {
+		color: "bg-status-danger",
+		border: "border-status-danger/50",
+		ghost: "bg-status-danger/10",
+	},
 } as const;
 
 const DEFAULT_STATUS = {

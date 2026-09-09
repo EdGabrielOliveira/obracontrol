@@ -17,8 +17,13 @@ const getSessionUser = mock(async () => ({
 }));
 
 const constructionWorkFindUnique = mock(
-	async (): Promise<{ id: string; costCenterId: string } | null> => ({
+	async (): Promise<{
+		id: string;
+		ownerId: string;
+		costCenterId: string;
+	} | null> => ({
 		id: TEST_WORK_ID,
+		ownerId: TEST_OWNER,
 		costCenterId: TEST_CC_ID,
 	}),
 );

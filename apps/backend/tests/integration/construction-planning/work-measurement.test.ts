@@ -21,6 +21,10 @@ const getSessionUser = mock(async () => ({
 
 const auditLogCreate = mock(async () => ({ id: "audit-1" }));
 
+const userFindUnique = mock(async () => ({
+	role: (await getSessionUser()).role,
+}));
+
 const getBudgetItemTotals = mock(async () => ({
 	[TEST_BUDGET_ITEM_ID]: 50000,
 }));
@@ -32,12 +36,11 @@ mock.module("../../../src/lib/auth-middleware", () => ({ getSessionUser }));
 mock.module("../../../src/lib/prisma", () => ({
 	prisma: {
 		auditLog: { create: auditLogCreate },
-		user: {
-			findUnique: mock(async () => ({ role: "GERENTE" })),
-		},
+		user: { findUnique: userFindUnique },
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: TEST_CC_ID,
 			})),
 		},
@@ -72,7 +75,9 @@ mock.module("../../../src/lib/prisma", () => ({
 				number: 1,
 				title: "Medicao E2E",
 			})),
+			findFirst: mock(async () => ({ id: "e2e-wm-1" })),
 		},
+		approvalRequest: { findFirst: mock(async () => null) },
 		constructionBudgetItem: {
 			findMany: mock(async () => [{ id: TEST_BUDGET_ITEM_ID }]),
 			findFirst: mock(async () => ({ index: "1" })),
@@ -97,7 +102,11 @@ mock.module("../../../src/lib/prisma", () => ({
 			),
 		},
 		$transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
-			callback({ auditLog: { create: auditLogCreate } }),
+			callback({
+				auditLog: { create: auditLogCreate },
+				workMeasurement: { findFirst: mock(async () => ({ id: "e2e-wm-1" })) },
+				constructionMeasurementCoverage: { count: mock(async () => 0) },
+			}),
 	},
 }));
 
@@ -222,6 +231,7 @@ mock.module(
 	"../../../src/modules/construction-planning/work-measurement.repository",
 	() => ({
 		getWorkMeasurementsForBI: mock(async () => []),
+		getWorkMeasurementsForManyWorks: mock(async () => new Map()),
 		listWorkMeasurements: mock(async () => ({
 			data: [],
 			total: 0,
@@ -397,7 +407,7 @@ describe("WorkMeasurement E2E", () => {
 						items: [
 							{
 								budgetItemId: TEST_BUDGET_ITEM_ID,
-								measuredQuantity: 25,
+								measuredQuantity: 125,
 							},
 						],
 					}),
@@ -451,7 +461,7 @@ describe("WorkMeasurement E2E", () => {
 						items: [
 							{
 								budgetItemId: TEST_BUDGET_ITEM_ID,
-								measuredQuantity: 25,
+								measuredQuantity: 125,
 							},
 						],
 					}),
@@ -461,7 +471,9 @@ describe("WorkMeasurement E2E", () => {
 
 		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe("Medicao acima do saldo do item de orcamento");
+		expect(body.message).toBe(
+			"Medicao acima do saldo de quantidade do item de orcamento",
+		);
 	});
 
 	it("POST - item acima do saldo restante (consumo existente) -> 422 MEASUREMENT_EXCEEDS_BALANCE", async () => {
@@ -487,7 +499,7 @@ describe("WorkMeasurement E2E", () => {
 						items: [
 							{
 								budgetItemId: TEST_BUDGET_ITEM_ID,
-								measuredQuantity: 20,
+								measuredQuantity: 105,
 							},
 						],
 					}),
@@ -497,7 +509,9 @@ describe("WorkMeasurement E2E", () => {
 
 		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe("Medicao acima do saldo do item de orcamento");
+		expect(body.message).toBe(
+			"Medicao acima do saldo de quantidade do item de orcamento",
+		);
 	});
 
 	it("POST - frontend sem accumulatedValue acima do saldo restante -> 422 (gate nao inerte)", async () => {
@@ -523,7 +537,7 @@ describe("WorkMeasurement E2E", () => {
 						items: [
 							{
 								budgetItemId: TEST_BUDGET_ITEM_ID,
-								measuredQuantity: 20,
+								measuredQuantity: 105,
 							},
 						],
 					}),
@@ -533,7 +547,9 @@ describe("WorkMeasurement E2E", () => {
 
 		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe("Medicao acima do saldo do item de orcamento");
+		expect(body.message).toBe(
+			"Medicao acima do saldo de quantidade do item de orcamento",
+		);
 	});
 
 	it("POST - accumulatedValue dentro do total (sem consumo) cria medicao", async () => {
@@ -589,7 +605,7 @@ describe("WorkMeasurement E2E", () => {
 						items: [
 							{
 								budgetItemId: TEST_BUDGET_ITEM_ID,
-								measuredQuantity: 25,
+								measuredQuantity: 125,
 							},
 						],
 					}),
@@ -599,7 +615,9 @@ describe("WorkMeasurement E2E", () => {
 
 		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe("Medicao acima do saldo do item de orcamento");
+		expect(body.message).toBe(
+			"Medicao acima do saldo de quantidade do item de orcamento",
+		);
 	});
 
 	it("POST - override GERENTE acima do saldo -> 403 GOVERNANCE_OVERRIDE_REQUIRED", async () => {
@@ -1064,7 +1082,10 @@ describe("WorkMeasurement E2E", () => {
 			measuredQuantity: 5,
 			measuredValue: 2500,
 			measuredPercentage: 5,
-			impactStatus: "APPROVED",
+			impactStatus: "PENDING_APPROVAL",
+			accumulatedQuantity: 5,
+			accumulatedValue: 2500,
+			availableQuantity: 95,
 		});
 	});
 

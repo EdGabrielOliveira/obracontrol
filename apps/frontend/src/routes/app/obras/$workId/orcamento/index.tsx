@@ -131,8 +131,7 @@ function RouteComponent() {
 
 	const { data, isLoading, error, refetch } = useQuery<BudgetViewResponse>({
 		queryKey: workKeys.budget(workId),
-		queryFn: () =>
-			getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
 		staleTime: 2 * 60 * 1000,
 	});
 

@@ -6,7 +6,10 @@ import {
 	calculateBalances,
 	normalizeCostAllocations,
 } from "../../../../../src/modules/construction-planning/budget-control/budget-control.calculator";
-import { budgetAllocationSchema } from "../../../../../src/modules/construction-planning/budget-control/budget-control.schema";
+import {
+	budgetAllocationSchema,
+	budgetPreviewSchema,
+} from "../../../../../src/modules/construction-planning/budget-control/budget-control.schema";
 
 describe("budgetAllocationSchema", () => {
 	it("rejects missing budgetItemId", () => {
@@ -235,6 +238,31 @@ describe("normalizeCostAllocations", () => {
 				{ budgetItemId: "b", value: 1005 },
 			]),
 		).toThrow();
+	});
+
+	it("aceita estorno negativo e fecha o rateio percentual", () => {
+		const parsed = budgetAllocationSchema.parse({
+			budgetItemId: "a",
+			value: -50,
+		});
+		expect(parsed.value).toBe(-50);
+		const result = normalizeCostAllocations(new Decimal("-0.05"), [
+			{ budgetItemId: "a", percentage: 30 },
+			{ budgetItemId: "b", percentage: 30 },
+			{ budgetItemId: "c", percentage: 40 },
+		]);
+		expect(result.map((row) => Number(row.value))).toEqual([
+			-0.02, -0.01, -0.02,
+		]);
+		expect(
+			result.reduce((sum, row) => sum.plus(row.value), new Decimal(0)),
+		).toEqual(new Decimal("-0.05"));
+		expect(
+			budgetPreviewSchema.parse({
+				amount: -100,
+				allocations: [{ budgetItemId: "a", percentage: 100 }],
+			}).amount,
+		).toBe(-100);
 	});
 });
 

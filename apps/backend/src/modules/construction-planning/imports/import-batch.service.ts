@@ -1,5 +1,4 @@
 import type { Prisma } from "@prisma/client";
-import * as XLSX from "xlsx";
 import { ConstructionError } from "../../../lib/errors";
 import { importStorage } from "../../../lib/import-storage";
 import {
@@ -17,6 +16,11 @@ import type {
 	ImportRowStatus,
 } from "./import-batch.types";
 import {
+	assertParsedWorkbookLimits,
+	IMPORT_LIMITS,
+	MAX_IMPORT_UPLOAD_BYTES,
+} from "./import-limits";
+import {
 	DEFAULT_IMPORT_MEMORY_BUDGET,
 	defaultMemoryChecker,
 	importParseSemaphore,
@@ -28,15 +32,7 @@ import { parseWorkbookByKind } from "./parser";
 import { assertSelectedRowIds } from "./selected-workbook";
 import { validateWorkbookByKind } from "./validator";
 
-const MB = 1024 * 1024;
-
-export const IMPORT_LIMITS = {
-	maxFileMb: 25,
-	maxSheets: 20,
-	maxRows: 100_000,
-	previewPageSize: 500,
-	batchTtlDays: 7,
-};
+export { IMPORT_LIMITS } from "./import-limits";
 
 export const IMPORT_MODEL_VERSION = "2";
 
@@ -145,15 +141,18 @@ export class ConstructionImportBatchService {
 			}
 		}
 
-		await importParseSemaphore.acquire();
 		const memoryChecker = defaultMemoryChecker();
 		let batchId: string | null = null;
+		let storageKey: string | null = null;
+		let parsing = false;
 		try {
 			const stored = await importStorage.put(
 				crypto.randomUUID(),
 				input.file,
 				new Date(Date.now() + IMPORT_LIMITS.batchTtlDays * 24 * 60 * 60 * 1000),
+				MAX_IMPORT_UPLOAD_BYTES,
 			);
+			storageKey = stored.storageKey;
 
 			const created = await importBatchRepository.createImportBatch({
 				ownerId,
@@ -175,12 +174,15 @@ export class ConstructionImportBatchService {
 
 			const buffer = await readAllChunks(stored.storageKey);
 			await this.assertWorkbookShape(buffer);
+			await importParseSemaphore.acquire();
+			parsing = true;
 
 			const workbook = parseWorkbookByKind(
 				buffer,
 				input.fileName,
 				input.model as WorkbookKind,
 			);
+			assertParsedWorkbookLimits(workbook);
 			const validation = validateWorkbookByKind(
 				workbook,
 				input.model as WorkbookKind,
@@ -235,29 +237,26 @@ export class ConstructionImportBatchService {
 		} catch (error) {
 			if (batchId) {
 				await importBatchRepository
+					.deleteImportRows(batchId)
+					.catch(() => undefined);
+				await importBatchRepository
 					.updateImportBatch(batchId, { status: "FAILED" })
 					.catch(() => undefined);
 			}
+			if (storageKey)
+				await importStorage.remove(storageKey).catch(() => undefined);
 			throw error;
 		} finally {
-			importParseSemaphore.release();
+			if (parsing) importParseSemaphore.release();
 		}
 	}
 
 	private async assertWorkbookShape(buffer: Uint8Array) {
-		if (buffer.byteLength > IMPORT_LIMITS.maxFileMb * MB) {
+		if (buffer.byteLength > MAX_IMPORT_UPLOAD_BYTES) {
 			throw new ConstructionError(
 				"IMPORT_FILE_TOO_LARGE",
 				`Arquivo excede o limite de tamanho de ${IMPORT_LIMITS.maxFileMb} MB`,
 				413,
-			);
-		}
-		const sheetCount = XLSX.read(buffer, { type: "buffer" }).SheetNames.length;
-		if (sheetCount > IMPORT_LIMITS.maxSheets) {
-			throw new ConstructionError(
-				"IMPORT_SHEET_LIMIT_EXCEEDED",
-				`Workbook excede o limite de ${IMPORT_LIMITS.maxSheets} planilhas`,
-				422,
 			);
 		}
 	}
@@ -420,7 +419,7 @@ export class ConstructionImportBatchService {
 		workId: string,
 		batchId: string,
 		page = 1,
-		pageSize = IMPORT_LIMITS.previewPageSize,
+		pageSize: number = IMPORT_LIMITS.previewPageSize,
 	): Promise<ImportPreviewPage> {
 		const batch = await importBatchRepository.findImportBatch(
 			ownerId,
@@ -519,8 +518,11 @@ export class ConstructionImportBatchService {
 	async listBatches(ownerId: string, workId: string, page = 1, pageSize = 20) {
 		return importBatchRepository.listImportBatches(ownerId, {
 			workId,
-			page,
-			pageSize,
+			page: Math.max(1, Math.floor(page)),
+			pageSize: Math.min(
+				Math.max(1, Math.floor(pageSize)),
+				IMPORT_LIMITS.batchPageSize,
+			),
 		});
 	}
 

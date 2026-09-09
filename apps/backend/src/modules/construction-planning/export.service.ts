@@ -1,4 +1,5 @@
 ﻿import * as XLSX from "xlsx";
+import { xlsxResponse as buildXlsxResponse } from "../../lib/binary-response";
 import { ConstructionError } from "../../lib/errors";
 import { prisma } from "../../lib/prisma";
 import { auditService } from "../audit/audit.service";
@@ -64,13 +65,7 @@ function toBuffer(workbook: XLSX.WorkBook): Buffer {
 }
 
 export function xlsxResponse(buffer: Buffer, filename: string): Response {
-	return new Response(buffer as unknown as Blob, {
-		headers: {
-			"content-type":
-				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"content-disposition": `attachment; filename="${filename}"`,
-		},
-	});
+	return buildXlsxResponse(buffer, filename);
 }
 
 function buildSimpleWorkbook(
@@ -781,7 +776,7 @@ function appendMetadados(
 	meta: {
 		work: { code: string; name: string } | null;
 		asOfDate?: Date;
-		source: ExportSourceResolution;
+		source: "LIVE";
 		actor: ExportActor;
 		mode: ExportMode;
 	},
@@ -796,7 +791,7 @@ function appendMetadados(
 			meta.asOfDate ? toDateString(meta.asOfDate) : "Sem corte",
 		],
 		["Data de Corte", effectiveCutoff],
-		["Fonte", meta.source.mode],
+		["Fonte", meta.source],
 		["Modo", meta.mode],
 		["Versao do Snapshot", ""],
 		["Tipo do Snapshot", ""],
@@ -810,6 +805,25 @@ function appendMetadados(
 
 export class ExportService {
 	constructor(private readonly audit: ExportAudit = auditService) {}
+
+	private async logStandaloneExport(input: {
+		ownerId: string;
+		actorId: string;
+		kind: string;
+		entityId: string;
+		fileName: string;
+	}) {
+		await this.audit.log({
+			userId: input.actorId,
+			ownerId: input.ownerId,
+			action: "EXPORT",
+			entityType: "EXPORT",
+			entityId: input.entityId,
+			entityDescription: `${input.entityId}:${input.kind}`,
+			previousState: null,
+			newState: { kind: input.kind, fileName: input.fileName },
+		});
+	}
 
 	private async runExport(input: {
 		ownerId: string;
@@ -826,10 +840,11 @@ export class ExportService {
 	}): Promise<Response> {
 		const opts = input.opts ?? {};
 		const actor = opts.actor ?? { id: input.ownerId };
-		const [source, work] = await Promise.all([
+		const [sourceResolution, work] = await Promise.all([
 			exportRepo.resolveExportSource(input.ownerId, input.workId),
 			exportRepo.getWorkInfoForExport(input.ownerId, input.workId),
 		]);
+		const source: ExportSourceResolution["mode"] = sourceResolution.mode;
 		const fileName =
 			typeof input.fileName === "function"
 				? input.fileName(work)
@@ -857,7 +872,7 @@ export class ExportService {
 			newState: {
 				kind: input.kind,
 				asOfDate: opts?.asOfDate ? opts?.asOfDate.toISOString() : null,
-				sourceMode: source.mode,
+				sourceMode: source,
 				fileName,
 			},
 		});
@@ -1108,33 +1123,76 @@ export class ExportService {
 		ownerId: string,
 		workId: string,
 		period = "monthly",
+		actor: ExportActor = { id: ownerId },
 	) {
 		const statistics = await getWorkStatistics(
 			ownerId,
 			workId,
 			period as "daily" | "weekly" | "monthly",
 		);
-		return buildSimpleWorkbook(
+		const response = buildSimpleWorkbook(
 			{
 				"Série temporal": statistics.series,
 				Fornecedores: statistics.suppliers,
 			},
 			"estatisticas-obra.xlsx",
 		);
+		await this.logStandaloneExport({
+			ownerId,
+			actorId: actor.id,
+			kind: "estatisticas-obra",
+			entityId: workId,
+			fileName: "estatisticas-obra.xlsx",
+		});
+		return response;
 	}
 
-	async exportSuppliers(ownerId: string) {
+	async exportSuppliers(ownerId: string, actor: ExportActor = { id: ownerId }) {
 		const suppliers = await prisma.constructionSupplier.findMany({
 			where: { ownerId },
 			orderBy: { name: "asc" },
+			select: {
+				name: true,
+				document: true,
+				responsibleName: true,
+				responsibleDocument: true,
+				contact: true,
+				pixKey: true,
+				pixKeyType: true,
+				bankCode: true,
+				bankName: true,
+				bankBranch: true,
+				bankAccount: true,
+				bankAccountType: true,
+				addressZipCode: true,
+				addressStreet: true,
+				addressNumber: true,
+				addressComplement: true,
+				addressDistrict: true,
+				addressCity: true,
+				addressState: true,
+				notes: true,
+				status: true,
+			},
 		});
-		return buildSimpleWorkbook(
+		const response = buildSimpleWorkbook(
 			{ Fornecedores: suppliers },
 			"fornecedores.xlsx",
 		);
+		await this.logStandaloneExport({
+			ownerId,
+			actorId: actor.id,
+			kind: "fornecedores",
+			entityId: ownerId,
+			fileName: "fornecedores.xlsx",
+		});
+		return response;
 	}
 
-	async exportSystemStatistics(ownerId: string) {
+	async exportSystemStatistics(
+		ownerId: string,
+		actor: ExportActor = { id: ownerId },
+	) {
 		const [works, organizations, costCenters, suppliers, contracts, costs] =
 			await Promise.all([
 				prisma.constructionWork.count({ where: { ownerId } }),
@@ -1144,7 +1202,7 @@ export class ExportService {
 				prisma.contract.count({ where: { ownerId } }),
 				prisma.constructionActualCost.count({ where: { ownerId } }),
 			]);
-		return buildSimpleWorkbook(
+		const response = buildSimpleWorkbook(
 			{
 				Resumo: [
 					{ works, organizations, costCenters, suppliers, contracts, costs },
@@ -1152,14 +1210,26 @@ export class ExportService {
 			},
 			"estatisticas-sistema.xlsx",
 		);
+		await this.logStandaloneExport({
+			ownerId,
+			actorId: actor.id,
+			kind: "estatisticas-sistema",
+			entityId: ownerId,
+			fileName: "estatisticas-sistema.xlsx",
+		});
+		return response;
 	}
 
-	async exportOrganizationStatistics(ownerId: string, organizationId: string) {
+	async exportOrganizationStatistics(
+		ownerId: string,
+		organizationId: string,
+		actor: ExportActor = { id: ownerId },
+	) {
 		const report = await orgBIService.getOrganizationBI(
 			ownerId,
 			organizationId,
 		);
-		return buildSimpleWorkbook(
+		const response = buildSimpleWorkbook(
 			{
 				Resumo: [report.cards],
 				"Por obra": report.works,
@@ -1167,19 +1237,28 @@ export class ExportService {
 			},
 			"estatisticas-organizacao.xlsx",
 		);
+		await this.logStandaloneExport({
+			ownerId,
+			actorId: actor.id,
+			kind: "estatisticas-organizacao",
+			entityId: organizationId,
+			fileName: "estatisticas-organizacao.xlsx",
+		});
+		return response;
 	}
 
 	async exportCostCenterStatistics(
 		ownerId: string,
 		organizationId: string,
 		costCenterId: string,
+		actor: ExportActor = { id: ownerId },
 	) {
 		const report = await orgBIService.getCostCenterBI(
 			ownerId,
 			organizationId,
 			costCenterId,
 		);
-		return buildSimpleWorkbook(
+		const response = buildSimpleWorkbook(
 			{
 				Resumo: [report.cards],
 				"Por obra": report.works,
@@ -1187,6 +1266,14 @@ export class ExportService {
 			},
 			"estatisticas-centro-custo.xlsx",
 		);
+		await this.logStandaloneExport({
+			ownerId,
+			actorId: actor.id,
+			kind: "estatisticas-centro-custo",
+			entityId: costCenterId,
+			fileName: "estatisticas-centro-custo.xlsx",
+		});
+		return response;
 	}
 
 	async exportCompleto(ownerId: string, workId: string, opts?: ExportOptions) {

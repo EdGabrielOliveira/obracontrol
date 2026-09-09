@@ -73,10 +73,12 @@ export const Route = createFileRoute(
 )({
 	component: RouteComponent,
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: quotationKeys.comparison(params.workId, params.requestId),
-			queryFn: () => getQuotationComparison(params.workId, params.requestId),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: quotationKeys.comparison(params.workId, params.requestId),
+				queryFn: () => getQuotationComparison(params.workId, params.requestId),
+			})
+			.catch(() => undefined);
 	},
 	head: () => ({
 		meta: [

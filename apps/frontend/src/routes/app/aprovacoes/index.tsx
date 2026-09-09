@@ -10,7 +10,8 @@ import { queryClient } from "@/lib/query-client";
 import { requireAuthorizationCapability } from "@/lib/route-authorization";
 
 export const Route = createFileRoute("/app/aprovacoes/")({
-	beforeLoad: () => requireAuthorizationCapability("canDecideSupervisorRequests"),
+	beforeLoad: () =>
+		requireAuthorizationCapability("canDecideSupervisorRequests"),
 	loader: () => {
 		void queryClient.prefetchQuery({
 			queryKey: governanceKeys.pendingApprovals(),

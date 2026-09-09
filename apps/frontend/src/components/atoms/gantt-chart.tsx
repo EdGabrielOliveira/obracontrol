@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useGanttHeaders } from "@/components/atoms/use-gantt-headers";
 import { cn } from "@/lib/utils";
@@ -122,6 +122,7 @@ function GanttBar({
 	const end = gantt?.baselineEnd ?? row.plannedEnd;
 	const measured = gantt?.measuredPercentage ?? row.completionPercentage;
 	const status = gantt?.status ?? row.computedStatus;
+	const delayed = gantt?.delayed ?? row.delayed;
 
 	if (!start || !end) return null;
 
@@ -149,14 +150,14 @@ function GanttBar({
 				<div
 					className={cn(
 						"absolute inset-0 rounded-sm border",
-						getStatusGhostColor(status),
-						getStatusBorderColor(status),
+						getStatusGhostColor(delayed ? "DELAYED" : status),
+						getStatusBorderColor(delayed ? "DELAYED" : status),
 					)}
 				/>
 				<div
 					className={cn(
 						"absolute inset-y-0 left-0 rounded-l-sm",
-						getStatusColor(status),
+						getStatusColor(delayed ? "DELAYED" : status),
 						measured >= 0.99 && "rounded-r-sm",
 					)}
 					style={{ width: progressWidth }}
@@ -181,7 +182,7 @@ function GanttBar({
 			)}
 
 			<div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-30">
-				{row.description} — {pctValue}%
+				{row.description} — {pctValue}%{delayed ? " — Atrasado" : ""}
 			</div>
 		</div>
 	);
@@ -250,7 +251,7 @@ interface GanttTableProps {
 
 function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 	return (
-		<div className="shrink-0" style={{ width: 500, minWidth: 500 }}>
+		<div className="shrink-0" style={{ width: 760, minWidth: 760 }}>
 			<div
 				className="flex items-center border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
 				style={{ height: 44 }}
@@ -262,6 +263,8 @@ function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 				<div className="w-16 px-2 text-right">Duração</div>
 				<div className="w-28 px-2 text-right">Início (base)</div>
 				<div className="w-28 px-2 text-right">Fim (base)</div>
+				<div className="w-28 px-2 text-right">Início real</div>
+				<div className="w-28 px-2 text-right">Fim real</div>
 			</div>
 
 			{flatItems.map((row) => {
@@ -278,6 +281,7 @@ function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 						className={cn(
 							"flex items-center border-b border-border text-sm transition-colors hover:bg-muted/30",
 							isStage && "bg-muted/20 font-semibold",
+							row.delayed && "bg-status-danger/10 text-status-danger",
 						)}
 						style={{ height: ROW_HEIGHT }}
 					>
@@ -304,6 +308,15 @@ function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 							)}
 							{!hasChildren && <span className="w-5" />}
 							<span className="truncate">{row.description}</span>
+							{row.delayed && (
+								<span
+									className="inline-flex shrink-0 items-center gap-1 rounded-full bg-status-danger/15 px-1.5 py-0.5 text-[10px] font-semibold text-status-danger"
+									title="Início previsto ultrapassado sem início real"
+								>
+									<AlertTriangle className="h-3 w-3" />
+									Atrasado
+								</span>
+							)}
 						</div>
 						<div className="w-16 px-2 text-right text-xs text-muted-foreground tabular-nums">
 							{days > 0 ? formatDuration(days) : "—"}
@@ -313,6 +326,12 @@ function GanttTable({ flatItems, collapsed, toggleCollapse }: GanttTableProps) {
 						</div>
 						<div className="w-28 px-2 text-right text-xs text-muted-foreground tabular-nums">
 							{end ? formatDate(end) : "—"}
+						</div>
+						<div className="w-28 px-2 text-right text-xs tabular-nums">
+							{row.actualStart ? formatDate(row.actualStart) : "—"}
+						</div>
+						<div className="w-28 px-2 text-right text-xs tabular-nums">
+							{row.actualEnd ? formatDate(row.actualEnd) : "—"}
 						</div>
 					</div>
 				);
@@ -413,6 +432,7 @@ function GanttTimeline({
 							className={cn(
 								"border-b border-border transition-colors hover:bg-muted/20",
 								isStage && "bg-muted/10",
+								row.delayed && "bg-status-danger/10",
 							)}
 							style={{ height: ROW_HEIGHT }}
 						>
@@ -443,6 +463,10 @@ function GanttLegend() {
 			<div className="flex items-center gap-1.5">
 				<div className="h-2.5 w-5 rounded-sm border border-border bg-muted" />
 				<span>Não iniciado</span>
+			</div>
+			<div className="flex items-center gap-1.5">
+				<div className="h-2.5 w-5 rounded-sm bg-status-danger" />
+				<span>Atrasado</span>
 			</div>
 			<div className="flex items-center gap-1.5">
 				<div className="h-3 w-0.5 bg-status-danger" />

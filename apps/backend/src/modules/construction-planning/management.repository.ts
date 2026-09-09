@@ -42,6 +42,8 @@ function snapshotFromResolved(
 ): WorkMetricsSnapshot {
 	return {
 		input: resolved.input,
+		sourceMeasurements:
+			resolved.sourceMeasurements ?? resolved.input.measurements ?? [],
 		metrics: resolved.metrics,
 		manualMeasurements: resolved.manualMeasurements,
 	};

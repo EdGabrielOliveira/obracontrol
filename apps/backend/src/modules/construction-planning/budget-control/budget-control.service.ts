@@ -60,7 +60,7 @@ const REVERSAL_EVENT_BY_IMPACT: Record<string, string> = {
 };
 
 function roundNumber(value: Decimal): number {
-	return Number(value.toDecimalPlaces(2));
+	return value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 function balanceFromRow(row: InternalBalance): BudgetBalance {
@@ -81,7 +81,7 @@ export class BudgetControlService {
 		const balances = await this.getBalances(ownerId, workId, refs);
 
 		const items: BudgetBalance[] = [];
-		let totalImpact = 0;
+		let totalImpact = new Decimal(0);
 		let requiresApproval = false;
 		for (const allocation of input.allocations) {
 			const ref = refs.found.find(
@@ -105,10 +105,10 @@ export class BudgetControlService {
 				...balanceFromRow(balance),
 				projectedBalance: plan.projectedBalance,
 			});
-			totalImpact += Number(amount);
+			totalImpact = totalImpact.plus(amount);
 			if (plan.status === "PENDING_APPROVAL") requiresApproval = true;
 		}
-		return { items, totalImpact, requiresApproval };
+		return { items, totalImpact: totalImpact.toNumber(), requiresApproval };
 	}
 
 	async getAvailability(

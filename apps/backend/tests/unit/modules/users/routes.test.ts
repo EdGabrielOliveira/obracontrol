@@ -27,6 +27,12 @@ const userFindFirst = mock(
 );
 const userFindMany = mock(async (): Promise<Record<string, unknown>[]> => []);
 const userCount = mock(async () => 0);
+const companyFindMany = mock(async (): Promise<{ id: string }[]> => []);
+const companyMembershipFindMany = mock(
+	async (): Promise<
+		{ companyId: string; company: { organizations: { id: string }[] } }[]
+	> => [],
+);
 const orgFindMany = mock(
 	async (args?: { where?: { ownerId?: string; id?: { in?: string[] } } }) => {
 		if (args?.where?.ownerId) return [];
@@ -34,10 +40,14 @@ const orgFindMany = mock(
 	},
 );
 const ccFindMany = mock(
-	async (): Promise<{ id: string; organizationId: string }[]> => [
-		{ id: "cc-1", organizationId: "org-1" },
-		{ id: "cc-2", organizationId: "org-2" },
-	],
+	async (args?: { where?: { id?: { in?: string[] } } }) => {
+		const all = [
+			{ id: "cc-1", organizationId: "org-1" },
+			{ id: "cc-2", organizationId: "org-2" },
+		];
+		const ids = args?.where?.id?.in;
+		return ids ? all.filter((cc) => ids.includes(cc.id)) : all;
+	},
 );
 const orgMembershipUpsert = mock(async () => ({}));
 const ccMembershipUpsert = mock(async () => ({}));
@@ -78,6 +88,10 @@ const transaction = mock(
 				upsert: workMembershipUpsert,
 				updateMany: workMembershipUpdateMany,
 			},
+			companyMembership: {
+				updateMany: mock(async () => ({ count: 1 })),
+				upsert: mock(async () => ({})),
+			},
 			auditLog: { create: auditLogCreate },
 		}),
 );
@@ -97,10 +111,14 @@ mock.module("../../../../src/lib/prisma", () => ({
 		organization: { findMany: orgFindMany },
 		costCenter: { findMany: ccFindMany },
 		constructionWork: { findMany: workFindMany },
+		company: { findMany: companyFindMany },
 		organizationMembership: {
 			upsert: orgMembershipUpsert,
 			updateMany: orgMembershipUpdateMany,
 			findMany: orgMembershipFindMany,
+		},
+		companyMembership: {
+			findMany: companyMembershipFindMany,
 		},
 		costCenterMembership: {
 			upsert: ccMembershipUpsert,
@@ -126,7 +144,7 @@ function supervisorInput() {
 		email: "supervisor.novo@obra.bi",
 		password: "Senha@2026",
 		role: "SUPERVISOR" as const,
-		scope: { organizationIds: ["org-1"], costCenterIds: ["cc-1"], workIds: [] },
+		scope: { organizationIds: [], costCenterIds: ["cc-1"], workIds: [] },
 	};
 }
 
@@ -182,7 +200,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 		);
 	});
 
-	it("ADMIN cria Supervisor com organizacoes e centros", async () => {
+	it("ADMIN cria Supervisor somente com centros de custo", async () => {
 		await userService.create(supervisorInput(), { actorId: "admin-1" });
 
 		expect(userCreate).toHaveBeenCalled();
@@ -190,14 +208,14 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			where: { id: "user-1" },
 			data: { role: "SUPERVISOR" },
 		});
-		expect(orgMembershipUpsert).toHaveBeenCalledWith(
-			expect.objectContaining({
-				create: { organizationId: "org-1", userId: "user-1", role: "GERENTE" },
-			}),
-		);
+		expect(orgMembershipUpsert).not.toHaveBeenCalled();
 		expect(ccMembershipUpsert).toHaveBeenCalledWith(
 			expect.objectContaining({
-				create: { costCenterId: "cc-1", userId: "user-1", role: "GESTOR" },
+				create: {
+					costCenterId: "cc-1",
+					userId: "user-1",
+					role: "SUPERVISOR",
+				},
 			}),
 		);
 	});
@@ -228,6 +246,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 		await userService.create(
 			{
 				...supervisorInput(),
+				role: "GESTOR",
 				scope: {
 					organizationIds: ["org-1"],
 					costCenterIds: ["cc-1"],
@@ -247,7 +266,8 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 	it("GERENTE cria Gestor e Supervisor nas proprias organizacoes", async () => {
 		userFindUnique.mockResolvedValue({ id: "gerente-1", role: "GERENTE" });
 		orgMembershipFindMany.mockResolvedValue([{ organizationId: "org-1" }]);
-
+		orgFindMany.mockResolvedValue([{ id: "org-1" }]);
+		ccFindMany.mockResolvedValue([{ id: "cc-1", organizationId: "org-1" }]);
 		await userService.create(supervisorInput(), { actorId: "gerente-1" });
 
 		expect(userCreate).toHaveBeenCalled();
@@ -281,6 +301,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			await userService.create(
 				{
 					...supervisorInput(),
+					role: "GESTOR",
 					scope: {
 						organizationIds: ["org-2"],
 						costCenterIds: ["cc-2"],
@@ -304,7 +325,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 				{
 					...supervisorInput(),
 					role: "GESTOR",
-					scope: { organizationIds: ["org-1"], costCenterIds: [], workIds: [] },
+					scope: { organizationIds: [], costCenterIds: [], workIds: [] },
 				},
 				{ actorId: "admin-1" },
 			);
@@ -312,7 +333,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			error = e as ConstructionError;
 		}
 
-		expect(error?.code).toBe("COST_CENTER_REQUIRED");
+		expect(error?.code).toBe("SCOPE_REQUIRED");
 		expect(error?.status).toBe(422);
 		expect(userCreate).not.toHaveBeenCalled();
 	});
@@ -323,6 +344,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			await userService.create(
 				{
 					...supervisorInput(),
+					role: "GESTOR",
 					scope: {
 						organizationIds: ["org-1"],
 						costCenterIds: ["cc-2"],
@@ -345,6 +367,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			await userService.create(
 				{
 					...supervisorInput(),
+					role: "GESTOR",
 					scope: { organizationIds: [], costCenterIds: [], workIds: [] },
 				},
 				{ actorId: "admin-1" },
@@ -353,7 +376,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 			error = e as ConstructionError;
 		}
 
-		expect(error?.code).toBe("ORGANIZATION_REQUIRED");
+		expect(error?.code).toBe("SCOPE_REQUIRED");
 		expect(error?.status).toBe(422);
 	});
 
@@ -402,7 +425,7 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 		await userService.update("admin-1", "user-1", {
 			role: "GESTOR",
 			scope: {
-				organizationIds: ["org-1"],
+				organizationIds: [],
 				costCenterIds: ["cc-1"],
 				workIds: [],
 			},
@@ -453,6 +476,8 @@ describe("userService - delegacao e escopo (DEC-005)", () => {
 	it("GERENTE atualiza somente Gestores/Supervisores", async () => {
 		userFindUnique.mockResolvedValue({ id: "gerente-1", role: "GERENTE" });
 		orgMembershipFindMany.mockResolvedValue([{ organizationId: "org-1" }]);
+		orgFindMany.mockResolvedValue([{ id: "org-1" }]);
+		ccFindMany.mockResolvedValue([{ id: "cc-1", organizationId: "org-1" }]);
 		userFindFirst.mockResolvedValue({
 			id: "user-1",
 			role: "SUPERVISOR",

@@ -53,13 +53,15 @@ export const Route = createFileRoute("/app/obras/$workId/medicoes/")({
 	validateSearch: measurementFilterSchema,
 	loaderDeps: ({ search }) => ({ search }),
 	loader: ({ params, deps }) => {
-		void queryClient.prefetchQuery({
-			queryKey: workKeys.measurementsList(
-				params.workId,
-				deps.search as Record<string, unknown>,
-			),
-			queryFn: () => listWorkMeasurements(params.workId, deps.search),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: workKeys.measurementsList(
+					params.workId,
+					deps.search as Record<string, unknown>,
+				),
+				queryFn: () => listWorkMeasurements(params.workId, deps.search),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

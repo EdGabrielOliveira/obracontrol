@@ -16,6 +16,7 @@ import {
 	validateDateRange,
 } from "./normalizers";
 import { REQUIRED_SHEETS } from "./parser";
+import { SHEET_NAME_ALIASES } from "./sheet-aliases";
 import { normalizeActualCosts } from "./validators/actual-cost.validator";
 import { normalizeBaselineSchedules } from "./validators/baseline.validator";
 import { validateBudgetRows } from "./validators/budget.validator";
@@ -166,18 +167,6 @@ function validateUnifiedWorkbook(workbook: ParsedWorkbook): ValidationResult {
 		actualCosts,
 	);
 }
-
-const SHEET_NAME_ALIASES: Record<string, string[]> = {
-	"Medicoes Obra": [
-		"Medições de Obra",
-		"Medicoes Obra",
-		"Medicoes",
-		"Medições",
-	],
-	Orcamento: ["Orcamento", "Orçamento"],
-	"Cronograma Original": ["Cronograma Original", "Cronograma"],
-	"Itens do Orcamento": ["Itens do Orcamento", "Itens do Orçamento"],
-};
 
 function getAliases(sheetName: string): string[] {
 	return SHEET_NAME_ALIASES[sheetName] ?? [sheetName];

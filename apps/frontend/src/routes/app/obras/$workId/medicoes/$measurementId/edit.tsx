@@ -58,8 +58,7 @@ function RouteComponent() {
 	});
 	const budgetQuery = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () =>
-			getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const coveragesQuery = useQuery({
 		queryKey: measurementCoverageKeys.list(workId),

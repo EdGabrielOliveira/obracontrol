@@ -52,7 +52,11 @@ export const contractFormSchema = z
 			.optional(),
 	})
 	.superRefine((data, ctx) => {
-		if (data.startDate && data.endDate && new Date(data.endDate) < new Date(data.startDate)) {
+		if (
+			data.startDate &&
+			data.endDate &&
+			new Date(data.endDate) < new Date(data.startDate)
+		) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
 				path: ["endDate"],
@@ -139,17 +143,16 @@ export type ContractServiceEditValues = z.infer<
 	typeof contractServiceEditSchema
 >;
 
-export const contractPaymentCreateSchema = z
-	.object({
-		description: z.string().optional(),
-		date: z.string().min(1, "Data obrigatória"),
-		value: z.string().min(1, "Valor obrigatório"),
-		paidValue: z.string().min(1, "Valor pago obrigatório"),
-		retentionValue: z.string().optional(),
-		discountValue: z.string().optional(),
-		measurementId: z.string().optional(),
-		status: paymentStatusSchema.optional(),
-	});
+export const contractPaymentCreateSchema = z.object({
+	description: z.string().optional(),
+	date: z.string().min(1, "Data obrigatória"),
+	value: z.string().min(1, "Valor obrigatório"),
+	paidValue: z.string().min(1, "Valor pago obrigatório"),
+	retentionValue: z.string().optional(),
+	discountValue: z.string().optional(),
+	measurementId: z.string().optional(),
+	status: paymentStatusSchema.optional(),
+});
 
 export type ContractPaymentCreateValues = z.infer<
 	typeof contractPaymentCreateSchema

@@ -1,8 +1,8 @@
 import { env } from "../../env";
 import {
-	isValidCnpj,
 	type CnpjLookupResult,
 	cnpjClient,
+	isValidCnpj,
 } from "../../lib/cnpj-client";
 import { ConstructionError } from "../../lib/errors";
 import { objectStorage } from "../../lib/object-storage";
@@ -389,9 +389,7 @@ export const companyService = {
 			where: { id: companyId },
 			data: {
 				...(input.name !== undefined ? { name: input.name.trim() } : {}),
-				...(input.document !== undefined
-					? { document }
-					: {}),
+				...(input.document !== undefined ? { document } : {}),
 				...(input.tradeName !== undefined
 					? { tradeName: input.tradeName?.trim() || null }
 					: {}),

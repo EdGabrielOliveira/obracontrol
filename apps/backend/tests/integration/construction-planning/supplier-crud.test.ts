@@ -16,8 +16,13 @@ mock.module("../../../src/lib/auth-middleware", () => ({ getSessionUser }));
 
 const userFindUnique = mock(async () => ({ id: TEST_OWNER, role: "GERENTE" }));
 const workFindUnique = mock(
-	async (): Promise<{ id: string; costCenterId: string } | null> => ({
+	async (): Promise<{
+		id: string;
+		ownerId: string;
+		costCenterId: string;
+	} | null> => ({
 		id: "work-1",
+		ownerId: TEST_OWNER,
 		costCenterId: "cc-1",
 	}),
 );
@@ -162,7 +167,11 @@ beforeEach(() => {
 	unlinkFromWork.mockClear();
 	importSupplierWorkbook.mockClear();
 	supplierAnalyticsList.mockClear();
-	workFindUnique.mockResolvedValue({ id: "work-1", costCenterId: "cc-1" });
+	workFindUnique.mockResolvedValue({
+		id: "work-1",
+		ownerId: TEST_OWNER,
+		costCenterId: "cc-1",
+	});
 	orgMembershipFindMany.mockResolvedValue([{ organizationId: "org-1" }]);
 	ccMembershipFindMany.mockResolvedValue([{ costCenterId: "cc-1" }]);
 });
@@ -220,7 +229,11 @@ describe("Supplier CRUD E2E", () => {
 		assertJsonResponse(response, 200);
 		const body = await response.json();
 		expect(body).toMatchObject({ id: "supplier-1", name: "Fornecedor E2E" });
-		expect(getSupplierDetail).toHaveBeenCalledWith(TEST_OWNER, "supplier-1");
+		expect(getSupplierDetail).toHaveBeenCalledWith(
+			TEST_OWNER,
+			"supplier-1",
+			undefined,
+		);
 	});
 
 	it("POST /construction/suppliers - cria fornecedor", async () => {
@@ -297,7 +310,7 @@ describe("Supplier CRUD E2E", () => {
 		);
 
 		assertJsonResponse(response, 200);
-		expect(listWorkSuppliers).toHaveBeenCalledWith(TEST_OWNER, "work-1");
+		expect(listWorkSuppliers).toHaveBeenCalledWith(TEST_OWNER, "work-1", "");
 	});
 
 	it("GET /construction/works/:workId/suppliers - nega obra fora do escopo", async () => {

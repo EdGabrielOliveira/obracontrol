@@ -139,6 +139,21 @@ const rejectedRowCount = (errors: unknown[]) =>
 			(error) => `${error.sheet ?? ""}:${error.row ?? ""}`,
 		),
 	).size;
+const parseAndValidateWorkbook = mock(async () => ({
+	parsed: {},
+	validation: {
+		valid: true,
+		errors: [],
+		warnings: [],
+		normalizedRows: [],
+		baselineSchedules: [],
+		scheduleRevisions: [],
+		measurements: [],
+		actualCosts: [],
+		importedSections: [],
+		processedSheets: [],
+	},
+}));
 
 mock.module(
 	"../../../src/modules/construction-planning/imports/import-service",
@@ -147,6 +162,7 @@ mock.module(
 		previewWorkbook,
 		buildRejectedSheet,
 		rejectedRowCount,
+		parseAndValidateWorkbook,
 	}),
 );
 
@@ -268,7 +284,9 @@ describe("Import routes E2E", () => {
 
 		expect(response.status).toBe(400);
 		const body = await response.json();
-		expect(body.message).toBe("Parametros invalidos");
+		expect(body.message).toBe(
+			"Paginacao invalida: page deve ser >= 1 e pageSize deve estar entre 1 e 100",
+		);
 		expect(listImports).not.toHaveBeenCalled();
 	});
 
@@ -283,7 +301,9 @@ describe("Import routes E2E", () => {
 
 		expect(response.status).toBe(400);
 		const body = await response.json();
-		expect(body.message).toBe("Parametros invalidos");
+		expect(body.message).toBe(
+			"Paginacao invalida: page deve ser >= 1 e pageSize deve estar entre 1 e 100",
+		);
 		expect(listImports).not.toHaveBeenCalled();
 	});
 

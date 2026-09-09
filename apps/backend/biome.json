@@ -1,5 +1,6 @@
 {
 	"$schema": "https://biomejs.dev/schemas/2.3.0/schema.json",
+	"root": true,
 	"files": {
 		"includes": ["**", "!generated/prisma", "!src/generated", "!.prisma"]
 	}

@@ -72,8 +72,10 @@ mock.module("../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: TEST_CC_ID,
 			})),
+			findFirst: mock(async () => ({ operationalStatus: "IN_PROGRESS" })),
 		},
 		costCenter: {
 			findUnique: mock(async () => ({
@@ -100,12 +102,14 @@ mock.module("../../../src/lib/prisma", () => ({
 			findMany: mock(async () => [{ organizationId: TEST_ORG_ID }]),
 		},
 		contractMeasurementItem: { findMany: mock(async () => []) },
+		contractMeasurement: { findMany: mock(async () => []) },
 		constructionBudgetImpact: { findMany: mock(async () => []) },
 		approvalRequest: { findFirst: approvalRequestFindFirst },
 		$transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
 			callback({
 				auditLog: { create: auditLogCreate },
 				constructionBudgetImpact: { findMany: mock(async () => []) },
+				contractMeasurement: { findMany: mock(async () => []) },
 			}),
 	},
 }));
@@ -238,20 +242,20 @@ mock.module(
 			endDate: null,
 		})),
 		getServiceBudgetItems,
-		getContractServicesById: mock(
-			async () =>
-				new Map([
-					[
-						SERVICE_ID,
-						{
-							id: SERVICE_ID,
-							quantity: 10,
-							unitCost: 5000,
-							totalCost: 50000,
-						},
-					],
+		getContractServicesById: mock(async () => {
+			const totals = await getServiceTotals();
+			return new Map(
+				Object.entries(totals).map(([id, totalCost]) => [
+					id,
+					{
+						id,
+						quantity: totalCost / 5000,
+						unitCost: 5000,
+						totalCost,
+					},
 				]),
-		),
+			);
+		}),
 		countPaidPaymentsForMeasurement: mock(async () => 0),
 		buildMeasurementItemData: mock(
 			(item: Record<string, unknown>, _service?: unknown) => ({
@@ -444,7 +448,6 @@ describe("Contract Measurements E2E", () => {
 							{
 								serviceId: "e2e-cs-1",
 								measuredQuantity: 5,
-								measuredValue: 25000,
 								measuredPercentage: 50,
 							},
 						],
@@ -540,8 +543,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 15000,
+								measuredQuantity: 3,
 							},
 						],
 					}),
@@ -600,8 +602,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 15000,
+								measuredQuantity: 3,
 							},
 						],
 					}),
@@ -642,8 +643,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 15000,
+								measuredQuantity: 3,
 							},
 						],
 					}),
@@ -702,8 +702,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 15000,
+								measuredQuantity: 3,
 							},
 						],
 					}),
@@ -745,8 +744,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 12500,
+								measuredQuantity: 2.5,
 							},
 						],
 					}),
@@ -757,7 +755,7 @@ describe("Contract Measurements E2E", () => {
 		expect(response.status).toBe(200);
 	});
 
-	it("POST - item sem cobertura orcamentaria ao lado de item coberto -> 422 CONTRACT_BUDGET_COVERAGE_MISSING", async () => {
+	it("POST - item sem cobertura orcamentaria cria rascunho para validacao posterior", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -791,13 +789,11 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 12500,
+								measuredQuantity: 2.5,
 							},
 							{
 								serviceId: "e2e-cs-2",
-								measuredValue: 30000,
-								accumulatedValue: 30000,
+								measuredQuantity: 6,
 							},
 						],
 					}),
@@ -805,13 +801,10 @@ describe("Contract Measurements E2E", () => {
 			),
 		);
 
-		expect(response.status).toBe(422);
-		const body = await response.json();
-		expect(body.message).toContain("Sem cobertura orcamentaria vigente");
-		expect(body.message).toContain("e2e-cs-2");
+		expect(response.status).toBe(200);
 	});
 
-	it("POST - item sem nenhum valor medido -> 422 INVALID_MEASUREMENT_ITEM", async () => {
+	it("POST - item sem quantidade medida -> 400 Dados invalidos", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -841,15 +834,15 @@ describe("Contract Measurements E2E", () => {
 						number: 1,
 						date: "2026-06-15",
 						title: "Medicao Teste",
-						items: [{ serviceId: SERVICE_ID }],
+						items: [{ serviceId: SERVICE_ID, measuredQuantity: 0 }],
 					}),
 				},
 			),
 		);
 
-		expect(response.status).toBe(422);
+		expect(response.status).toBe(400);
 		const body = await response.json();
-		expect(body.message).toContain("Item de medicao sem valor");
+		expect(body.message).toBe("Dados invalidos");
 	});
 
 	it("POST - valor acima do saldo (GERENTE) bloqueia", async () => {
@@ -879,7 +872,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 15000,
+								measuredQuantity: 3,
 							},
 						],
 					}),
@@ -892,7 +885,7 @@ describe("Contract Measurements E2E", () => {
 		expect(body.message).toContain("saldo");
 	});
 
-	it("POST - percentual fora da escala (150) -> 400 INVALID_INPUT", async () => {
+	it("POST - quantidade medida fora da escala -> 400 Dados invalidos", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -916,9 +909,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredQuantity: 5,
-								measuredValue: 25000,
-								measuredPercentage: 150,
+								measuredQuantity: 0,
 							},
 						],
 					}),
@@ -952,8 +943,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
-								accumulatedValue: 12500,
+								measuredQuantity: 2.5,
 							},
 						],
 					}),
@@ -1044,7 +1034,7 @@ describe("Contract Measurements E2E", () => {
 						items: [
 							{
 								serviceId: SERVICE_ID,
-								measuredValue: 12500,
+								measuredQuantity: 2.5,
 							},
 						],
 					}),

@@ -57,6 +57,7 @@ export type MetricBaselineScheduleInput = {
 	id?: string;
 	budgetItemId?: string | null;
 	budgetItemIndex?: string | null;
+	budgetIndex?: string | null;
 	index?: string | null;
 	plannedStart?: Date | null;
 	plannedEnd?: Date | null;
@@ -67,6 +68,7 @@ export type MetricMeasurementInput = {
 	id?: string;
 	budgetItemId?: string | null;
 	budgetItemIndex?: string | null;
+	budgetIndex?: string | null;
 	index?: string | null;
 	measurementDate?: Date | null;
 	measuredValueAccumulated?: number | Decimal | null;
@@ -90,6 +92,13 @@ export type MetricActualCostInput = {
 	paymentStatus?: string | null;
 };
 
+type BudgetItemReference = {
+	budgetItemId?: string | null;
+	budgetItemIndex?: string | null;
+	budgetIndex?: string | null;
+	index?: string | null;
+};
+
 export type IndicatorStatus = "AVAILABLE" | "UNAVAILABLE";
 
 export type Indicator<T> = {
@@ -107,6 +116,7 @@ export type DataCompleteness = {
 	hasFutureCosts: boolean;
 	hasUnappropriatedActualCosts: boolean;
 	hasUnappropriatedFutureCosts: boolean;
+	hasSingleActualCostCategory?: boolean;
 };
 
 export type WorkMetricIndicators = {
@@ -176,6 +186,8 @@ export type WorkMetrics = {
 	etc: number | null;
 	vac: number | null;
 	tcpi: number | null;
+	baselineEnd: string | null;
+	contractEnd: string | null;
 	indicators: WorkMetricIndicators;
 	dataCompleteness: DataCompleteness;
 	financial: FinancialBreakdown;
@@ -256,20 +268,36 @@ function compareDateOnly(left: Date, right: Date): number {
 	return startOfUtcDay(left).getTime() - startOfUtcDay(right).getTime();
 }
 
-function matchesItem(
-	item: MetricItemInput,
-	row: {
-		budgetItemId?: string | null;
-		budgetItemIndex?: string | null;
-		budgetIndex?: string | null;
-		index?: string | null;
-	},
+function nonEmpty(value: string | null | undefined): string | null {
+	const normalized = value?.trim();
+	return normalized ? normalized : null;
+}
+
+function itemIndexes(reference: BudgetItemReference): string[] {
+	return [reference.budgetItemIndex, reference.budgetIndex, reference.index]
+		.map(nonEmpty)
+		.filter((value): value is string => value !== null);
+}
+
+export function budgetItemReferencesMatch(
+	left: BudgetItemReference,
+	right: BudgetItemReference,
 ): boolean {
-	return (
-		row.budgetItemId === item.id ||
-		row.budgetItemIndex === item.index ||
-		row.budgetIndex === item.index ||
-		row.index === item.index
+	const leftId = nonEmpty(left.budgetItemId);
+	const rightId = nonEmpty(right.budgetItemId);
+	if (leftId && rightId) return leftId === rightId;
+
+	const rightIndexes = new Set(itemIndexes(right));
+	return itemIndexes(left).some((index) => rightIndexes.has(index));
+}
+
+export function budgetItemMatches(
+	item: Pick<MetricItemInput, "id" | "index">,
+	row: BudgetItemReference,
+): boolean {
+	return budgetItemReferencesMatch(
+		{ budgetItemId: item.id, index: item.index },
+		row,
 	);
 }
 
@@ -287,7 +315,7 @@ function latestMeasurementForItem(
 				return false;
 			}
 
-			return matchesItem(item, measurement);
+			return budgetItemMatches(item, measurement);
 		})
 		.sort((a, b) => {
 			const left = a.measurementDate
@@ -351,7 +379,8 @@ export function baselineForItem(
 	baselineSchedules: MetricBaselineScheduleInput[],
 ): MetricBaselineScheduleInput | null {
 	return (
-		baselineSchedules.find((baseline) => matchesItem(item, baseline)) ?? null
+		baselineSchedules.find((baseline) => budgetItemMatches(item, baseline)) ??
+		null
 	);
 }
 
@@ -362,7 +391,7 @@ function hasUsableBaseline(
 ): boolean {
 	return baselineSchedules.some(
 		(baseline) =>
-			matchesItem(item, baseline) &&
+			budgetItemMatches(item, baseline) &&
 			plannedProgressAt(
 				dataDate,
 				baseline.plannedStart ?? null,
@@ -389,9 +418,7 @@ export function calculateWorkMetrics(
 	actualCosts: MetricActualCostInput[] = [],
 	asOf?: Date,
 ): WorkMetrics {
-	// The live view is always evaluated at today's date. Historical views pass
-	// an explicit asOf date and are therefore deterministic and reproducible.
-	const dataDate = asOf ?? new Date();
+	const dataDate = asOf ?? getDataDate(work);
 	const rawItemMetrics = items.map((item) =>
 		calculateItemMetrics(item, dataDate, baselineSchedules, measurements),
 	);
@@ -482,29 +509,57 @@ export function calculateWorkMetrics(
 	const unappropriatedFutureCost = futureCosts
 		.filter(isUnappropriated)
 		.reduce((sum, cost) => sum + toNum(cost.amount), 0);
-	const currentBudgetBalance = activeBudget - actualCost;
-	const projectedBudgetBalance = activeBudget - actualCost - futureCost;
 	const hasActualCosts = currentCosts.length > 0;
+	const actualCostCategories = new Set(
+		currentCosts.map(
+			(cost) => cost.category?.trim().toUpperCase() || "SEM_CATEGORIA",
+		),
+	);
+	const hasSingleActualCostCategory =
+		hasActualCosts && actualCostCategories.size === 1;
+	const costDataReliable = hasActualCosts && !hasSingleActualCostCategory;
+	const currentBudgetBalance = activeBudget - actualCost;
 	const costVariance =
-		hasMeasurements && hasActualCosts ? earnedValue - actualCost : null;
+		hasMeasurements && costDataReliable ? earnedValue - actualCost : null;
 	const costPerformanceIndex =
-		hasMeasurements && hasActualCosts && actualCost > 0
+		hasMeasurements && costDataReliable && actualCost > 0
 			? earnedValue / actualCost
 			: null;
 	const bac = activeBudget;
 	const eacTypical =
-		costPerformanceIndex != null && costPerformanceIndex > 0
+		costDataReliable && costPerformanceIndex != null && costPerformanceIndex > 0
 			? bac / costPerformanceIndex
 			: null;
 	const eacAtypical =
-		costPerformanceIndex != null && costPerformanceIndex > 0
-			? actualCost + (bac - earnedValue) / costPerformanceIndex
+		hasMeasurements && costDataReliable
+			? actualCost + (bac - earnedValue)
 			: null;
 	const selectedEac = eacTypical;
+	const projectedBudgetBalance =
+		selectedEac != null
+			? bac - selectedEac
+			: activeBudget - actualCost - futureCost;
+	const baselineEnds = activeItems
+		.map(
+			(item) =>
+				baselineForItem(item, baselineSchedules)?.plannedEnd ?? item.plannedEnd,
+		)
+		.filter((date): date is Date => date != null);
+	const baselineEnd = baselineEnds.length
+		? new Date(Math.max(...baselineEnds.map((date) => date.getTime())))
+		: null;
 	const etc = selectedEac != null ? selectedEac - actualCost : null;
 	const vac = selectedEac != null ? bac - selectedEac : null;
-	const tcpi =
-		bac - actualCost !== 0 ? (bac - earnedValue) / (bac - actualCost) : null;
+	const tcpi = (() => {
+		if (!hasMeasurements || !costDataReliable) return null;
+		const remaining = bac - actualCost;
+		if (remaining > 0) return (bac - earnedValue) / remaining;
+		// When over budget, BAC is no longer achievable — use EAC-based TCPI
+		if (eacTypical != null && eacTypical - actualCost > 0) {
+			return (bac - earnedValue) / (eacTypical - actualCost);
+		}
+		return null;
+	})();
 	const dataCompleteness: DataCompleteness = {
 		hasBudget: activeItems.length > 0,
 		hasBaselineSchedule,
@@ -513,6 +568,7 @@ export function calculateWorkMetrics(
 		hasFutureCosts: futureCosts.length > 0,
 		hasUnappropriatedActualCosts: currentCosts.some(isUnappropriated),
 		hasUnappropriatedFutureCosts: futureCosts.some(isUnappropriated),
+		hasSingleActualCostCategory,
 	};
 	const indicators = buildIndicators({
 		plannedValue,
@@ -532,6 +588,7 @@ export function calculateWorkMetrics(
 		vac,
 		tcpi,
 		dataCompleteness,
+		costDataReliable,
 	});
 
 	const financial = buildFinancialBreakdown(
@@ -575,6 +632,8 @@ export function calculateWorkMetrics(
 		etc,
 		vac,
 		tcpi,
+		baselineEnd: baselineEnd?.toISOString() ?? null,
+		contractEnd: work.plannedEnd?.toISOString() ?? null,
 		indicators,
 		dataCompleteness,
 		financial,

@@ -52,6 +52,7 @@ export type MetricSourceResolverDependencies = {
 
 function fingerprintEnvelope(envelope: {
 	input: unknown;
+	sourceMeasurements: unknown;
 	metrics: unknown;
 	manualMeasurements: unknown;
 }): string {
@@ -59,6 +60,7 @@ function fingerprintEnvelope(envelope: {
 		.update(
 			JSON.stringify({
 				input: envelope.input,
+				sourceMeasurements: envelope.sourceMeasurements,
 				metrics: envelope.metrics,
 				manualMeasurements: envelope.manualMeasurements,
 			}),
@@ -132,6 +134,7 @@ const MISSING_ISSUES = new Set([
 ]);
 
 const INVALID_ISSUES = new Set([
+	"SINGLE_ACTUAL_COST_CATEGORY",
 	"ZERO_PLANNED_VALUE_DENOMINATOR",
 	"ZERO_ACTUAL_COST_DENOMINATOR",
 ]);
@@ -140,6 +143,8 @@ const UNLINKED_ISSUES = new Set([
 	"UNAPPROPRIATED_ACTUAL_COSTS",
 	"UNAPPROPRIATED_FUTURE_COSTS",
 ]);
+
+const STALE_ISSUES = new Set(["BASELINE_END_BEFORE_WORK_END"]);
 
 export function buildQualitySummary(
 	metrics: WorkMetricCalculationResult,
@@ -150,7 +155,7 @@ export function buildQualitySummary(
 		invalid: issues.filter((issue) => INVALID_ISSUES.has(issue.code)).length,
 		unlinked: issues.filter((issue) => UNLINKED_ISSUES.has(issue.code)).length,
 		duplicated: 0,
-		stale: 0,
+		stale: issues.filter((issue) => STALE_ISSUES.has(issue.code)).length,
 	};
 }
 
@@ -251,6 +256,13 @@ export class MetricSourceResolver {
 		const cutSnapshot = {
 			...snapshot,
 			input,
+			sourceMeasurements: asOfDate
+				? snapshot.sourceMeasurements.filter(
+						(measurement) =>
+							measurement.measurementDate != null &&
+							measurement.measurementDate.getTime() <= asOfDate.getTime(),
+					)
+				: snapshot.sourceMeasurements,
 			manualMeasurements: cutManualMeasurements,
 		};
 		return {
@@ -262,6 +274,7 @@ export class MetricSourceResolver {
 			fingerprint: fingerprintEnvelope(cutSnapshot),
 			asOfDate: snapshot.metrics.dataDate,
 			input: cutSnapshot.input,
+			sourceMeasurements: cutSnapshot.sourceMeasurements,
 			metrics: snapshot.metrics,
 			manualMeasurements: cutSnapshot.manualMeasurements,
 			series: buildSeriesFromProjection(

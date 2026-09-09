@@ -68,8 +68,14 @@ export function WorksHealthTable({
 						const spiTone = classifyIndex(work.schedulePerformanceIndex);
 						const cpiTone = classifyIndex(work.costPerformanceIndex);
 						const balanceTone = classifyBalance(work.currentBudgetBalance);
+						const rawMeasured = work.measuredPercentage;
+						const measuredRatio = Number.isFinite(rawMeasured)
+							? rawMeasured > 1
+								? rawMeasured / 100
+								: rawMeasured
+							: 0;
 						const measuredWidth = `${Math.min(
-							Math.max(work.measuredPercentage * 100, 2),
+							Math.max(measuredRatio * 100, 2),
 							100,
 						)}%`;
 						return (
@@ -95,20 +101,22 @@ export function WorksHealthTable({
 											/>
 										</div>
 										<span className="w-12 text-right text-xs font-bold tabular-nums text-muted-foreground">
-											{formatRatioAsPercentage(work.measuredPercentage)}
+											{formatRatioAsPercentage(measuredRatio)}
 										</span>
 									</div>
 								</TableCell>
 								<TableCell className="text-right">
 									<Badge variant="tag" tone={HEALTH_TONE[spiTone].badge}>
-										{work.schedulePerformanceIndex != null
+										{work.schedulePerformanceIndex != null &&
+										Number.isFinite(work.schedulePerformanceIndex)
 											? work.schedulePerformanceIndex.toFixed(2)
 											: "N/A"}
 									</Badge>
 								</TableCell>
 								<TableCell className="text-right">
 									<Badge variant="tag" tone={HEALTH_TONE[cpiTone].badge}>
-										{work.costPerformanceIndex != null
+										{work.costPerformanceIndex != null &&
+										Number.isFinite(work.costPerformanceIndex)
 											? work.costPerformanceIndex.toFixed(2)
 											: "N/A"}
 									</Badge>

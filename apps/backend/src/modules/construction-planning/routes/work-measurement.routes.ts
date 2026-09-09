@@ -3,7 +3,6 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
-import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { throwInvalidInput } from "../../../lib/zod-validation";
 import { auditService } from "../../audit/audit.service";
@@ -220,22 +219,25 @@ export const workMeasurementRoutes = new Elysia({
 	.delete(
 		"/:id",
 		async ({ params, user, scope }) => {
-			const old = await prisma.workMeasurement.findUnique({
-				where: { id: params.id },
-			});
+			const old = await workMeasurementService.get(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
 			await workMeasurementService.delete(
 				scope.resourceOwnerId,
 				params.workId,
 				params.id,
 			);
 			if (old) {
+				const measurement = old.measurement;
 				auditService.log({
 					userId: user.id,
 					ownerId: scope.resourceOwnerId,
 					action: "DELETE",
 					entityType: ENTITY_TYPE,
 					entityId: params.id,
-					entityDescription: `Medição #${old.number} - ${old.title}`,
+					entityDescription: `Medição #${measurement.number} - ${measurement.title}`,
 					previousState: old as unknown as Record<string, unknown>,
 				});
 			}

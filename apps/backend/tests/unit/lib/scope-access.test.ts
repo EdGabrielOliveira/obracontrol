@@ -6,6 +6,7 @@ const mockFindUser = mock(
 const mockFindOrgs = mock(async (): Promise<Array<{ id: string }>> => []);
 const mockFindCCs = mock(async (): Promise<Array<{ id: string }>> => []);
 const mockFindManyOrgMemberships = mock(async (): Promise<unknown[]> => []);
+const mockFindManyCompanyMemberships = mock(async (): Promise<unknown[]> => []);
 const mockFindManyCCMemberships = mock(async (): Promise<unknown[]> => []);
 const mockFindManyWorkMemberships = mock(async (): Promise<unknown[]> => []);
 
@@ -16,6 +17,9 @@ mock.module("../../../src/lib/prisma", () => ({
 		costCenter: { findMany: mockFindCCs },
 		organizationMembership: {
 			findMany: mockFindManyOrgMemberships,
+		},
+		companyMembership: {
+			findMany: mockFindManyCompanyMemberships,
 		},
 		costCenterMembership: {
 			findMany: mockFindManyCCMemberships,

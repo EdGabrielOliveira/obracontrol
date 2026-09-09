@@ -31,6 +31,15 @@ describe("metrics", () => {
 		});
 	});
 
+	it("ignores invalid timing values instead of poisoning the snapshot", () => {
+		metrics.reset();
+		metrics.timing("import.duration_ms", -1);
+		metrics.timing("import.duration_ms", Number.NaN);
+		metrics.timing("import.duration_ms", Number.POSITIVE_INFINITY);
+
+		expect(metrics.snapshot()).toEqual({ counters: {}, timings: {} });
+	});
+
 	it("snapshot returns a plain object copy, immune to external mutation", () => {
 		metrics.reset();
 		metrics.increment("auth.denied");

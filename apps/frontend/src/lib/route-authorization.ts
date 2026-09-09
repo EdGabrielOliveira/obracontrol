@@ -1,15 +1,16 @@
 import { redirect } from "@tanstack/react-router";
-import { fetchAuthorizationSession } from "@/lib/auth-client";
+import type { fetchAuthorizationSession } from "@/lib/auth-client";
 import { authorizationSessionQueryOptions } from "@/lib/authorization-session-query";
-import { queryClient } from "@/lib/query-client";
 import { authQueryKeys } from "@/lib/query-cache";
+import { queryClient } from "@/lib/query-client";
 import type { AuthorizationCapabilities } from "@/types/authorization";
 
 async function getAuthorizationForGuard() {
 	return (
-		queryClient.getQueryData<Awaited<ReturnType<typeof fetchAuthorizationSession>>>(
-			authQueryKeys.authorization,
-		) ?? queryClient.fetchQuery(authorizationSessionQueryOptions())
+		queryClient.getQueryData<
+			Awaited<ReturnType<typeof fetchAuthorizationSession>>
+		>(authQueryKeys.authorization) ??
+		queryClient.fetchQuery(authorizationSessionQueryOptions())
 	);
 }
 

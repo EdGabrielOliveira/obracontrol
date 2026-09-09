@@ -61,6 +61,15 @@ const costs = [
 		costType: "CURRENT",
 		category: "MATERIAL",
 	},
+	{
+		id: "c2",
+		budgetItemId: "item-1",
+		budgetItemIndex: "1.1",
+		costDate: new Date("2026-01-10T00:00:00.000Z"),
+		amount: 0,
+		costType: "CURRENT",
+		category: "LABOR",
+	},
 ];
 
 describe("projecoes EVM em calculateWorkMetrics", () => {
@@ -108,10 +117,7 @@ describe("projecoes EVM em calculateWorkMetrics", () => {
 
 		expect(metrics.bac).toBe(1000);
 		expect(metrics.eacTypical).toBeCloseTo(1000 / (500 / 400), 8);
-		expect(metrics.eacAtypical).toBeCloseTo(
-			400 + (1000 - 500) / (500 / 400),
-			8,
-		);
+		expect(metrics.eacAtypical).toBeCloseTo(400 + (1000 - 500), 8);
 		expect(metrics.selectedEac).toBe(metrics.eacTypical);
 		const selectedEac = metrics.selectedEac as number;
 		expect(metrics.etc).toBeCloseTo(selectedEac - 400, 8);
@@ -122,9 +128,7 @@ describe("projecoes EVM em calculateWorkMetrics", () => {
 		expect(metrics.indicators.bac.value).toBe(1000);
 		expect(metrics.indicators.eacTypical.status).toBe("AVAILABLE");
 		expect(metrics.indicators.eacTypical.formula).toBe("BAC / CPI");
-		expect(metrics.indicators.eacAtypical.formula).toBe(
-			"AC + (BAC - EV) / CPI",
-		);
+		expect(metrics.indicators.eacAtypical.formula).toBe("AC + (BAC - EV)");
 		expect(metrics.indicators.etc.formula).toBe("EAC selecionado - AC");
 		expect(metrics.indicators.vac.formula).toBe("BAC - EAC selecionado");
 		expect(metrics.indicators.tcpi.formula).toBe("(BAC - EV) / (BAC - AC)");
@@ -138,7 +142,7 @@ describe("projecoes EVM em calculateWorkMetrics", () => {
 		expect(metrics.indicators.bac.value).toBe(0);
 	});
 
-	it("marca EAC/ETC/VAC indisponiveis sem custos realizados e mantem TCPI", () => {
+	it("marca EAC/ETC/VAC/TCPI indisponiveis sem custos realizados", () => {
 		const metrics = calculateWorkMetrics(
 			work,
 			items,
@@ -157,8 +161,8 @@ describe("projecoes EVM em calculateWorkMetrics", () => {
 		expect(metrics.indicators.etc.status).toBe("UNAVAILABLE");
 		expect(metrics.indicators.vac.status).toBe("UNAVAILABLE");
 
-		expect(metrics.tcpi).toBeCloseTo(0.5, 8);
-		expect(metrics.indicators.tcpi.status).toBe("AVAILABLE");
+		expect(metrics.tcpi).toBeNull();
+		expect(metrics.indicators.tcpi.status).toBe("UNAVAILABLE");
 	});
 
 	it("marca EAC indisponivel com motivo de medicao quando EV nao existe", () => {
@@ -172,21 +176,23 @@ describe("projecoes EVM em calculateWorkMetrics", () => {
 		expect(metrics.indicators.tcpi.unavailableReason).toContain("Medicoes");
 	});
 
-	it("marca TCPI indisponivel quando BAC e igual a AC", () => {
+	it("calcula TCPI com base no EAC quando BAC e igual a AC", () => {
 		const metrics = calculateWorkMetrics(work, items, baselines, measurements, [
 			{ ...costs[0], amount: 1000 },
+			{ ...costs[1] },
 		]);
 
-		expect(metrics.tcpi).toBeNull();
-		expect(metrics.indicators.tcpi.status).toBe("UNAVAILABLE");
-		expect(metrics.indicators.tcpi.unavailableReason).toContain(
-			"BAC - AC igual a zero",
-		);
+		// BAC=1000, AC=1000, EV=500, CPI=0.5, EAC=2000
+		// TCPI(EAC) = (BAC - EV) / (EAC - AC) = 500/1000 = 0.5
+		expect(metrics.tcpi).toBeCloseTo(0.5, 8);
+		expect(metrics.indicators.tcpi.status).toBe("AVAILABLE");
+		expect(metrics.indicators.tcpi.formula).toBe("(BAC - EV) / (EAC - AC)");
 	});
 
 	it("marca EAC indisponivel quando CPI e zero", () => {
 		const metrics = calculateWorkMetrics(work, items, baselines, measurements, [
 			{ ...costs[0], amount: 0 },
+			{ ...costs[1] },
 		]);
 
 		expect(metrics.eacTypical).toBeNull();
@@ -262,7 +268,7 @@ describe("projecoes EVM nos contratos HTTP", () => {
 
 		expect(multiworks.cards.totalBac).toBe(2000);
 		expect(multiworks.cards.totalEacTypical).toBeCloseTo(800, 8);
-		expect(multiworks.cards.totalEacAtypical).toBeCloseTo(800, 8);
+		expect(multiworks.cards.totalEacAtypical).toBeCloseTo(900, 8);
 		expect(multiworks.cards.totalEtc).toBeCloseTo(400, 8);
 		expect(multiworks.cards.totalVac).toBeCloseTo(200, 8);
 		expect(multiworks.works[0].eacTypical).toBeCloseTo(800, 8);

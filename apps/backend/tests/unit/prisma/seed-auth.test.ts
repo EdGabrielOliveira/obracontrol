@@ -49,8 +49,9 @@ describe("createSeedUsers", () => {
 		expect(createdAccounts[0]).toMatchObject({
 			id: "credential-seed-admin",
 			userId: "seed-admin",
-			accountId: "admin@example.com",
+			accountId: "seed-admin",
 			providerId: "credential",
+			issuer: "local:credential",
 		});
 		expect(
 			await Bun.password.verify(

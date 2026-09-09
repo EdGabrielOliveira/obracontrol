@@ -42,10 +42,11 @@ const listImportRowsByIds = mock(
 	async (): Promise<Array<Record<string, unknown>>> => [
 		{
 			id: "row-1",
+			rowNumber: 2,
 			status: "VALID",
 			values: {
 				supplierName: "Fornecedor A",
-				supplierDocument: "12.345.678/0001-90",
+				supplierDocument: "11.222.333/0001-81",
 				supplierAddress: "Rua A, 100",
 				supplierPhone: "(83) 99999-1234",
 				supplierEmail: "a@exemplo.com.br",
@@ -60,10 +61,11 @@ const listImportRowsByIds = mock(
 		},
 		{
 			id: "row-2",
+			rowNumber: 3,
 			status: "VALID",
 			values: {
 				supplierName: "Fornecedor B",
-				supplierDocument: "98765432000100",
+				supplierDocument: "04.252.011/0001-10",
 				serviceDescription: "Pintura",
 				value: 11500,
 			},
@@ -86,7 +88,7 @@ mock.module(
 );
 const findSupplierByDocument = mock(
 	async (ownerId: string, document: string) =>
-		document === "12345678000190"
+		document === "11222333000181"
 			? { id: "supplier-1", ownerId, document }
 			: null,
 );
@@ -132,7 +134,7 @@ describe("quotationImportService", () => {
 			data: [
 				expect.objectContaining({
 					quotationId: "quote-1",
-					supplierDocument: "12345678000190",
+					supplierDocument: "11222333000181",
 					supplierId: "supplier-1",
 					supplierName: "Fornecedor A",
 					supplierAddress: "Rua A, 100",
@@ -190,7 +192,7 @@ describe("quotationImportService", () => {
 				values: {
 					quotationCode: "COT-001",
 					supplierName: "Fornecedor A",
-					supplierDocument: "12345678000190",
+					supplierDocument: "11222333000181",
 					value: 100,
 					justification: "Prazo menor",
 					winner: "SIM",
@@ -227,7 +229,7 @@ describe("quotationImportService", () => {
 				status: "VALID",
 				values: {
 					supplierName: "Fornecedor A",
-					supplierDocument: "12345678000190",
+					supplierDocument: "11222333000181",
 					value: 100,
 				},
 			},
@@ -237,7 +239,7 @@ describe("quotationImportService", () => {
 				status: "VALID",
 				values: {
 					supplierName: " fornecedor a ",
-					supplierDocument: "12.345.678/0001-90",
+					supplierDocument: "11.222.333/0001-81",
 					value: 200,
 				},
 			},

@@ -4,6 +4,7 @@ import { ConstructionError } from "../../../lib/errors";
 import { prisma } from "../../../lib/prisma";
 import { normalizeText } from "../../../lib/text-utils";
 import type { ImportValidationError } from "../types";
+import { isValidCnpj, normalizeSupplierDocument } from "./supplier-document";
 
 export type NormalizedSupplierImportRow = {
 	rowNumber: number;
@@ -39,8 +40,8 @@ function optionalText(value: unknown): string | null {
 }
 
 function cnpj(value: unknown): string | null {
-	const digits = optionalText(value)?.replace(/\D/g, "") ?? "";
-	return digits.length === 14 ? digits : null;
+	const digits = normalizeSupplierDocument(optionalText(value));
+	return digits && isValidCnpj(digits) ? digits : null;
 }
 
 function rowValue(row: Record<string, unknown>, aliases: string[]) {
@@ -108,9 +109,7 @@ export function parseSupplierWorkbook(
 			invalid = true;
 		}
 		if (!document) {
-			errors.push(
-				error(rowNumber, "CNPJ", "INVALID_CNPJ", "CNPJ deve conter 14 digitos"),
-			);
+			errors.push(error(rowNumber, "CNPJ", "INVALID_CNPJ", "CNPJ invalido"));
 			invalid = true;
 		}
 		if (!document || seenCnpjs.has(document)) {

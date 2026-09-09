@@ -5,6 +5,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { pipeline } from "node:stream/promises";
+import { ConstructionError } from "./errors";
 
 export type ImportStorageOptions = {
 	directory?: string;
@@ -20,6 +21,7 @@ export type ImportStorage = {
 		batchId: string,
 		input: AsyncIterable<Uint8Array>,
 		expiresAt: Date,
+		maxBytes?: number,
 	): Promise<StoredImportFile>;
 	chunks(storageKey: string): AsyncIterable<Uint8Array>;
 	remove(storageKey: string): Promise<void>;
@@ -46,7 +48,7 @@ export function createImportStorage(
 	}
 
 	return {
-		async put(batchId, input, expiresAt) {
+		async put(batchId, input, expiresAt, maxBytes) {
 			void expiresAt;
 			await mkdir(resolveDirectory(options), { recursive: true });
 			const safeBatchId = basename(batchId);
@@ -55,15 +57,29 @@ export function createImportStorage(
 			}
 			const storageKey = `${safeBatchId}.xlsx`;
 			const hash = createHash("sha256");
-			await pipeline(
-				(async function* () {
-					for await (const part of input) {
-						hash.update(part);
-						yield part;
-					}
-				})(),
-				createWriteStream(resolvePath(storageKey)),
-			);
+			let totalBytes = 0;
+			try {
+				await pipeline(
+					(async function* () {
+						for await (const part of input) {
+							totalBytes += part.byteLength;
+							if (maxBytes !== undefined && totalBytes > maxBytes) {
+								throw new ConstructionError(
+									"IMPORT_FILE_TOO_LARGE",
+									"Arquivo excede o limite de tamanho permitido",
+									413,
+								);
+							}
+							hash.update(part);
+							yield part;
+						}
+					})(),
+					createWriteStream(resolvePath(storageKey)),
+				);
+			} catch (error) {
+				await rm(resolvePath(storageKey), { force: true });
+				throw error;
+			}
 			return { storageKey, sha256: hash.digest("hex") };
 		},
 

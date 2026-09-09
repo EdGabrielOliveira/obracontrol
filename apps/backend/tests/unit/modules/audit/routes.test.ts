@@ -35,6 +35,7 @@ const workMembershipFindUnique = mock(
 );
 const orgMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 const ccMembershipFindMany = mock(async (): Promise<unknown[]> => []);
+const companyMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 
 mock.module("../../../../src/lib/auth-middleware", () => ({ getSessionUser }));
 mock.module("../../../../src/lib/prisma", () => ({
@@ -43,6 +44,8 @@ mock.module("../../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: "work-1",
+				ownerId: "owner-1",
+				workspaceId: null,
 				costCenterId: "cc-1",
 			})),
 		},
@@ -56,6 +59,8 @@ mock.module("../../../../src/lib/prisma", () => ({
 			findUnique: mock(async () => ({
 				id: "org-1",
 				ownerId: "owner-1",
+				workspaceId: null,
+				companyId: null,
 			})),
 		},
 		workMembership: {
@@ -70,6 +75,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 			findUnique: mock(async () => null),
 			findMany: orgMembershipFindMany,
 		},
+		companyMembership: { findMany: companyMembershipFindMany },
 	},
 }));
 mock.module("../../../../src/modules/audit/audit.service", () => ({
@@ -88,6 +94,7 @@ describe("audit routes", () => {
 		listForWork.mockClear();
 		orgMembershipFindMany.mockClear();
 		ccMembershipFindMany.mockClear();
+		companyMembershipFindMany.mockClear();
 		getSessionUser.mockResolvedValue({ id: "owner-1", role: "ADMIN" });
 		userFindUnique.mockResolvedValue({ role: "ADMIN" });
 	});
@@ -152,7 +159,7 @@ describe("audit routes", () => {
 			new Request("http://localhost/audit-logs/work/work-1"),
 		);
 
-		expect(response.status).toBe(404);
+		expect(response.status).toBe(403);
 		expect(listForWork).not.toHaveBeenCalled();
 	});
 
@@ -187,7 +194,7 @@ describe("audit routes", () => {
 		);
 	});
 
-	it("GOV-004 (DEC-005): GESTOR acessa a auditoria apenas da propria obra via scope", async () => {
+	it("GOV-004 (DEC-005): GESTOR nao acessa a auditoria administrativa", async () => {
 		getSessionUser.mockResolvedValue({ id: "gestor-1", role: "GESTOR" });
 		userFindUnique.mockResolvedValue({ role: "GESTOR" });
 		// Membership do gestor no centro da obra concede o escopo.
@@ -199,12 +206,7 @@ describe("audit routes", () => {
 			new Request("http://localhost/audit-logs/work/work-1"),
 		);
 
-		expect(response.status).toBe(200);
-		// O owner resolvido da obra (owner-1) e passado, nunca o actor.
-		expect(listForWork).toHaveBeenCalledWith(
-			"owner-1",
-			"work-1",
-			expect.anything(),
-		);
+		expect(response.status).toBe(403);
+		expect(listForWork).not.toHaveBeenCalled();
 	});
 });

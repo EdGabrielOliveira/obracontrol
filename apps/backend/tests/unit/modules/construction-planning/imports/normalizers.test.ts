@@ -67,6 +67,21 @@ describe("normalizeNumberField", () => {
 		expect(normalizeNumberField(errors, "Teste", 2, "Valor", -15)).toBe(-15);
 		expect(errors).toEqual([]);
 	});
+
+	it("preserves monetary values from Brazilian, international, and plain-decimal sources", () => {
+		const errors: ImportValidationError[] = [];
+
+		expect(
+			normalizeNumberField(errors, "Medicoes", 1, "Valor", "100.828,20"),
+		).toBe(100828.2);
+		expect(
+			normalizeNumberField(errors, "Medicoes", 2, "Valor", "100,828.20"),
+		).toBe(100828.2);
+		expect(
+			normalizeNumberField(errors, "Medicoes", 3, "Valor", "100828.20"),
+		).toBe(100828.2);
+		expect(errors).toEqual([]);
+	});
 });
 
 describe("normalizePercentage", () => {

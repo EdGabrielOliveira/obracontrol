@@ -3,11 +3,12 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { xlsxResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import { rateLimitApi } from "../../../lib/rate-limit";
 import { resolveAuth } from "../../../lib/resolve-auth";
-import { xlsxResponse } from "../export.service";
 import { constructionImportBatchService } from "../imports/import-batch.service";
+import { IMPORT_LIMITS, parseImportPagination } from "../imports/import-limits";
 import { getImportById, listImports } from "../imports/import-repository";
 import {
 	WORKBOOK_KINDS,
@@ -37,18 +38,12 @@ export const importRoutes = new Elysia({
 	.get(
 		"/",
 		async ({ query, user }) => {
-			const page = query.page ? Number(query.page) : undefined;
-			const pageSize = query.pageSize ? Number(query.pageSize) : undefined;
-			if (
-				(page !== undefined && !Number.isInteger(page)) ||
-				(pageSize !== undefined && !Number.isInteger(pageSize))
-			) {
-				throw new ConstructionError(
-					"INVALID_QUERY",
-					"Parametros invalidos",
-					400,
-				);
-			}
+			const { page, pageSize } = parseImportPagination(
+				query.page,
+				query.pageSize,
+				{ page: 1, pageSize: 20 },
+				100,
+			);
 			return listImports(user.id, {
 				workId: query.workId ?? null,
 				page,
@@ -97,8 +92,12 @@ export const importBatchRoutes = new Elysia({
 	.get(
 		"/:workId/import-batches/:batchId",
 		async ({ params, query, scope }) => {
-			const page = query.page ? Number(query.page) : 1;
-			const pageSize = query.pageSize ? Number(query.pageSize) : 500;
+			const { page, pageSize } = parseImportPagination(
+				query.page,
+				query.pageSize,
+				{ page: 1, pageSize: IMPORT_LIMITS.previewPageSize },
+				IMPORT_LIMITS.previewPageSize,
+			);
 			return constructionImportBatchService.getPreviewPage(
 				scope.resourceOwnerId,
 				params.workId,
@@ -128,8 +127,12 @@ export const importBatchRoutes = new Elysia({
 	.get(
 		"/:workId/import-batches",
 		async ({ params, query, scope }) => {
-			const page = query.page ? Number(query.page) : 1;
-			const pageSize = query.pageSize ? Number(query.pageSize) : 20;
+			const { page, pageSize } = parseImportPagination(
+				query.page,
+				query.pageSize,
+				{ page: 1, pageSize: 20 },
+				IMPORT_LIMITS.batchPageSize,
+			);
 			return constructionImportBatchService.listBatches(
 				scope.resourceOwnerId,
 				params.workId,
@@ -164,7 +167,7 @@ export const importBatchRoutes = new Elysia({
 	.use(requireWorkAccess("write"))
 	.post(
 		"/:workId/import-batches",
-		async ({ params, body, scope }) => {
+		async ({ params, body, scope, user }) => {
 			assertValidXlsxUpload(body.file);
 			const model = resolveKind(body.model);
 			const page = await constructionImportBatchService.createBatch(
@@ -177,6 +180,7 @@ export const importBatchRoutes = new Elysia({
 					reprocessOfId: body.reprocessOfId ?? null,
 					reason: body.reason ?? null,
 				},
+				user.id,
 			);
 			return new Response(JSON.stringify(page), {
 				status: 201,

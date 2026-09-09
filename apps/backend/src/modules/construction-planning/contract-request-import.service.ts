@@ -4,31 +4,13 @@ import { prisma } from "../../lib/prisma";
 import { resolveResourceScope } from "../../lib/resource-scope";
 import { parseNumber } from "../../lib/text-utils";
 import { constructionImportBatchService } from "./imports/import-batch.service";
+import { isValidCnpj } from "./suppliers/supplier-document";
 
 function digits(value: string): string {
 	return value.replace(/\D/g, "");
 }
 
-const CNPJ_WEIGHT_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-const CNPJ_WEIGHT_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-
-function cnpjCheckDigit(base: string, weights: number[]): number {
-	let sum = 0;
-	for (let index = 0; index < weights.length; index += 1) {
-		sum += Number(base[index]) * weights[index];
-	}
-	const rest = sum % 11;
-	return rest < 2 ? 0 : 11 - rest;
-}
-
-export function isValidCnpj(value: string): boolean {
-	const cnpj = digits(value);
-	if (cnpj.length !== 14 || new Set(cnpj).size === 1) return false;
-	return (
-		cnpjCheckDigit(cnpj.slice(0, 12), CNPJ_WEIGHT_1) === Number(cnpj[12]) &&
-		cnpjCheckDigit(cnpj.slice(0, 13), CNPJ_WEIGHT_2) === Number(cnpj[13])
-	);
-}
+export { isValidCnpj } from "./suppliers/supplier-document";
 
 type QuotationMapFile = {
 	name: string;
@@ -100,7 +82,7 @@ export async function getQuotationMapPreview(
 	requestId: string,
 	batchId: string,
 	page = 1,
-	pageSize = 50,
+	pageSize: number = 50,
 ) {
 	const scope = await resolveResourceScope(actorId, { workId });
 	if (!scope.canRead) {

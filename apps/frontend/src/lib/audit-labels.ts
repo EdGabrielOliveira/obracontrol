@@ -160,7 +160,10 @@ const TECHNICAL_AUDIT_FIELD_PATTERN =
 const TECHNICAL_CAMEL_ID_PATTERN = /[A-Z]Id$/;
 
 export function isTechnicalAuditField(field: string): boolean {
-	return TECHNICAL_AUDIT_FIELD_PATTERN.test(field) || TECHNICAL_CAMEL_ID_PATTERN.test(field);
+	return (
+		TECHNICAL_AUDIT_FIELD_PATTERN.test(field) ||
+		TECHNICAL_CAMEL_ID_PATTERN.test(field)
+	);
 }
 
 export function auditFieldLabel(field: string): string {
@@ -217,7 +220,7 @@ export function auditDescription(
 	if (internalCode) {
 		return (
 			INTERNAL_DESCRIPTION_LABELS[internalCode[1].toUpperCase()] ??
-				"Solicitação interna registrada"
+			"Solicitação interna registrada"
 		);
 	}
 	if (action === "EXPORT" && /^[^:]+:medicoes$/i.test(trimmed)) {

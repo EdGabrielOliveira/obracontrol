@@ -690,6 +690,19 @@ export class WorkMeasurementService {
 				status,
 			);
 			if (currentStatus === "ACEITO" && status !== "ACEITO") {
+				const hasCoverages =
+					(await measurementCoverageService.hasCoveragesForWorkMeasurement(
+						ownerId,
+						measurementId,
+						tx,
+					)) ?? false;
+				if (hasCoverages) {
+					throw new ConstructionError(
+						"BUDGET_MEASUREMENT_ALREADY_COVERED",
+						"Remova as coberturas contratuais antes de reverter a medicao de obra",
+						422,
+					);
+				}
 				await reverseWorkMeasurementAcceptance({
 					tx,
 					ownerId,

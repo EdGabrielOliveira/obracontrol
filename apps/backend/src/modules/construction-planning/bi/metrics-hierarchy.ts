@@ -1,5 +1,15 @@
 import { fillMonthGaps, monthKey } from "../../../lib/month-utils";
-import type { ItemMetric, ItemMetricNode, StageRollup } from "./metrics-core";
+import {
+	baselineForItem,
+	budgetItemMatches,
+	type ItemMetric,
+	type ItemMetricNode,
+	inclusiveDays,
+	latestMeasurementPercentage,
+	type MetricBaselineScheduleInput,
+	type MetricMeasurementInput,
+	type StageRollup,
+} from "./metrics-core";
 
 export type SCurvePoint = {
 	period: string;
@@ -111,24 +121,66 @@ export function rollupNode(node: ItemMetricNode, depth = 0): StageRollup {
 export function buildMonthlySCurve(
 	items: ItemMetric[],
 	dataDate: Date,
+	measurements: MetricMeasurementInput[] = [],
+	baselineSchedules: MetricBaselineScheduleInput[] = [],
 ): SCurvePoint[] {
-	const plannedItems = items.filter(
-		(item) => item.activeBudget > 0 && item.plannedEnd,
-	);
+	const plannedItems = items.flatMap((item) => {
+		if (item.activeBudget <= 0) return [];
+		const baseline = baselineForItem(item, baselineSchedules);
+		const plannedStart = baseline?.plannedStart ?? item.plannedStart;
+		const plannedEnd = baseline?.plannedEnd ?? item.plannedEnd;
+		if (!plannedStart || !plannedEnd) return [];
+		const plannedWeight =
+			baseline?.plannedWeight == null ? 1 : Number(baseline.plannedWeight);
+		if (!Number.isFinite(plannedWeight) || plannedWeight <= 0) return [];
+		return [{ item, plannedStart, plannedEnd, plannedWeight }];
+	});
 	const totalPlannedBudget = plannedItems.reduce(
-		(sum, item) => sum + item.activeBudget,
+		(sum, row) => sum + row.item.activeBudget * row.plannedWeight,
 		0,
 	);
 
 	if (totalPlannedBudget === 0) return [];
 
 	const plannedByPeriod = new Map<string, number>();
-	for (const item of plannedItems) {
-		const period = monthKey(item.plannedEnd as Date);
-		plannedByPeriod.set(
-			period,
-			(plannedByPeriod.get(period) ?? 0) + item.activeBudget,
+	for (const row of plannedItems) {
+		const start = new Date(row.plannedStart);
+		const end = new Date(row.plannedEnd);
+		// Generate all months between start and end (inclusive)
+		const months: string[] = [];
+		const cursor = new Date(
+			Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1),
 		);
+		const endMonth = new Date(
+			Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1),
+		);
+		while (cursor <= endMonth) {
+			months.push(monthKey(cursor));
+			cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+		}
+		if (months.length === 0) months.push(monthKey(end));
+		for (const month of months) {
+			const [year, monthNumber] = month.split("-").map(Number);
+			const monthStart = new Date(Date.UTC(year, monthNumber - 1, 1));
+			const monthEnd = new Date(
+				Date.UTC(year, monthNumber, 0, 23, 59, 59, 999),
+			);
+			const overlapStart = new Date(
+				Math.max(start.getTime(), monthStart.getTime()),
+			);
+			const overlapEnd = new Date(Math.min(end.getTime(), monthEnd.getTime()));
+			const overlap =
+				overlapStart <= overlapEnd
+					? inclusiveDays(overlapStart, overlapEnd)
+					: 0;
+			const monthlyValue =
+				(row.item.activeBudget * row.plannedWeight * overlap) /
+				inclusiveDays(start, end);
+			plannedByPeriod.set(
+				month,
+				(plannedByPeriod.get(month) ?? 0) + monthlyValue,
+			);
+		}
 	}
 
 	const currentPeriod = monthKey(dataDate);
@@ -138,8 +190,25 @@ export function buildMonthlySCurve(
 	if (periodKeys.length === 0) return [];
 
 	const allPeriods = fillMonthGaps(periodKeys);
-	const activeBudget = items.reduce((sum, item) => sum + item.activeBudget, 0);
-	const earnedValue = items.reduce((sum, item) => sum + item.earnedValue, 0);
+	const plannedActiveBudget = plannedItems.reduce(
+		(sum, row) => sum + row.item.activeBudget * row.plannedWeight,
+		0,
+	);
+	const plannedEarnedValue = plannedItems.reduce(
+		(sum, row) => sum + row.item.earnedValue * row.plannedWeight,
+		0,
+	);
+	const hasMeasurementHistory = measurements.some(
+		(measurement) =>
+			measurement.measurementDate != null &&
+			plannedItems.some((row) => budgetItemMatches(row.item, measurement)),
+	);
+	const activeBudget = hasMeasurementHistory
+		? plannedActiveBudget
+		: items.reduce((sum, item) => sum + item.activeBudget, 0);
+	const earnedValue = hasMeasurementHistory
+		? plannedEarnedValue
+		: items.reduce((sum, item) => sum + item.earnedValue, 0);
 	const currentMeasured = activeBudget > 0 ? earnedValue / activeBudget : 0;
 	let plannedAccumulatedValue = 0;
 	const plannedAccumulatedByPeriod = new Map<string, number>();
@@ -159,13 +228,35 @@ export function buildMonthlySCurve(
 			? currentMeasured / currentPlannedAccumulated
 			: 0;
 	const currentIndex = allPeriods.indexOf(currentPeriod);
+	const measuredByPeriod = new Map<string, number>();
+	if (hasMeasurementHistory) {
+		for (const period of allPeriods) {
+			const [year, month] = period.split("-").map(Number);
+			const monthEnd = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
+			const periodEnd = monthEnd < dataDate ? monthEnd : dataDate;
+			const measuredValue = plannedItems.reduce((sum, row) => {
+				const progress = latestMeasurementPercentage(
+					row.item,
+					measurements,
+					periodEnd,
+				);
+				return sum + row.item.activeBudget * row.plannedWeight * progress;
+			}, 0);
+			measuredByPeriod.set(
+				period,
+				activeBudget > 0 ? measuredValue / activeBudget : 0,
+			);
+		}
+	}
 
 	return allPeriods.map((period) => {
 		const periodIndex = allPeriods.indexOf(period);
 		const plannedAccumulated = plannedAccumulatedByPeriod.get(period) ?? 0;
 		const measuredAccumulated =
 			currentIndex >= 0 && periodIndex <= currentIndex
-				? plannedAccumulated * projectionRatio
+				? hasMeasurementHistory
+					? (measuredByPeriod.get(period) ?? 0)
+					: plannedAccumulated * projectionRatio
 				: null;
 
 		return {

@@ -13,6 +13,7 @@ export type ManualWorkMeasurementInput = AdapterManualWorkMeasurementInput;
 
 export type WorkMetricsSnapshot = {
 	input: ReturnType<typeof toWorkWithMetricsInput>;
+	sourceMeasurements: WorkForBIInput["measurements"];
 	metrics: WorkMetricCalculationResult;
 	manualMeasurements: ManualWorkMeasurementInput[];
 };
@@ -115,6 +116,7 @@ export function buildWorkMetricsSnapshot(input: {
 
 	return {
 		input: metricInput,
+		sourceMeasurements: input.work.measurements,
 		metrics: calculateMetrics(metricInput, metricInput, input.asOf),
 		manualMeasurements,
 	};

@@ -723,12 +723,10 @@ export async function decideApproval(input: {
 					input.decision === "APPROVE"
 						? "Solicitacao aprovada"
 						: "Solicitacao rejeitada",
-				body: [
-					input.reason?.trim(),
-					approvalDetailDeepLink(request),
-				]
-					.filter(Boolean)
-					.join(" ") || null,
+				body:
+					[input.reason?.trim(), approvalDetailDeepLink(request)]
+						.filter(Boolean)
+						.join(" ") || null,
 			},
 			tx,
 		);
@@ -769,11 +767,14 @@ async function notifyManagersForReview(
 	});
 	const managerIds = new Set(
 		memberships
-			.filter((membership) => normalizeRole(membership.user?.role) === "GERENTE")
+			.filter(
+				(membership) => normalizeRole(membership.user?.role) === "GERENTE",
+			)
 			.map((membership) => membership.userId),
 	);
 	for (const membership of companyMemberships) {
-		if (normalizeRole(membership.user?.role) === "GERENTE") managerIds.add(membership.userId);
+		if (normalizeRole(membership.user?.role) === "GERENTE")
+			managerIds.add(membership.userId);
 	}
 	for (const managerId of managerIds) {
 		await notificationService.create(
@@ -848,12 +849,15 @@ async function notifyGerentesAfterSupervisorExecution(
 	const gerenteIds = [
 		...new Set(
 			memberships
-				.filter((membership) => normalizeRole(membership.user?.role) === "GERENTE")
+				.filter(
+					(membership) => normalizeRole(membership.user?.role) === "GERENTE",
+				)
 				.map((membership) => membership.userId),
 		),
 	];
 	for (const membership of companyMemberships) {
-		if (normalizeRole(membership.user?.role) === "GERENTE") gerenteIds.push(membership.userId);
+		if (normalizeRole(membership.user?.role) === "GERENTE")
+			gerenteIds.push(membership.userId);
 	}
 	for (const gerenteId of gerenteIds) {
 		await notificationService.create(

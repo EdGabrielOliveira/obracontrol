@@ -5,6 +5,7 @@ const budgetItemFindMany = mock(async (): Promise<unknown[]> => []);
 const workMeasurementFindMany = mock(async (): Promise<unknown[]> => []);
 const baselineFindMany = mock(async (): Promise<unknown[]> => []);
 const actualCostFindMany = mock(async (): Promise<unknown[]> => []);
+const contractFindMany = mock(async (): Promise<unknown[]> => []);
 
 mock.module("../../../../src/lib/prisma", () => ({
 	prisma: {
@@ -13,6 +14,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		workMeasurement: { findMany: workMeasurementFindMany },
 		constructionBaselineSchedule: { findMany: baselineFindMany },
 		constructionActualCost: { findMany: actualCostFindMany },
+		contract: { findMany: contractFindMany },
 		constructionLedgerEvent: { groupBy: mock(async () => []) },
 	},
 }));
@@ -219,7 +221,7 @@ describe("management repository projections", () => {
 					itemsCount: 3,
 					byStatus: { active: 1, done: 0, notStarted: 1 },
 				},
-				measurements: { total: 275, count: 0, percentage: 0.5 },
+				measurements: { total: 275, count: 1, percentage: 0.5 },
 				costs: { total: 200, balance: 350 },
 				sourceMode: "LIVE",
 				snapshot: null,
@@ -230,8 +232,8 @@ describe("management repository projections", () => {
 			actualCost: 200,
 			currentBudgetBalance: 350,
 			projectedBudgetBalance: 300,
-			costVariance: 75,
-			costPerformanceIndex: 1.375,
+			costVariance: null,
+			costPerformanceIndex: null,
 		});
 		expect(report?.evm.plannedValue).toBeCloseTo((550 * 15) / 31, 8);
 		expect(report?.evm.scheduleVariance).toBeCloseTo(275 - (550 * 15) / 31, 8);
@@ -239,14 +241,22 @@ describe("management repository projections", () => {
 			275 / ((550 * 15) / 31),
 			8,
 		);
-		expect(report?.qualityIssues).toEqual([
-			expect.objectContaining({
-				code: "UNAPPROPRIATED_FUTURE_COSTS",
-				severity: "MEDIUM",
-				metric: "AC",
-				workId: "work-1",
-			}),
-		]);
+		expect(report?.qualityIssues).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					code: "UNAPPROPRIATED_FUTURE_COSTS",
+					severity: "MEDIUM",
+					metric: "AC",
+					workId: "work-1",
+				}),
+				expect.objectContaining({
+					code: "SINGLE_ACTUAL_COST_CATEGORY",
+					severity: "HIGH",
+					metric: "CPI",
+					workId: "work-1",
+				}),
+			]),
+		);
 	});
 
 	it("cuts the dashboard by asOfDate in LIVE mode", async () => {

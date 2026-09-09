@@ -17,9 +17,11 @@ const timings = new Map<string, TimingSummary>();
 
 export const metrics = {
 	increment(name: string, by = 1): void {
+		if (!Number.isFinite(by) || by < 0) return;
 		counters.set(name, (counters.get(name) ?? 0) + by);
 	},
 	timing(name: string, ms: number): void {
+		if (!Number.isFinite(ms) || ms < 0) return;
 		const current = timings.get(name);
 		if (!current) {
 			timings.set(name, {

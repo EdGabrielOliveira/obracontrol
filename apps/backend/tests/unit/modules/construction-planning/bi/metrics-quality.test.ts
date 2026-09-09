@@ -71,4 +71,45 @@ describe("buildDataQualityIssues", () => {
 		expect(issues[2]).toMatchObject({ severity: "HIGH", metric: "SPI" });
 		expect(issues[3]).toMatchObject({ severity: "HIGH", metric: "CPI" });
 	});
+
+	it("blocks cost interpretation for a single appropriated category", () => {
+		const issues = buildDataQualityIssues(
+			metrics({
+				dataCompleteness: {
+					hasBaselineSchedule: true,
+					hasMeasurements: true,
+					hasActualCosts: true,
+					hasFutureCosts: false,
+					hasUnappropriatedActualCosts: false,
+					hasUnappropriatedFutureCosts: false,
+					hasSingleActualCostCategory: true,
+				},
+			}),
+		);
+
+		expect(issues).toContainEqual(
+			expect.objectContaining({
+				code: "SINGLE_ACTUAL_COST_CATEGORY",
+				severity: "HIGH",
+				metric: "CPI",
+			}),
+		);
+	});
+
+	it("warns when the baseline ends before the contract deadline", () => {
+		const issues = buildDataQualityIssues(
+			metrics({
+				baselineEnd: "2026-10-31T00:00:00.000Z",
+				contractEnd: "2026-12-31T00:00:00.000Z",
+			}),
+		);
+
+		expect(issues).toContainEqual(
+			expect.objectContaining({
+				code: "BASELINE_END_BEFORE_WORK_END",
+				severity: "MEDIUM",
+				metric: "SPI",
+			}),
+		);
+	});
 });

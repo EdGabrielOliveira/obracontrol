@@ -5,6 +5,7 @@ import {
 	BarChart3,
 	FileText,
 	MoreHorizontal,
+	Pencil,
 	Plus,
 	Trash2,
 } from "lucide-react";
@@ -72,6 +73,14 @@ export function OrgTable({
 						ariaLabel={`Ações para ${name}`}
 						targetMenu={<MoreHorizontal className="h-4 w-4" />}
 						menuItems={[
+							canManageStructure
+								? {
+										label: "Editar organização",
+										icon: <Pencil className="h-4 w-4" />,
+										to: "/app/organizacoes/$orgId/edit",
+										params: { orgId },
+									}
+								: null,
 							{
 								label: "Abrir organização",
 								icon: <ArrowUpRight className="h-4 w-4" />,

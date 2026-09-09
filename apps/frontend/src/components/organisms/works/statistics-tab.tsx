@@ -130,11 +130,13 @@ export function StatisticsTab({
 						icon={BarChart3}
 						title="Indicadores consolidados"
 						description="Resumo dos principais indicadores da obra."
+						tooltip="Os valores são calculados a partir do orçamento ativo, custos aprovados e medições registradas para esta obra. Passe o mouse sobre cada KPI para ver o critério específico."
 					/>
 					<CardContent>
 						<KpiGrid>
 							<KpiCard
 								title="Orçamento ativo"
+								tooltip="Soma do valor dos itens da versão de orçamento atualmente ativa, incluindo os ajustes aplicáveis."
 								value={
 									completeness.hasBudget
 										? formatCurrency(summary.activeBudget)
@@ -143,6 +145,7 @@ export function StatisticsTab({
 							/>
 							<KpiCard
 								title="Gasto realizado"
+								tooltip="Soma dos custos realizados/aprovados registrados para a obra até o momento."
 								value={
 									completeness.hasActualCosts
 										? formatCurrency(summary.actualCost)
@@ -151,6 +154,7 @@ export function StatisticsTab({
 							/>
 							<KpiCard
 								title="Saldo atual"
+								tooltip="Orçamento ativo menos o gasto realizado: saldo = orçamento - custos realizados."
 								value={
 									completeness.hasBudget
 										? formatCurrency(summary.currentBudgetBalance)
@@ -159,6 +163,7 @@ export function StatisticsTab({
 							/>
 							<KpiCard
 								title="Medição acumulada"
+								tooltip="Percentual acumulado medido em relação ao orçamento físico total da obra."
 								value={
 									completeness.hasMeasurements
 										? formatPercentage(summary.measuredPercentage * 100)
@@ -167,6 +172,7 @@ export function StatisticsTab({
 							/>
 							<KpiCard
 								title={`BDI (${summary.bdiPercentage ?? 0}%)`}
+								tooltip="Valor do BDI aplicado ao orçamento. É calculado pela taxa de BDI configurada sobre a base de custos elegível."
 								value={
 									completeness.hasBudget
 										? formatCurrency(summary.bdiValue ?? 0)
@@ -181,6 +187,7 @@ export function StatisticsTab({
 						icon={BarChart3}
 						title="Indicadores financeiros"
 						description="Valores planejado, agregado e custo futuro."
+						tooltip="Indicadores do método de Valor Agregado: o planejado representa o valor previsto, o agregado o valor do trabalho medido e o custo futuro a projeção do custo restante."
 					/>
 					<CardContent className="grid gap-4 sm:grid-cols-3">
 						<div>
@@ -211,6 +218,7 @@ export function StatisticsTab({
 						icon={Users}
 						title="Gastos por fornecedor"
 						description="Distribuição dos pagamentos e valores em aberto."
+						tooltip="Cada barra agrupa os valores dos custos vinculados ao fornecedor: Pago corresponde ao total quitado e Aberto ao saldo ainda não pago."
 					/>
 					<CardContent>
 						{chartData.length === 0 ? (
@@ -256,19 +264,23 @@ export function StatisticsTab({
 						icon={AlertTriangle}
 						title="Índices de desempenho"
 						description="IDP, IDC e variação de prazo."
+						tooltip="Índices de Valor Agregado. IDP = valor agregado / valor planejado; IDC = valor agregado / custo realizado. Valores acima de 1 indicam desempenho acima do planejado ou do custo de referência."
 					/>
 					<CardContent>
 						<KpiGrid>
 							<KpiCard
 								title="IDP (SPI)"
+								tooltip="Índice de Desempenho de Prazo: valor agregado dividido pelo valor planejado."
 								value={summary.schedulePerformanceIndex?.toFixed(3) ?? "-"}
 							/>
 							<KpiCard
 								title="IDC (CPI)"
+								tooltip="Índice de Desempenho de Custo: valor agregado dividido pelo custo realizado."
 								value={summary.costPerformanceIndex?.toFixed(3) ?? "-"}
 							/>
 							<KpiCard
 								title="Variação de prazo"
+								tooltip="Diferença percentual entre o avanço medido e o avanço planejado."
 								value={
 									summary.scheduleDifference == null ||
 									summary.scheduleDifference <= 0
@@ -337,6 +349,7 @@ export function StatisticsTab({
 						icon={CalendarDays}
 						title="Custos, medições e contratos por período"
 						description="Cada ponto representa o período exato retornado pelo backend."
+						tooltip="O gráfico compara os valores registrados em cada período selecionado. Custos, medições e contratos são totais do período, não saldos acumulados. As séries acumuladas mostram a soma até aquele período."
 					/>
 					<CardContent>
 						{scheduleQuery.isLoading ? (

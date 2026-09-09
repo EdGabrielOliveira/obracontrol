@@ -12,11 +12,11 @@ import {
 	metricSourceResolver,
 } from "./metric-source-resolver";
 import { buildMultiworksAggregate } from "./multiworks-aggregator";
+import { buildWorkBIFromResolved } from "./work-bi-builder";
 import {
 	buildWorkMetricsSnapshot,
 	type ManualWorkMeasurementInput,
 } from "./work-metrics-snapshot";
-import { buildWorkBIFromResolved } from "./work-bi-builder";
 
 type ConstructionBIRepository = Pick<
 	typeof constructionRepository,

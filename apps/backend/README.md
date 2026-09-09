@@ -8,7 +8,7 @@ O backend é a fonte oficial de:
 
 - regras de domínio e validações;
 - escopo organizacional e autorização;
-- transações e persistência Prisma/SQLite;
+- transações e persistência Prisma/PostgreSQL;
 - cálculos de orçamento, EVM, físico-financeiro e BI;
 - importação/exportação de planilhas e relatórios;
 - estados de governança, aceite, trava, reabertura e replanejamento;
@@ -21,16 +21,16 @@ O frontend consome DTOs JSON-safe, apresenta os resultados e não reimplementa f
 
 - Bun + TypeScript;
 - Elysia;
-- Prisma 6 + SQLite;
+- Prisma 6 + PostgreSQL;
 - Zod;
 - Better Auth;
 - XLSX para importação/exportação;
 - PDF-Lib para relatórios;
 - Swagger, Sentry e rate limit em memória por processo.
 
-Pré-requisitos: Bun e variáveis configuradas. O desenvolvimento local e a
-produção (Dokploy) usam um arquivo SQLite; a produção persiste o banco e os
-artefatos no volume `/data`.
+Pré-requisitos: Bun, PostgreSQL e variáveis configuradas. O desenvolvimento
+local via Compose e a produção usam PostgreSQL; os artefatos persistem no
+volume `/data`.
 
 ```bash
 bun install
@@ -46,7 +46,7 @@ Variáveis principais em `.env`:
 ```dotenv
 NODE_ENV=development
 PORT=7001
-DATABASE_URL=file:./prisma/dev.db
+DATABASE_URL=postgresql://obracontrol:obracontrol_dev@localhost:5432/obracontrol?schema=public
 BETTER_AUTH_SECRET=change-me-to-a-random-64-char-string
 BETTER_AUTH_URL=http://localhost:7001
 FRONTEND_ORIGIN=http://localhost:7000
@@ -64,9 +64,9 @@ bun run format       # formata arquivos
 bun run test:unit        # testes unitários, de serviço, repositório, schema e rota
 bun run test:integration # jornadas HTTP compostas sem banco real
 bun run test:unity       # executa unit e integration
-bun run test:e2e-db      # suítes sequenciais com SQLite descartável
+bun run test:e2e-db      # suítes sequenciais com PostgreSQL descartável
 bun run db:generate  # gera Prisma Client
-bun run db:setup:local # sincroniza o SQLite usado pelo servidor Bun
+bun run db:setup:local # aplica migrations no PostgreSQL usado pelo servidor Bun
 bun run db:migrate:dev
 bun run db:push
 bun run db:studio
@@ -77,10 +77,9 @@ bun run db:seed:smoke  # valida o seed: BI LIVE, baseline de versoes e cronogram
 Health check: `GET /health`.
 
 `bun run dev` e `bun run start` executam `db:setup:local` antes de iniciar o
-servidor. Esse comando sincroniza `DATABASE_URL` (por padrão,
-`prisma/dev.db`) com o schema Prisma sem aplicar seed. `db:migrate:dev` e
-`db:push` são aliases dessa sincronização; `db:studio` abre o Prisma Studio no
-SQLite alvo.
+servidor. Esse comando aplica as migrations PostgreSQL pendentes em
+`DATABASE_URL` sem aplicar seed. Use `db:migrate:dev` para criar migrations
+durante o desenvolvimento; `db:push` fica reservado para experimentos locais.
 
 ## Seed de demonstracao
 
@@ -98,11 +97,11 @@ SQLite alvo.
 
 O seed e destrutivo por design (truncate de todas as tabelas publicas). O fixture de fornecedores vive em `prisma/fixtures/suppliers.ts`; os demais fixtures permanecem em `prisma/fixtures/`.
 
-Quando a aplicacao estiver em Docker, o backend usa o SQLite persistido no
-volume `/data`, e nao `prisma/dev.db` da maquina. Recrie o backend apos mudar o
+Quando a aplicação estiver em Docker, o backend usa o PostgreSQL do serviço
+`postgres` e mantém os anexos no volume `/data`. Recrie o backend após mudar o
 seed (`docker compose up -d --build backend`) e execute, a partir da raiz do
-repositorio, `bun run db:seed:container`. Esse comando tambem e destrutivo e
-deve ser usado apenas no ambiente de demonstracao/desenvolvimento.
+repositório, `bun run db:seed:container`. Esse comando também é destrutivo e
+deve ser usado apenas no ambiente de demonstração/desenvolvimento.
 
 ## Arquitetura
 
@@ -111,7 +110,7 @@ route/controller
   → schema/DTO
   → service de domínio
   → repository com escopo
-  → Prisma/SQLite
+  → Prisma/PostgreSQL
 ```
 
 Calculadoras e adapters puros não acessam banco. Projections e builders podem agrupar ou formatar, mas não devem recalcular regras já definidas no núcleo de métricas.
@@ -263,7 +262,7 @@ bun run check
 bun run test:unity
 ```
 
-Priorizar testes de schema/rota, autorização e escopo, transação, orçamento, medições, contratos, pagamentos, imports, cálculos, paridade de snapshot e relatórios. Os testes E2E usam um arquivo SQLite descartável.
+Priorizar testes de schema/rota, autorização e escopo, transação, orçamento, medições, contratos, pagamentos, imports, cálculos, paridade de snapshot e relatórios. Os testes E2E usam um banco PostgreSQL descartável.
 
 A organização completa das suítes e dos runners está em
 [`tests/README.md`](./tests/README.md).

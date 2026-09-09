@@ -6,7 +6,8 @@ import { queryClient } from "@/lib/query-client";
 import { requireAuthorizationCapability } from "@/lib/route-authorization";
 
 export const Route = createFileRoute("/app/obras/$workId/aprovacoes/")({
-	beforeLoad: () => requireAuthorizationCapability("canDecideSupervisorRequests"),
+	beforeLoad: () =>
+		requireAuthorizationCapability("canDecideSupervisorRequests"),
 	loader: ({ params }) => {
 		void Promise.all([
 			queryClient.prefetchQuery({

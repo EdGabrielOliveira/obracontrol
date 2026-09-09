@@ -1,0 +1,96 @@
+name: obracontrol-development
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-obracontrol}
+      POSTGRES_USER: ${POSTGRES_USER:-obracontrol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-obracontrol_dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - obracontrol_development_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      HOST: 0.0.0.0
+      PORT: 7001
+      DATABASE_URL: ${DATABASE_URL:-postgresql://obracontrol:obracontrol_dev@postgres:5432/obracontrol?schema=public}
+      OBJECT_STORAGE_DIR: /data/objects
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-only-change-this-secret-0123456789abcdef}
+      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:-dev-only-admin-key-0123456789}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:7001}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:7000}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://localhost:7000}
+      TRUSTED_PROXY: ${TRUSTED_PROXY:-127.0.0.1,::1}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
+      PDF_CONVERSION_TIMEOUT_SECONDS: ${PDF_CONVERSION_TIMEOUT_SECONDS:-45}
+      PDF_CONVERSION_QUEUE_LIMIT: ${PDF_CONVERSION_QUEUE_LIMIT:-2}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-7001}:7001"
+    volumes:
+      - obracontrol_development_api_data:/data
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:7001/health > /dev/null"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      target: development
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      VITE_BACKEND_TARGET: http://backend:7001
+      VITE_USE_POLLING: "${VITE_USE_POLLING:-true}"
+      CHOKIDAR_USEPOLLING: "${CHOKIDAR_USEPOLLING:-true}"
+      VITE_POLLING_INTERVAL: "${VITE_POLLING_INTERVAL:-250}"
+      VITE_HMR_CLIENT_PORT: "${FRONTEND_PORT:-7000}"
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-7000}:7000"
+    volumes:
+      - type: bind
+        source: ./apps/frontend
+        target: /app
+        consistency: delegated
+      - type: volume
+        source: obracontrol_development_frontend_node_modules
+        target: /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:7000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+volumes:
+  obracontrol_development_api_data:
+    name: obracontrol_development_api_data
+  obracontrol_development_postgres_data:
+    name: obracontrol_development_postgres_data
+  obracontrol_development_frontend_node_modules:
+    name: obracontrol_development_frontend_node_modules

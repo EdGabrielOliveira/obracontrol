@@ -19,6 +19,7 @@ export function buildIndicators(values: {
 	vac: number | null;
 	tcpi: number | null;
 	dataCompleteness: DataCompleteness;
+	costDataReliable?: boolean;
 }): WorkMetricIndicators {
 	const plannedValueFormula =
 		"sum(active item budget * baseline planned progress at dataDate)";
@@ -26,17 +27,20 @@ export function buildIndicators(values: {
 		"sum(active item budget * latest measured percentage at dataDate)";
 	const actualCostFormula = "sum(CURRENT actual costs up to dataDate)";
 	const currentBudgetBalanceFormula = "activeBudget - AC";
-	const projectedBudgetBalanceFormula = "activeBudget - AC - FUTURE costs";
+	const projectedBudgetBalanceFormula = "BAC - EAC selecionado";
 	const scheduleVarianceFormula = "EV - PV";
 	const schedulePerformanceIndexFormula = "EV / PV";
 	const costVarianceFormula = "EV - AC";
 	const costPerformanceIndexFormula = "EV / AC";
 	const bacFormula = "soma dos orcamentos dos itens ativos (activeBudget)";
 	const eacTypicalFormula = "BAC / CPI";
-	const eacAtypicalFormula = "AC + (BAC - EV) / CPI";
+	const eacAtypicalFormula = "AC + (BAC - EV)";
 	const etcFormula = "EAC selecionado - AC";
 	const vacFormula = "BAC - EAC selecionado";
-	const tcpiFormula = "(BAC - EV) / (BAC - AC)";
+	const usesEacForTcpi = values.bac - values.actualCost <= 0;
+	const tcpiFormula = usesEacForTcpi
+		? "(BAC - EV) / (EAC - AC)"
+		: "(BAC - EV) / (BAC - AC)";
 	const missingBaseline =
 		"Cronograma Original ausente ou sem itens ativos planejados";
 	const missingMeasurements = "Medicoes ausentes para calcular valor agregado";
@@ -45,6 +49,17 @@ export function buildIndicators(values: {
 	const hasPlannedValue = values.dataCompleteness.hasBaselineSchedule;
 	const hasEarnedValue = values.dataCompleteness.hasMeasurements;
 	const hasActualCost = values.dataCompleteness.hasActualCosts;
+	const costDataReliable =
+		values.costDataReliable ??
+		!values.dataCompleteness.hasSingleActualCostCategory;
+	const incompleteCostScope =
+		"Escopo de custo incompleto; informe mais de uma categoria antes de interpretar o IDC/EAC";
+	const costUnavailableReason = (zeroReason = "AC igual a zero") => {
+		if (!hasEarnedValue) return missingMeasurements;
+		if (!hasActualCost) return missingActualCosts;
+		if (!costDataReliable) return incompleteCostScope;
+		return zeroReason;
+	};
 
 	const plannedValue = hasPlannedValue
 		? available(values.plannedValue, plannedValueFormula)
@@ -58,9 +73,13 @@ export function buildIndicators(values: {
 	const currentBudgetBalance = hasActualCost
 		? available(values.currentBudgetBalance, currentBudgetBalanceFormula)
 		: unavailable<number>(currentBudgetBalanceFormula, missingActualCosts);
-	const projectedBudgetBalance = hasActualCost
-		? available(values.projectedBudgetBalance, projectedBudgetBalanceFormula)
-		: unavailable<number>(projectedBudgetBalanceFormula, missingActualCosts);
+	const projectedBudgetBalance =
+		hasActualCost && values.selectedEac != null
+			? available(values.projectedBudgetBalance, projectedBudgetBalanceFormula)
+			: unavailable<number>(
+					projectedBudgetBalanceFormula,
+					!hasActualCost ? missingActualCosts : incompleteCostScope,
+				);
 	const scheduleVariance =
 		values.scheduleVariance == null || !hasPlannedValue || !hasEarnedValue
 			? unavailable<number>(
@@ -85,36 +104,25 @@ export function buildIndicators(values: {
 					schedulePerformanceIndexFormula,
 				);
 	const costVariance =
-		values.costVariance == null || !hasEarnedValue || !hasActualCost
-			? unavailable<number>(
-					costVarianceFormula,
-					hasEarnedValue ? missingActualCosts : missingMeasurements,
-				)
+		values.costVariance == null || !hasEarnedValue || !costDataReliable
+			? unavailable<number>(costVarianceFormula, costUnavailableReason())
 			: available(values.costVariance, costVarianceFormula);
 	const costPerformanceIndex =
-		values.costPerformanceIndex == null || !hasEarnedValue || !hasActualCost
+		values.costPerformanceIndex == null || !hasEarnedValue || !costDataReliable
 			? unavailable<number>(
 					costPerformanceIndexFormula,
-					!hasEarnedValue
-						? missingMeasurements
-						: !hasActualCost
-							? missingActualCosts
-							: "AC igual a zero",
+					costUnavailableReason(),
 				)
 			: available(values.costPerformanceIndex, costPerformanceIndexFormula);
-	const cpiUnavailableReason = !hasEarnedValue
-		? missingMeasurements
-		: !hasActualCost
-			? missingActualCosts
-			: "CPI igual a zero";
+	const cpiUnavailableReason = costUnavailableReason("CPI igual a zero");
 	const bacIndicator = available(values.bac, bacFormula);
 	const eacTypicalIndicator =
-		values.eacTypical == null || !hasEarnedValue || !hasActualCost
+		values.eacTypical == null || !hasEarnedValue || !costDataReliable
 			? unavailable<number>(eacTypicalFormula, cpiUnavailableReason)
 			: available(values.eacTypical, eacTypicalFormula);
 	const eacAtypicalIndicator =
-		values.eacAtypical == null || !hasEarnedValue || !hasActualCost
-			? unavailable<number>(eacAtypicalFormula, cpiUnavailableReason)
+		values.eacAtypical == null || !hasEarnedValue || !costDataReliable
+			? unavailable<number>(eacAtypicalFormula, costUnavailableReason())
 			: available(values.eacAtypical, eacAtypicalFormula);
 	const selectedEacIndicator =
 		values.selectedEac == null
@@ -129,10 +137,14 @@ export function buildIndicators(values: {
 			? unavailable<number>(vacFormula, cpiUnavailableReason)
 			: available(values.vac, vacFormula);
 	const tcpiIndicator =
-		values.tcpi == null || !hasEarnedValue
+		values.tcpi == null || !hasEarnedValue || !costDataReliable
 			? unavailable<number>(
 					tcpiFormula,
-					!hasEarnedValue ? missingMeasurements : "BAC - AC igual a zero",
+					!hasEarnedValue || !hasActualCost || !costDataReliable
+						? costUnavailableReason()
+						: usesEacForTcpi
+							? "EAC - AC igual a zero"
+							: "BAC - AC igual a zero",
 				)
 			: available(values.tcpi, tcpiFormula);
 

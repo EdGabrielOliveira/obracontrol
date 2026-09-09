@@ -26,6 +26,7 @@ mock.module("../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: TEST_CC_ID,
 			})),
 		},

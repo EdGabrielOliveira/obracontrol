@@ -4,7 +4,10 @@ export const budgetAllocationSchema = z
 	.object({
 		budgetItemId: z.string().min(1, "Item de orçamento obrigatório"),
 		quantity: z.number().positive().optional(),
-		value: z.number().positive().optional(),
+		value: z
+			.number()
+			.refine((value) => value !== 0, "Valor de alocação não pode ser zero")
+			.optional(),
 		percentage: z.number().min(0).max(100).optional(),
 	})
 	.superRefine((data, ctx) => {
@@ -36,7 +39,10 @@ export const budgetPreviewSchema = z
 		allocations: z
 			.array(budgetAllocationSchema)
 			.min(1, "Informe ao menos uma alocação de item de orçamento"),
-		amount: z.number().positive().optional(),
+		amount: z
+			.number()
+			.refine((value) => value !== 0, "Valor da operação não pode ser zero")
+			.optional(),
 	})
 	.superRefine((data, ctx) => {
 		if (

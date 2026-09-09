@@ -17,7 +17,10 @@ function asDecimal(value: Decimal | number): Decimal {
 }
 
 function roundCurrency(value: Decimal | number): Decimal {
-	return asDecimal(value).toDecimalPlaces(CURRENCY_DECIMALS);
+	return asDecimal(value).toDecimalPlaces(
+		CURRENCY_DECIMALS,
+		Decimal.ROUND_HALF_UP,
+	);
 }
 
 export function calculateAnalyticLimit(
@@ -75,10 +78,15 @@ export function normalizeCostAllocations(
 				422,
 			);
 		}
-		if (allocation.value !== undefined && allocation.value <= 0) {
+		if (
+			allocation.value !== undefined &&
+			(amount.lessThan(0) ? allocation.value >= 0 : allocation.value <= 0)
+		) {
 			throw new ConstructionError(
 				"BUDGET_ALLOCATION_MISMATCH",
-				"Valor de alocação deve ser positivo",
+				amount.lessThan(0)
+					? "Valor de alocação deve ser negativo para custos negativos"
+					: "Valor de alocação deve ser positivo",
 				422,
 			);
 		}
@@ -137,7 +145,7 @@ export function normalizeCostAllocations(
 		budgetItemId: row.budgetItemId,
 		basis: "VALUE" as const,
 		percentage: roundNumber(
-			amount.greaterThan(0)
+			!amount.isZero()
 				? new Decimal(row.value ?? 0).div(amount).mul(100)
 				: new Decimal(0),
 		),
@@ -166,41 +174,40 @@ function distributePercentageResidual(
 	index: number,
 ): Decimal {
 	const raw = rows.map((row) => amount.mul(row.percentage ?? 0).div(100));
-	const floors = raw.map((value) =>
-		value.toDecimalPlaces(2, Decimal.ROUND_DOWN),
+	const rounded = raw.map((value) =>
+		value.toDecimalPlaces(CURRENCY_DECIMALS, Decimal.ROUND_DOWN),
 	);
-	const remaining = amount
-		.minus(floors.reduce((sum, value) => sum.plus(value), new Decimal(0)))
+	const remainingCents = amount
+		.minus(rounded.reduce((sum, value) => sum.plus(value), new Decimal(0)))
 		.div("0.01")
 		.toDecimalPlaces(0);
 	const order = raw
-		.map((value, i) => ({ i, fraction: value.minus(floors[i]) }))
-		.sort((a, b) => b.fraction.comparedTo(a.fraction));
+		.map((value, i) => ({
+			i,
+			fraction: value.minus(rounded[i]).abs(),
+		}))
+		.sort((a, b) => b.fraction.comparedTo(a.fraction) || a.i - b.i);
+	if (remainingCents.isZero() || order.length === 0) return rounded[index];
 
-	let result = floors[index];
-	let cents = remaining;
-	let position = 0;
-	while (cents.greaterThan(0) && order.length > 0) {
-		const target = order[position % order.length].i;
-		if (target === index) result = result.plus("0.01");
-		cents = cents.minus(1);
-		position += 1;
-	}
-	while (cents.lessThan(0) && order.length > 0) {
-		const target = order[position % order.length].i;
-		if (target === index) result = result.minus("0.01");
-		cents = cents.plus(1);
-		position += 1;
-	}
-	return result;
+	const sign = remainingCents.isNegative() ? -1 : 1;
+	const absoluteCents = remainingCents.abs();
+	const baseCents = absoluteCents.div(order.length).floor();
+	const extraCents = absoluteCents
+		.minus(baseCents.mul(order.length))
+		.toNumber();
+	const rank = order.findIndex((entry) => entry.i === index);
+	const centsForItem = baseCents.plus(rank >= 0 && rank < extraCents ? 1 : 0);
+	return rounded[index].plus(centsForItem.mul(sign).mul("0.01"));
 }
 
 function roundNumber(value: Decimal): number {
-	return Number(value.toDecimalPlaces(2));
+	return value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 }
 
 function round2(value: number): number {
-	return Math.round(value * 100) / 100;
+	return new Decimal(value)
+		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+		.toNumber();
 }
 
 export function calculateBalances(

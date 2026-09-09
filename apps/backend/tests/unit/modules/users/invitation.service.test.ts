@@ -195,9 +195,9 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 			expect.objectContaining({
 				data: expect.objectContaining({
 					role: "SUPERVISOR",
-						scopeJson: {
-							companyIds: [],
-							organizationIds: [],
+					scopeJson: {
+						companyIds: [],
+						organizationIds: [],
 						costCenterIds: ["cc-1"],
 						workIds: [],
 					},
@@ -271,9 +271,9 @@ describe("invitation service - pacote de escopo (DEC-005)", () => {
 	it("convite para GESTOR com escopo de organizacao e aceito", async () => {
 		const { invitationService } = await importService();
 		const result = await invitationService.createInvitation("actor-1", {
-				email: "gestor@obra.bi",
-				role: "GESTOR",
-				scope: { organizationIds: ["org-1"], costCenterIds: [], workIds: [] },
+			email: "gestor@obra.bi",
+			role: "GESTOR",
+			scope: { organizationIds: ["org-1"], costCenterIds: [], workIds: [] },
 		});
 		expect(result.role).toBe("GESTOR");
 	});

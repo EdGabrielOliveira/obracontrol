@@ -1,6 +1,15 @@
 import { prisma } from "../../lib/prisma";
 
+/** @deprecated Exports now use the live operational source directly. */
 export type ExportSourceResolution = { mode: "LIVE"; persisted: null };
+
+/** @deprecated Kept for compatibility with repository consumers. */
+export async function resolveExportSource(
+	_ownerId: string,
+	_workId: string,
+): Promise<ExportSourceResolution> {
+	return { mode: "LIVE", persisted: null };
+}
 
 async function getActiveBudgetItemIds(ownerId: string, workId: string) {
 	const work = await prisma.constructionWork.findFirst({
@@ -13,13 +22,6 @@ async function getActiveBudgetItemIds(ownerId: string, workId: string) {
 		select: { id: true },
 	});
 	return items.map((item) => item.id);
-}
-
-export async function resolveExportSource(
-	_ownerId: string,
-	_workId: string,
-): Promise<ExportSourceResolution> {
-	return { mode: "LIVE", persisted: null };
 }
 
 export async function getBudgetItemsForExport(ownerId: string, workId: string) {

@@ -15,8 +15,13 @@ export async function downloadTemplate(
 	kind: ConstructionTemplateKind,
 	workId?: string,
 ): Promise<Blob> {
+	const scopedKinds = new Set<ConstructionTemplateKind>([
+		"orcamento-aditivo",
+		"cronograma",
+		"medicao-obra",
+	]);
 	const endpoint =
-		kind === "medicao-obra" && workId
+		workId && scopedKinds.has(kind)
 			? `/construction/templates/${kind}/${workId}`
 			: `/construction/templates/${kind}`;
 	const { data } = await api.get<Blob>(endpoint, {
@@ -28,17 +33,9 @@ export async function downloadTemplate(
 export async function downloadBudgetAmendmentTemplate(
 	workId: string,
 ): Promise<Blob> {
-	const { data } = await api.get<Blob>(
-		`/construction/templates/orcamento-aditivo/${workId}`,
-		{ responseType: "blob" },
-	);
-	return data;
+	return downloadTemplate("orcamento-aditivo", workId);
 }
 
 export async function downloadScheduleTemplate(workId: string): Promise<Blob> {
-	const { data } = await api.get<Blob>(
-		`/construction/templates/cronograma/${workId}`,
-		{ responseType: "blob" },
-	);
-	return data;
+	return downloadTemplate("cronograma", workId);
 }

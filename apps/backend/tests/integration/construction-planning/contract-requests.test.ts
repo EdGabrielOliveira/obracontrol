@@ -104,6 +104,7 @@ mock.module("../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: "cc-1",
 			})),
 			findFirst: mock(async () => ({
@@ -149,6 +150,8 @@ mock.module("../../../src/lib/prisma", () => ({
 		budgetVersionItem: { findMany: budgetVersionItemFindMany },
 		constructionBudgetItem: { findMany: budgetItemFindMany },
 		budgetItemIdentity: { findMany: identityFindMany },
+		approvalRequest: { findMany: mock(async () => []) },
+		importRow: { findMany: mock(async () => []) },
 		$transaction: transactionMock,
 	},
 }));
@@ -263,7 +266,10 @@ describe("Contract request routes E2E", () => {
 				suggestedWinner: false,
 			},
 		]);
-		supplierFindFirst.mockResolvedValue({ id: "supplier-1" });
+		supplierFindFirst.mockResolvedValue({
+			id: "supplier-1",
+			status: "APPROVED",
+		});
 		workSupplierFindFirst.mockResolvedValue({ id: "ws-1" });
 
 		const { constructionPlanningController } = await import(

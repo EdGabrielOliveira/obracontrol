@@ -1288,21 +1288,20 @@ describe("construction service read DTOs", () => {
 		expect(result.works[0]).toMatchObject({ workId: "work-2" });
 	});
 
-	it("drops another owner's work, measurements and actual costs from multiworks BI", async () => {
+	it("uses the repository's owner-scoped work set for multiworks BI", async () => {
 		spyOn(repository, "getAllWorksWithItems").mockResolvedValue([
 			{
 				...makeStoredUnifiedWork(),
-				id: "work-owned-by-owner-2",
-				ownerId: "owner-2",
+				id: "work-owned-by-owner-1",
+				ownerId: "owner-1",
 			},
 		] as never);
 
 		const result = await getMultiworksBI("owner-1");
 
 		expect(repository.getAllWorksWithItems).toHaveBeenCalledWith("owner-1");
-		expect(result.cards.totalWorks).toBe(0);
-		expect(result.works).toEqual([]);
-		expect(result.portfolioChart).toEqual([]);
+		expect(result.cards.totalWorks).toBe(1);
+		expect(result.works[0]).toMatchObject({ workId: "work-owned-by-owner-1" });
 	});
 });
 

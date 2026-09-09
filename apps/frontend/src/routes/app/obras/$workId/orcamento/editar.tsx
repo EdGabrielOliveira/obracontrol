@@ -23,11 +23,13 @@ import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/obras/$workId/orcamento/editar")({
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: workKeys.budget(params.workId),
-			queryFn: () =>
-				getBudgetItems(params.workId, { includePhysicalFinancial: false }),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: workKeys.budget(params.workId),
+				queryFn: () =>
+					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({
@@ -48,8 +50,7 @@ function RouteComponent() {
 
 	const { data, isLoading, error, refetch } = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () =>
-			getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 
 	const items = useMemo(

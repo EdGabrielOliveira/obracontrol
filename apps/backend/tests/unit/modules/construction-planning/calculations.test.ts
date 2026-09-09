@@ -8,7 +8,10 @@ import {
 import type { ItemMetricNode } from "../../../../src/modules/construction-planning/bi/metrics";
 import { buildMultiworksBI } from "../../../../src/modules/construction-planning/bi/multiworks-builder";
 import { buildWorkBI } from "../../../../src/modules/construction-planning/bi/work-bi-builder";
-import { buildScheduleFromDbItems } from "../../../../src/modules/construction-planning/schedule/schedule-builder";
+import {
+	buildScheduleFromDbItems,
+	isScheduleStartDelayed,
+} from "../../../../src/modules/construction-planning/schedule/schedule-builder";
 
 const unifiedWork = {
 	id: "w-unified",
@@ -167,6 +170,123 @@ describe("computeWorkStatus", () => {
 		expect(computeWorkStatus(0)).toBe("NOT_STARTED");
 		expect(computeWorkStatus(0.5)).toBe("IN_PROGRESS");
 		expect(computeWorkStatus(1)).toBe("DONE");
+	});
+});
+
+describe("schedule actual dates", () => {
+	it("flags an item whose planned start passed without actual start", () => {
+		expect(
+			isScheduleStartDelayed(
+				{
+					plannedStart: new Date("2026-08-01T00:00:00.000Z"),
+					actualStart: null,
+				},
+				new Date("2026-08-06T00:00:00.000Z"),
+			),
+		).toBe(true);
+	});
+
+	it("does not treat a zero-progress measurement as an actual start", () => {
+		const result = buildScheduleFromDbItems(
+			{
+				id: "work-zero-progress",
+				code: "OBRA-002",
+				name: "Obra",
+				plannedStart: null,
+				plannedEnd: null,
+				baseDate: new Date("2026-02-10T00:00:00.000Z"),
+				createdAt: new Date("2026-01-01T00:00:00.000Z"),
+				lastImportAt: null,
+			},
+			{
+				items: [
+					{
+						id: "item-zero-progress",
+						parentId: null,
+						index: "1.1",
+						type: "ITEM",
+						description: "Serviço",
+						quantity: 10,
+						totalCost: 100,
+						plannedStart: new Date("2026-01-01T00:00:00.000Z"),
+						plannedEnd: new Date("2026-03-01T00:00:00.000Z"),
+						actualStart: null,
+						actualEnd: null,
+						completionPercentage: 0,
+						computedStatus: "NOT_STARTED",
+						sortOrder: 1,
+					},
+				],
+				measurements: [
+					{
+						budgetItemId: "item-zero-progress",
+						measurementDate: new Date("2026-01-10T00:00:00.000Z"),
+						measuredPercentageAccumulated: 0,
+					},
+				],
+			},
+		);
+
+		expect(result.items[0]?.actualStart).toBeNull();
+		expect(result.gantt[0]?.actualStart).toBeNull();
+	});
+
+	it("keeps the baseline start when deriving a stage delay", () => {
+		const result = buildScheduleFromDbItems(
+			{
+				id: "work-stage-delay",
+				code: "OBRA-003",
+				name: "Obra",
+				plannedStart: null,
+				plannedEnd: null,
+				baseDate: new Date("2026-02-10T00:00:00.000Z"),
+				createdAt: new Date("2026-01-01T00:00:00.000Z"),
+				lastImportAt: null,
+			},
+			{
+				items: [
+					{
+						id: "stage",
+						parentId: null,
+						index: "1",
+						type: "STAGE",
+						description: "Etapa",
+						totalCost: 100,
+						plannedStart: new Date("2100-01-01T00:00:00.000Z"),
+						plannedEnd: new Date("2100-03-01T00:00:00.000Z"),
+						actualStart: null,
+						actualEnd: null,
+						completionPercentage: 0,
+						computedStatus: "NOT_STARTED",
+						sortOrder: 1,
+					},
+					{
+						id: "child",
+						parentId: "stage",
+						index: "1.1",
+						type: "ITEM",
+						description: "Serviço",
+						totalCost: 100,
+						plannedStart: new Date("2100-01-01T00:00:00.000Z"),
+						plannedEnd: new Date("2100-03-01T00:00:00.000Z"),
+						actualStart: null,
+						actualEnd: null,
+						completionPercentage: 0,
+						computedStatus: "NOT_STARTED",
+						sortOrder: 2,
+					},
+				],
+				baselineSchedules: [
+					{
+						budgetItemId: "stage",
+						plannedStart: new Date("2000-01-01T00:00:00.000Z"),
+						plannedEnd: new Date("2000-03-01T00:00:00.000Z"),
+					},
+				],
+			},
+		);
+
+		expect(result.items[0]?.delayed).toBe(true);
 	});
 });
 

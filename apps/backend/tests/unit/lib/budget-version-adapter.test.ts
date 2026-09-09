@@ -89,6 +89,7 @@ const approvalRequestCreate = mock(async () => ({
 }));
 const approvalPolicyFindMany = mock(async () => []);
 const organizationMembershipFindMany = mock(async () => []);
+const companyMembershipFindMany = mock(async () => []);
 const costCenterMembershipFindMany = mock(async () => []);
 const userFindMany = mock(async () => []);
 const notificationFindUnique = mock(
@@ -120,6 +121,7 @@ mock.module("../../../src/lib/prisma", () => ({
 		},
 		approvalPolicy: { findMany: approvalPolicyFindMany },
 		organizationMembership: { findMany: organizationMembershipFindMany },
+		companyMembership: { findMany: companyMembershipFindMany },
 		costCenterMembership: { findMany: costCenterMembershipFindMany },
 		user: { findMany: userFindMany },
 		notification: {

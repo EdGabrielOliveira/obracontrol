@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from "bun:test";
 import type { WorkForBIInput } from "../../../../../src/modules/construction-planning/bi/calculations";
 import type { MetricSourceRequest } from "../../../../../src/modules/construction-planning/bi/metric-source";
 import {
+	buildQualitySummary,
 	MetricSourceResolver,
 	type MetricSourceResolverDependencies,
 	seriesPointStatus,
@@ -232,7 +233,7 @@ describe("MetricSourceResolver LIVE", () => {
 		]);
 		expect(result.quality).toEqual({
 			missing: 0,
-			invalid: 0,
+			invalid: 1,
 			unlinked: 0,
 			duplicated: 0,
 			stale: 0,
@@ -381,7 +382,7 @@ describe("MetricSourceResolver LIVE", () => {
 			workId: "work-1",
 		});
 		expect(withInvalid.quality.missing).toBe(1);
-		expect(withInvalid.quality.invalid).toBe(1);
+		expect(withInvalid.quality.invalid).toBe(2);
 
 		deps.getWork.mockResolvedValue(
 			workFixture({
@@ -409,5 +410,28 @@ describe("seriesPointStatus", () => {
 		expect(seriesPointStatus(0, null, null)).toBe("AVAILABLE");
 		expect(seriesPointStatus(null, 0, null)).toBe("AVAILABLE");
 		expect(seriesPointStatus(null, null, 0)).toBe("AVAILABLE");
+	});
+});
+
+describe("buildQualitySummary", () => {
+	it("classifies reliability and schedule freshness issues", () => {
+		const quality = buildQualitySummary({
+			dataCompleteness: {
+				hasBaselineSchedule: true,
+				hasMeasurements: true,
+				hasActualCosts: true,
+				hasFutureCosts: false,
+				hasUnappropriatedActualCosts: false,
+				hasUnappropriatedFutureCosts: false,
+				hasSingleActualCostCategory: true,
+			},
+			plannedValue: 100,
+			actualCost: 50,
+			baselineEnd: "2026-10-31T00:00:00.000Z",
+			contractEnd: "2026-12-31T00:00:00.000Z",
+		} as never);
+
+		expect(quality.invalid).toBe(1);
+		expect(quality.stale).toBe(1);
 	});
 });

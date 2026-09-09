@@ -1,3 +1,4 @@
+import { pdfResponse } from "../../../lib/binary-response";
 import { prismaExecutionViewRepository } from "../bi/execution-view.repository";
 import type { ExecutionViewResponse } from "../bi/execution-view.service";
 import { ExecutionViewService } from "../bi/execution-view.service";
@@ -199,10 +200,5 @@ export async function generateWorkExecutionPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="relatorio-execucao-${view.work.code}.pdf"`,
-		},
-	});
+	return pdfResponse(pdfBytes, `relatorio-execucao-${view.work.code}.pdf`);
 }

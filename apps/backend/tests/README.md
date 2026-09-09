@@ -5,7 +5,7 @@ Todo código exclusivo de teste fica neste diretório:
 - `unit/`: testes isolados, de serviço, repositório, schema e rota, espelhando
   a organização de `src/`;
 - `integration/`: jornadas HTTP compostas que não usam o banco real;
-- `e2e-db/`: cenários sequenciais contra um arquivo SQLite descartável;
+- `e2e-db/`: cenários sequenciais contra um banco PostgreSQL descartável;
 - `support/`: helpers compartilhados exclusivamente pelos testes;
 - `scripts/`: preparação do banco, runners sequenciais e smoke tests.
 

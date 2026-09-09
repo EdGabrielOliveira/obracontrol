@@ -59,6 +59,7 @@ mock.module("../../../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: "work-1",
+				ownerId: "owner-1",
 				costCenterId: "cc-1",
 			})),
 		},
@@ -290,7 +291,9 @@ describe("ARQ-003 rotas resolvem owner scope pelo modelo de memberships", () => 
 		);
 
 		expect(response.status).toBe(200);
-		expect(budgetGet).toHaveBeenCalledWith("owner-1", "work-1");
+		expect(budgetGet).toHaveBeenCalledWith("owner-1", "work-1", {
+			includePhysicalFinancial: true,
+		});
 		expect(budgetGet).not.toHaveBeenCalledWith("granted-1", "work-1");
 	});
 

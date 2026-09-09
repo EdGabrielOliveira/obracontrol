@@ -13,13 +13,11 @@ import {
 	classifyIndex,
 	HEALTH_TONE,
 } from "@/utils/evm-health";
-import {
-	formatCurrency,
-	formatRatioAsPercentage,
-} from "@/utils/format";
+import { formatCurrency, formatRatioAsPercentage } from "@/utils/format";
 
 interface WorkKPICardsProps {
 	summary: WorkBIResponse["summary"];
+	indicators: WorkBIResponse["indicators"];
 }
 
 interface KPIItem {
@@ -29,69 +27,74 @@ interface KPIItem {
 	tone: "good" | "attention" | "critical" | "unknown";
 }
 
-export function buildKPIs(summary: WorkBIResponse["summary"]): KPIItem[] {
+export function buildKPIs(
+	summary: WorkBIResponse["summary"],
+	indicators: WorkBIResponse["indicators"],
+): KPIItem[] {
 	const noInformation = "Sem informações";
-	const completeness = summary.dataCompleteness;
-	const hasProjectionData =
-		completeness.hasBudget &&
-		completeness.hasMeasurements &&
-		completeness.hasActualCosts;
+	const availableValue = (key: keyof typeof indicators): number | null => {
+		const indicator = indicators[key];
+		return indicator.status === "AVAILABLE" &&
+			indicator.value != null &&
+			Number.isFinite(indicator.value)
+			? indicator.value
+			: null;
+	};
+	const indicatorAvailable = (key: keyof typeof indicators) =>
+		availableValue(key) != null;
 	const valueOrPlaceholder = (
-		available: boolean,
-		value: number | null | undefined,
+		key: keyof typeof indicators,
 		format: (value: number) => string,
-	) =>
-		available && value != null && Number.isFinite(value)
-			? format(value)
-			: noInformation;
-	const spiTone = classifyIndex(summary.schedulePerformanceIndex);
-	const cpiTone = classifyIndex(summary.costPerformanceIndex);
+	) => {
+		const value = availableValue(key);
+		return value != null ? format(value) : noInformation;
+	};
+	const toneForIndex = (
+		key: "schedulePerformanceIndex" | "costPerformanceIndex",
+	) => {
+		const value = availableValue(key);
+		return value != null ? classifyIndex(value) : "unknown";
+	};
+	const spiTone = toneForIndex("schedulePerformanceIndex");
+	const cpiTone = toneForIndex("costPerformanceIndex");
+	const selectedEac = availableValue("selectedEac");
+	const bac = availableValue("bac");
+	const vac = availableValue("vac");
+	const tcpi = availableValue("tcpi");
 	const balanceTone = classifyBalance(summary.balance);
 
 	return [
 		{
 			label: "SPI (Prazo)",
-			value: valueOrPlaceholder(
-				completeness.hasBaselineSchedule && completeness.hasMeasurements,
-				summary.schedulePerformanceIndex,
-				(value) => value.toFixed(2),
+			value: valueOrPlaceholder("schedulePerformanceIndex", (value) =>
+				value.toFixed(2),
 			),
 			icon: CalendarClock,
 			tone: spiTone,
 		},
 		{
 			label: "CPI (Custo)",
-			value: valueOrPlaceholder(
-				completeness.hasMeasurements && completeness.hasActualCosts,
-				summary.costPerformanceIndex,
-				(value) => value.toFixed(2),
+			value: valueOrPlaceholder("costPerformanceIndex", (value) =>
+				value.toFixed(2),
 			),
 			icon: Wallet,
 			tone: cpiTone,
 		},
 		{
 			label: "SV (Variação Prazo)",
-			value: valueOrPlaceholder(
-				completeness.hasBaselineSchedule && completeness.hasMeasurements,
-				summary.scheduleVariance,
-				formatCurrency,
-			),
+			value: valueOrPlaceholder("scheduleVariance", formatCurrency),
 			icon: TrendingUp,
 			tone: spiTone,
 		},
 		{
 			label: "CV (Variação Custo)",
-			value: valueOrPlaceholder(
-				completeness.hasMeasurements && completeness.hasActualCosts,
-				summary.costVariance,
-				formatCurrency,
-			),
+			value: valueOrPlaceholder("costVariance", formatCurrency),
 			icon: TrendingDown,
 			tone: cpiTone,
 		},
 		{
 			label: "% Conclusão",
-			value: completeness.hasMeasurements
+			value: indicatorAvailable("earnedValue")
 				? formatRatioAsPercentage(summary.measuredPercentage)
 				: noInformation,
 			icon: Ruler,
@@ -99,52 +102,44 @@ export function buildKPIs(summary: WorkBIResponse["summary"]): KPIItem[] {
 		},
 		{
 			label: "Saldo",
-			value: completeness.hasBudget
-				? formatCurrency(summary.balance)
-				: noInformation,
+			value: valueOrPlaceholder("currentBudgetBalance", formatCurrency),
 			icon: PiggyBank,
 			tone: balanceTone,
 		},
 		{
 			label: "EAC (Projeção)",
-			value: valueOrPlaceholder(
-				hasProjectionData,
-				summary.selectedEac,
-				formatCurrency,
-			),
+			value: valueOrPlaceholder("selectedEac", formatCurrency),
 			icon: Wallet,
 			tone:
-				summary.selectedEac != null && summary.selectedEac > summary.bac
-					? "critical"
-					: "good",
+				selectedEac == null || bac == null
+					? "unknown"
+					: selectedEac > bac
+						? "critical"
+						: "good",
 		},
 		{
 			label: "ETC (Faltam)",
-			value: valueOrPlaceholder(hasProjectionData, summary.etc, formatCurrency),
+			value: valueOrPlaceholder("etc", formatCurrency),
 			icon: TrendingDown,
 			tone: "unknown",
 		},
 		{
 			label: "VAC (Projeção)",
-			value: valueOrPlaceholder(hasProjectionData, summary.vac, formatCurrency),
+			value: valueOrPlaceholder("vac", formatCurrency),
 			icon: TrendingUp,
-			tone: summary.vac != null && summary.vac < 0 ? "critical" : "good",
+			tone: vac == null ? "unknown" : vac < 0 ? "critical" : "good",
 		},
 		{
 			label: "TCPI (Necessário)",
-			value: valueOrPlaceholder(
-				hasProjectionData,
-				summary.tcpi,
-				(value) => value.toFixed(2),
-			),
+			value: valueOrPlaceholder("tcpi", (value) => value.toFixed(2)),
 			icon: Ruler,
-			tone: summary.tcpi != null && summary.tcpi > 1 ? "critical" : "good",
+			tone: tcpi == null ? "unknown" : tcpi > 1 ? "critical" : "good",
 		},
 	];
 }
 
-export function WorkKPICards({ summary }: WorkKPICardsProps) {
-	const kpis = buildKPIs(summary);
+export function WorkKPICards({ summary, indicators }: WorkKPICardsProps) {
+	const kpis = buildKPIs(summary, indicators);
 
 	return (
 		<div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">

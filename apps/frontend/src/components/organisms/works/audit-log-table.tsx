@@ -157,8 +157,7 @@ export function AuditLogTable({
 		columnHelper.display({
 			id: "user",
 			header: "Usuário",
-			cell: (info) =>
-				auditUserName(info.row.original),
+			cell: (info) => auditUserName(info.row.original),
 		}),
 		columnHelper.display({
 			id: "actions",

@@ -219,7 +219,13 @@ export function buildWorkBIFromMetrics(
 	const costByStage = collectStageRollups(
 		hierarchy,
 		buildActualCostByItemKey(input.actualCosts ?? [], dataDate),
+		!metrics.dataCompleteness.hasSingleActualCostCategory,
 	);
+	const baselineEndsBeforeContract =
+		metrics.baselineEnd != null &&
+		metrics.contractEnd != null &&
+		new Date(metrics.baselineEnd).getTime() <
+			new Date(metrics.contractEnd).getTime();
 
 	return {
 		summary: {
@@ -266,7 +272,14 @@ export function buildWorkBIFromMetrics(
 			dataCompleteness: metrics.dataCompleteness,
 		},
 		indicators: metrics.indicators,
-		sCurve: toResponseSCurve(buildMonthlySCurve(metrics.items, dataDate)),
+		sCurve: toResponseSCurve(
+			buildMonthlySCurve(
+				metrics.items,
+				dataDate,
+				input.measurements ?? [],
+				input.baselineSchedules ?? [],
+			),
+		),
 		costByStage,
 		unappropriatedCosts: buildUnappropriatedCosts(
 			input.actualCosts ?? [],
@@ -277,13 +290,17 @@ export function buildWorkBIFromMetrics(
 		financial: metrics.financial,
 		qualityIssues: buildDataQualityIssues(metrics, work.id),
 		ledgerSummary,
-		alerts: evaluateThresholds({
-			SPI: metrics.schedulePerformanceIndex,
-			CPI: metrics.costPerformanceIndex,
-			EAC:
-				metrics.bac > 0 && metrics.selectedEac !== null
-					? metrics.selectedEac / metrics.bac
-					: null,
-		}),
+		alerts: evaluateThresholds(
+			{
+				SPI: metrics.schedulePerformanceIndex,
+				CPI: metrics.costPerformanceIndex,
+				EAC:
+					metrics.bac > 0 && metrics.selectedEac !== null
+						? metrics.selectedEac / metrics.bac
+						: null,
+			},
+			undefined,
+			{ suppressScheduleAlerts: baselineEndsBeforeContract },
+		),
 	};
 }

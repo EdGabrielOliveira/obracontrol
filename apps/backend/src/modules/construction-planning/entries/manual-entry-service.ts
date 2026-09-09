@@ -534,7 +534,7 @@ export class ConstructionManualEntryService {
 			}
 			if (rejectedApproval && ctx) {
 				const { submitApproval } = await import(
-					"../../governance/approval.service",
+					"../../governance/approval.service"
 				);
 				await submitApproval({
 					actorId: ctx.userId,
@@ -547,7 +547,11 @@ export class ConstructionManualEntryService {
 						description: updated.description ?? null,
 					},
 					expectedVersion: 1,
-					idempotencyKey: ["actual-cost-revision", costId, crypto.randomUUID()].join("-"),
+					idempotencyKey: [
+						"actual-cost-revision",
+						costId,
+						crypto.randomUUID(),
+					].join("-"),
 				});
 			}
 			return updated;
@@ -579,7 +583,7 @@ export class ConstructionManualEntryService {
 							budgetItemId: allocation.budgetItemId,
 							percentage: Math.round(
 								((Number(allocation.value ?? 0) /
-									(oldAmount > 0 ? oldAmount : 1)) *
+									(oldAmount !== 0 ? oldAmount : 1)) *
 									100 *
 									100) /
 									100,

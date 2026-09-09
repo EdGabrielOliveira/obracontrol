@@ -73,6 +73,7 @@ mock.module("../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: "cc-1",
 			})),
 			findFirst: mock(async () => ({
@@ -104,6 +105,7 @@ mock.module("../../../src/lib/prisma", () => ({
 			findUnique: mock(async () => null),
 			findMany: mock(async () => [{ organizationId: "org-1" }]),
 		},
+		companyMembership: { findMany: mock(async () => []) },
 		budgetVersion: {
 			findFirst: budgetVersionFindFirst,
 			findMany: budgetVersionFindMany,
@@ -150,6 +152,7 @@ mock.module("../../../src/lib/prisma", () => ({
 				budgetProjectionOutbox: {
 					updateMany: mock(async () => ({ count: 0 })),
 				},
+				companyMembership: { findMany: mock(async () => []) },
 			}),
 		),
 	},

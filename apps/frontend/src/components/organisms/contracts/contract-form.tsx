@@ -25,7 +25,10 @@ import {
 	CONTRACT_STATUS_OPTIONS,
 	DEFAULT_CONTRACT_STATUS,
 } from "@/constants/status-options";
-import { optionsForStatus, CONTRACT_STATUS_TRANSITIONS } from "@/lib/status-transitions";
+import {
+	CONTRACT_STATUS_TRANSITIONS,
+	optionsForStatus,
+} from "@/lib/status-transitions";
 import {
 	type ContractEditFormValues,
 	type ContractFormValues,
@@ -238,8 +241,8 @@ function ContractCreateForm({
 	const { handleSubmit, control, register, setValue } =
 		useForm<ContractFormValues>({
 			resolver: zodResolver(contractFormSchema) as Resolver<ContractFormValues>,
-		defaultValues: {
-			status: DEFAULT_CONTRACT_STATUS,
+			defaultValues: {
+				status: DEFAULT_CONTRACT_STATUS,
 				...defaultValues,
 			},
 		});
@@ -310,7 +313,9 @@ function ContractCreateForm({
 									const supplier = suppliers.find((s) => s.name === name);
 									const isLinked =
 										linkedSupplierIds === undefined ||
-										(supplier ? linkedSupplierIds.includes(supplier.id) : false);
+										(supplier
+											? linkedSupplierIds.includes(supplier.id)
+											: false);
 									setValue(
 										"supplierId",
 										isLinked && supplier ? supplier.id : "",

@@ -106,6 +106,11 @@ export function SummaryTab({
 	const { summary, sCurve, costByStage } = bi;
 	const noInformation = "Sem informações";
 	const completeness = summary.dataCompleteness;
+	const indicators = bi.indicators;
+	const indicatorAvailable = (key: keyof typeof indicators) =>
+		indicators[key].status === "AVAILABLE";
+	const indicatorValue = (key: keyof typeof indicators) =>
+		indicators[key].value;
 
 	const safeFormat = (v: number | null | undefined, available = true) =>
 		available && v != null && Number.isFinite(v)
@@ -114,9 +119,6 @@ export function SummaryTab({
 
 	const formatIndex = (v: number | null | undefined, available = true) =>
 		available && v != null && Number.isFinite(v) ? v.toFixed(3) : noInformation;
-
-	const spIndex = summary.schedulePerformanceIndex ?? summary.idp;
-	const cpIndex = summary.costPerformanceIndex ?? summary.idc;
 
 	const progressWidth = Math.min(summary.measuredPercentage * 100, 100);
 
@@ -137,92 +139,131 @@ export function SummaryTab({
 			<KpiGrid>
 				<KpiCard
 					title="Orçado"
-					value={safeFormat(summary.activeBudget, completeness.hasBudget)}
+					value={safeFormat(summary.activeBudget, indicatorAvailable("bac"))}
+					tooltip="Valor total do orçamento ativo da obra, somando os itens atualmente válidos."
 				/>
 				<KpiCard
 					title="Gasto"
-					value={safeFormat(summary.actualCost, completeness.hasActualCosts)}
+					value={safeFormat(
+						summary.actualCost,
+						indicatorAvailable("actualCost"),
+					)}
+					tooltip="Soma dos custos realizados registrados para a obra."
 				/>
 				<KpiCard
 					title="Saldo"
 					value={safeFormat(
-						summary.currentBudgetBalance,
-						completeness.hasBudget,
+						indicatorValue("currentBudgetBalance"),
+						indicatorAvailable("currentBudgetBalance"),
 					)}
+					tooltip="Saldo disponível do orçamento: valor orçado menos o gasto realizado."
 					tone={summary.currentBudgetBalance >= 0 ? "success" : "danger"}
 				/>
 				<KpiCard
-					title="Execução (%)"
+					title="Orçamento consumido (%)"
+					tooltip="Percentual do orçamento já consumido: gasto realizado dividido pelo orçamento ativo."
 					value={
-							completeness.hasBudget && completeness.hasActualCosts
-								? formatPercentage(
-										(summary.actualCost / summary.activeBudget) * 100,
-									)
-								: noInformation
+						indicatorAvailable("bac") && indicatorAvailable("actualCost")
+							? formatPercentage(
+									(summary.actualCost / summary.activeBudget) * 100,
+								)
+							: noInformation
 					}
 				/>
 				<KpiCard
 					title="Valor agregado (EV)"
 					value={safeFormat(
-						summary.earnedValue,
-						completeness.hasBudget && completeness.hasMeasurements,
+						indicatorValue("earnedValue"),
+						indicatorAvailable("earnedValue"),
 					)}
+					tooltip="Valor orçado correspondente ao trabalho efetivamente medido. É a base para calcular IDC e IDP."
 				/>
 				<KpiCard
 					title="IDC (CPI)"
 					value={formatIndex(
-						cpIndex,
-						completeness.hasMeasurements && completeness.hasActualCosts,
+						indicatorValue("costPerformanceIndex"),
+						indicatorAvailable("costPerformanceIndex"),
 					)}
 					tone={
-						cpIndex != null
-							? classifyIndex(cpIndex) === "good"
+						indicatorAvailable("costPerformanceIndex")
+							? classifyIndex(indicatorValue("costPerformanceIndex")) === "good"
 								? "success"
-								: classifyIndex(cpIndex) === "attention"
+								: classifyIndex(indicatorValue("costPerformanceIndex")) ===
+										"attention"
 									? "warning"
 									: "danger"
 							: "default"
 					}
+					tooltip="Índice de Desempenho de Custo: valor agregado dividido pelo gasto realizado. Acima de 1 indica desempenho de custo favorável."
 				/>
 				<KpiCard
 					title="IDP (SPI)"
 					value={formatIndex(
-						spIndex,
-						completeness.hasBaselineSchedule && completeness.hasMeasurements,
+						indicatorValue("schedulePerformanceIndex"),
+						indicatorAvailable("schedulePerformanceIndex"),
 					)}
 					tone={
-						spIndex != null
-							? classifyIndex(spIndex) === "good"
+						indicatorAvailable("schedulePerformanceIndex")
+							? classifyIndex(indicatorValue("schedulePerformanceIndex")) ===
+								"good"
 								? "success"
-								: classifyIndex(spIndex) === "attention"
+								: classifyIndex(indicatorValue("schedulePerformanceIndex")) ===
+										"attention"
 									? "warning"
 									: "danger"
 							: "default"
 					}
+					tooltip="Índice de Desempenho de Prazo: valor agregado dividido pelo valor planejado. Acima de 1 indica avanço superior ao planejado."
 				/>
 				<KpiCard
 					title="Custos futuros"
 					value={safeFormat(summary.futureCost, completeness.hasFutureCosts)}
 					tone="warning"
+					tooltip="Estimativa do custo que ainda será necessário para concluir o trabalho restante."
 				/>
 				<KpiCard
 					title="Saldo projetado"
 					value={safeFormat(
-						summary.projectedBudgetBalance,
-						completeness.hasBudget,
+						indicatorValue("projectedBudgetBalance"),
+						indicatorAvailable("projectedBudgetBalance"),
 					)}
-					tone={summary.projectedBudgetBalance >= 0 ? "success" : "danger"}
+					tooltip="Saldo projetado ao final: orçamento ativo menos o custo total estimado da obra."
+					tone={
+						indicatorAvailable("projectedBudgetBalance")
+							? (indicatorValue("projectedBudgetBalance") ?? 0) >= 0
+								? "success"
+								: "danger"
+							: "default"
+					}
+				/>
+				<KpiCard
+					title="EAC típico"
+					value={safeFormat(
+						indicatorValue("eacTypical"),
+						indicatorAvailable("eacTypical"),
+					)}
+					tooltip="Estimativa ao aplicar o IDC atual ao orçamento total (BAC / CPI)."
+				/>
+				<KpiCard
+					title="EAC atípico"
+					value={safeFormat(
+						indicatorValue("eacAtypical"),
+						indicatorAvailable("eacAtypical"),
+					)}
+					tooltip="Estimativa assumindo que o custo restante seguirá o orçamento restante (AC + BAC - EV)."
 				/>
 				{bi.financial?.budgetCostPerM2 != null && (
 					<KpiCard
 						title="Custo/m² (orçado)"
 						value={formatCurrency(bi.financial.budgetCostPerM2)}
+						tooltip="Orçamento ativo dividido pela área construída informada para a obra."
 					/>
 				)}
 				{bi.financial?.actualCostPerM2 != null && (
 					<KpiCard
 						title="Custo/m² (real)"
 						value={formatCurrency(bi.financial.actualCostPerM2)}
+						tooltip="Gasto realizado dividido pela área construída informada para a obra."
 					/>
 				)}
 			</KpiGrid>

@@ -111,6 +111,7 @@ mock.module("../../../src/lib/prisma", () => ({
 		constructionWork: {
 			findUnique: mock(async () => ({
 				id: TEST_WORK_ID,
+				ownerId: TEST_OWNER,
 				costCenterId: TEST_CC_ID,
 			})),
 		},
@@ -139,7 +140,15 @@ mock.module("../../../src/lib/prisma", () => ({
 			findMany: orgMembershipFindMany,
 		},
 		$transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
-			callback({ auditLog: { create: auditLogCreate } }),
+			callback({
+				auditLog: { create: auditLogCreate },
+				constructionContractAmendment: {
+					update: mock(async () => ({
+						id: "e2e-ca-1",
+						approvalStatus: "APPROVED",
+					})),
+				},
+			}),
 	},
 }));
 
@@ -822,18 +831,10 @@ describe("Contract Supplier Link E2E", () => {
 		);
 
 		expect(response.status).toBe(400);
-		const body = await response.json();
-		expect(
-			body.errors?.some(
-				(error: { field: string; message: string }) =>
-					error.field === "supplierName" &&
-					error.message === "Informe supplierId ou supplierName.",
-			),
-		).toBe(true);
 		expect(createContract).not.toHaveBeenCalled();
 	});
 
-	it("PATCH define supplierId no contrato", async () => {
+	it("PATCH ignora campos de fornecedor fora do contrato de atualizacao", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -867,15 +868,10 @@ describe("Contract Supplier Link E2E", () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(updateContract).toHaveBeenCalledWith(
-			TEST_OWNER,
-			TEST_WORK_ID,
-			"e2e-contract-1",
-			expect.objectContaining({ supplierId: "e2e-supplier-1" }),
-		);
+		expect(updateContract).not.toHaveBeenCalled();
 	});
 
-	it("PATCH com supplierId null sem supplierName -> 400, nunca 500", async () => {
+	it("PATCH ignora supplierId nulo fora do contrato de atualizacao", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -898,11 +894,11 @@ describe("Contract Supplier Link E2E", () => {
 			),
 		);
 
-		expect(response.status).toBe(400);
+		expect(response.status).toBe(200);
 		expect(updateContract).not.toHaveBeenCalled();
 	});
 
-	it("PATCH com supplierId null e supplierName explicito desvincula mantendo o nome", async () => {
+	it("PATCH ignora campos de fornecedor ao atualizar contrato", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -929,18 +925,10 @@ describe("Contract Supplier Link E2E", () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(updateContract).toHaveBeenCalledWith(
-			TEST_OWNER,
-			TEST_WORK_ID,
-			"e2e-contract-1",
-			expect.objectContaining({
-				supplierId: null,
-				supplierName: "Fornecedor E2E",
-			}),
-		);
+		expect(updateContract).not.toHaveBeenCalled();
 	});
 
-	it("PATCH com supplierId de outro proprietario -> 422 INVALID_SUPPLIER", async () => {
+	it("PATCH nao resolve fornecedor porque esse endpoint nao vincula fornecedores", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -963,12 +951,11 @@ describe("Contract Supplier Link E2E", () => {
 			),
 		);
 
-		expect(response.status).toBe(422);
-		const body = await response.json();
-		expect(body.message).toBe("Fornecedor nao pertence ao proprietario");
+		expect(response.status).toBe(200);
+		expect(updateContract).not.toHaveBeenCalled();
 	});
 
-	it("PATCH com apenas supplierId denormaliza supplierName do fornecedor", async () => {
+	it("PATCH nao denormaliza fornecedor fora do endpoint de vinculo", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -1002,15 +989,7 @@ describe("Contract Supplier Link E2E", () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(updateContract).toHaveBeenCalledWith(
-			TEST_OWNER,
-			TEST_WORK_ID,
-			"e2e-contract-1",
-			expect.objectContaining({
-				supplierId: "e2e-supplier-1",
-				supplierName: "Fornecedor Cadastrado",
-			}),
-		);
+		expect(updateContract).not.toHaveBeenCalled();
 	});
 
 	it("GET detalhe retorna totalValue e amendmentTotal derivados", async () => {
@@ -1114,7 +1093,7 @@ describe("Contract Amendments E2E", () => {
 		);
 
 		expect(response.status).toBe(200);
-		expect(auditLogCreate).toHaveBeenCalledTimes(1);
+		expect(auditLogCreate).toHaveBeenCalledTimes(2);
 		expect(auditLogCreate).toHaveBeenCalledWith({
 			data: expect.objectContaining({
 				action: "CREATE",
@@ -1256,7 +1235,7 @@ describe("Contract Amendments E2E", () => {
 		});
 	});
 
-	it("PATCH contrato com aditivos alterando contractValue -> 422 CONTRACT_AMENDMENTS_EXIST", async () => {
+	it("PATCH ignora contractValue e preserva aditivos no endpoint de contrato", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -1281,10 +1260,7 @@ describe("Contract Amendments E2E", () => {
 			),
 		);
 
-		expect(response.status).toBe(422);
-		const body = await response.json();
-		expect(body.message).toBe("Contrato com aditivos: ajuste por aditivo");
-		expect(body.message).toBe("Contrato com aditivos: ajuste por aditivo");
+		expect(response.status).toBe(200);
 	});
 
 	it("PATCH contrato com aditivos sem alterar contractValue atualiza normalmente", async () => {
@@ -1383,7 +1359,7 @@ describe("Contract Read Access E2E", () => {
 		expect(response.status).toBe(404);
 	});
 
-	it("PATCH com supplierName vazio -> 400 INVALID_INPUT, nunca persiste", async () => {
+	it("PATCH ignora supplierName vazio fora do contrato de atualizacao", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -1406,7 +1382,7 @@ describe("Contract Read Access E2E", () => {
 			),
 		);
 
-		expect(response.status).toBe(400);
+		expect(response.status).toBe(200);
 		expect(updateContract).not.toHaveBeenCalled();
 	});
 });

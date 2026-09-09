@@ -208,7 +208,7 @@ describe("management projections", () => {
 			"2026-01-2",
 			"2026-01-3",
 		]);
-		expect(schedule.totals.plannedByMonth).toEqual([500, 500, 500]);
+		expect(schedule.totals.plannedByMonth).toEqual([107.14, 250, 142.86]);
 		expect(schedule.totals.measuredByMonth).toEqual([0, 400, 0]);
 		expect(schedule.totals.actualByMonth).toEqual([0, 250, 0]);
 		expect(schedule.totals.measuredAccumulated).toEqual([0, 400, 400]);
@@ -221,7 +221,7 @@ describe("management projections", () => {
 		);
 
 		expect(schedule.totals.months).toEqual(["2026-01-1", "2026-01-2"]);
-		expect(schedule.totals.plannedByMonth).toEqual([500, 500]);
+		expect(schedule.totals.plannedByMonth).toEqual([392.86, 107.14]);
 		expect(schedule.totals.measuredByMonth).toEqual([400, 0]);
 		expect(schedule.totals.actualByMonth).toEqual([250, 0]);
 	});

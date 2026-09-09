@@ -1,3 +1,4 @@
+import { pdfResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import * as managementRepo from "../management.repository";
 import {
@@ -151,10 +152,5 @@ export async function generateWorkPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="relatorio-obra-${report.work.code}.pdf"`,
-		},
-	});
+	return pdfResponse(pdfBytes, `relatorio-obra-${report.work.code}.pdf`);
 }

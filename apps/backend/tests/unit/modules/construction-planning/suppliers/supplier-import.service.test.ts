@@ -15,7 +15,7 @@ describe("parseSupplierWorkbook", () => {
 			workbookBytes([
 				{
 					"Nome da empresa": "Fornecedor A",
-					CNPJ: "12.345.678/0001-90",
+					CNPJ: "11.222.333/0001-81",
 					"Chave PIX": "financeiro@fornecedor.com",
 					"Tipo PIX": "EMAIL",
 					Banco: "Banco do Brasil",
@@ -37,7 +37,7 @@ describe("parseSupplierWorkbook", () => {
 			expect.objectContaining({
 				rowNumber: 2,
 				name: "Fornecedor A",
-				document: "12345678000190",
+				document: "11222333000181",
 				pixKeyType: "EMAIL",
 				addressState: "SP",
 			}),
@@ -61,8 +61,8 @@ describe("parseSupplierWorkbook", () => {
 	it("rejeita CNPJs duplicados no mesmo arquivo", () => {
 		const result = parseSupplierWorkbook(
 			workbookBytes([
-				{ "Nome da empresa": "Fornecedor A", CNPJ: "12.345.678/0001-90" },
-				{ "Nome da empresa": "Fornecedor B", CNPJ: "12.345.678/0001-90" },
+				{ "Nome da empresa": "Fornecedor A", CNPJ: "11.222.333/0001-81" },
+				{ "Nome da empresa": "Fornecedor B", CNPJ: "11.222.333/0001-81" },
 			]),
 		);
 

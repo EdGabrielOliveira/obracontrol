@@ -6,8 +6,8 @@ import {
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
 import { ConstructionError } from "../../../lib/errors";
-import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
+import * as contractRepository from "../contract.repository";
 import { managementService } from "../management.service";
 import { pdfReportService } from "../statistics/pdf-report.service";
 
@@ -15,11 +15,10 @@ async function resolveContractResource(
 	params: Record<string, string | undefined>,
 ) {
 	if (!params.contractId) return null;
-	const contract = await prisma.contract.findUnique({
-		where: { id: params.contractId },
-		select: { workId: true },
-	});
-	return contract ? { workId: contract.workId } : null;
+	const getContractWorkId = contractRepository.getContractWorkId;
+	if (!getContractWorkId) return null;
+	const workId = await getContractWorkId(params.contractId);
+	return workId ? { workId } : null;
 }
 
 const workReportRoutes = new Elysia({ name: "reports-work-read-routes" })

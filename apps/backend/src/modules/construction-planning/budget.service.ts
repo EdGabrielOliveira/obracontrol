@@ -7,10 +7,12 @@ import {
 	budgetGovernanceGuard,
 	type GovernanceMutationGuard,
 } from "./governance-guard";
+import { MAX_IMPORT_UPLOAD_BYTES } from "./imports/import-limits";
 import { replaceBudgetWithImport } from "./imports/import-repository";
-import { rejectedRowCount } from "./imports/import-service";
-import { parseWorkbookByKind } from "./imports/parser";
-import { validateWorkbookByKind } from "./imports/validator";
+import {
+	parseAndValidateWorkbook,
+	rejectedRowCount,
+} from "./imports/import-service";
 import type {
 	CreateBudgetItemInput,
 	ReorderBudgetItemsInput,
@@ -38,7 +40,6 @@ const HIERARCHY_MAP: Record<string, Set<string>> = {
 	INPUT: new Set(),
 };
 
-const maxUploadBytes = 10 * 1024 * 1024;
 const allowedUploadTypes = new Set([
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	"application/octet-stream",
@@ -452,29 +453,20 @@ export class BudgetService {
 				400,
 			);
 		}
-		if (input.file.size > maxUploadBytes) {
+		if (input.file.size > MAX_IMPORT_UPLOAD_BYTES) {
 			throw new ConstructionError(
 				"FILE_TOO_LARGE",
-				"Arquivo deve ter no maximo 10MB",
+				"Arquivo deve ter no maximo 25MB",
 				413,
 			);
 		}
 
 		const bytes = new Uint8Array(await input.file.arrayBuffer());
-		const workbook = parseWorkbookByKind(bytes, input.file.name, "orcamento");
-		const validation = validateWorkbookByKind(workbook, "orcamento");
-
-		const structural = validation.errors.filter(
-			(error) => error.row === undefined,
+		const { validation } = parseAndValidateWorkbook(
+			bytes,
+			input.file.name,
+			"orcamento",
 		);
-		if (structural.length > 0) {
-			throw new ConstructionError(
-				"VALIDATION_FAILED",
-				"Planilha invalida",
-				422,
-				structural,
-			);
-		}
 
 		const importedCount = validation.normalizedRows.length;
 		const imp = await replaceBudgetWithImport(

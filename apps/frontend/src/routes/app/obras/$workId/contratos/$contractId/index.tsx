@@ -67,9 +67,9 @@ import { linkSupplierToWork } from "@/api/work-suppliers";
 import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
+import { PageContainer } from "@/atoms/page-container";
 import { KpiCard } from "@/components/atoms/kpi-card";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
-import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import {
 	CONTRACT_STATUS_MAP,
@@ -83,8 +83,8 @@ import { InstrumentReadinessCard } from "@/components/organisms/contracts/instru
 import { MeasurementsTab } from "@/components/organisms/contracts/measurements-tab";
 import { PaymentsTab } from "@/components/organisms/contracts/payments-tab";
 import { ServicesTab } from "@/components/organisms/contracts/services-tab";
-import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { SupplierSummaryCard } from "@/components/organisms/contracts/supplier-summary-card";
+import { MeasurementStatusModal } from "@/components/organisms/measurements/measurement-status-modal";
 import { SupplierModal } from "@/components/organisms/modals/supplier-modal";
 import { useCreationConfirmation } from "@/components/providers/creation-confirmation-provider";
 import { Button } from "@/components/ui/button";
@@ -433,13 +433,13 @@ function RouteComponent() {
 		error: measurementsError,
 		refetch: refetchMeasurements,
 	} = useQuery({
-			queryKey: contractKeys.measurementsList(workId, contractId, measFilter),
+		queryKey: contractKeys.measurementsList(workId, contractId, measFilter),
 		queryFn: () => listContractMeasurements(workId, contractId, measFilter),
 		staleTime: 2 * 60 * 1000,
 	});
 
 	const { data: payments, isLoading: isPaymentsLoading } = useQuery({
-			queryKey: contractKeys.paymentsList(workId, contractId, payFilter),
+		queryKey: contractKeys.paymentsList(workId, contractId, payFilter),
 		queryFn: () => listContractPayments(workId, contractId, payFilter),
 		staleTime: 2 * 60 * 1000,
 	});
@@ -930,13 +930,9 @@ function RouteComponent() {
 							)
 						}
 						onDeleteMeasurement={(id) => deleteMeasMutation.mutate(id)}
-						canChangeMeasurementStatus={
-							role !== null && role !== "SUPERVISOR"
-						}
+						canChangeMeasurementStatus={role !== null && role !== "SUPERVISOR"}
 						onOpenMeasurementStatus={setMeasurementStatusTarget}
-						isUpdatingMeasurementStatus={
-							measurementStatusMutation.isPending
-						}
+						isUpdatingMeasurementStatus={measurementStatusMutation.isPending}
 						warnings={measurementWarnings}
 						onDismissWarnings={() => setMeasurementWarnings([])}
 						searchValue={measSearch}

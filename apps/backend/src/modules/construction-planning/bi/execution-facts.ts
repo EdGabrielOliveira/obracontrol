@@ -1,12 +1,14 @@
 import type { Decimal } from "@prisma/client/runtime/library";
 import { toNum } from "../../../lib/decimal-utils";
 import type { DbMeasurementInput } from "./calculations";
+import { budgetItemReferencesMatch } from "./metrics-core";
 import { normalizePercentage } from "./percent-utils";
 
 export type ManualWorkMeasurementInput = {
 	date: Date;
 	items: Array<{
 		budgetItemId: string;
+		budgetItemIndex?: string | null;
 		measuredValue?: number | Decimal | null;
 		accumulatedValue?: number | Decimal | null;
 		accumulatedPercentage?: number | Decimal | null;
@@ -14,29 +16,13 @@ export type ManualWorkMeasurementInput = {
 	}>;
 };
 
-function keyOf(row: {
-	budgetItemId?: string | null;
-	budgetItemIndex?: string | null;
-	budgetIndex?: string | null;
-	index?: string | null;
-}) {
-	return row.budgetItemId
-		? `id:${row.budgetItemId}`
-		: row.budgetItemIndex
-			? `index:${row.budgetItemIndex}`
-			: row.budgetIndex
-				? `index:${row.budgetIndex}`
-				: row.index
-					? `index:${row.index}`
-					: null;
-}
-
 export function workMeasurementsToMetricInputs(
 	workMeasurements: ManualWorkMeasurementInput[],
 ): DbMeasurementInput[] {
 	const rows = workMeasurements.flatMap((measurement) =>
 		measurement.items.map((item) => ({
 			budgetItemId: item.budgetItemId,
+			budgetItemIndex: item.budgetItemIndex ?? null,
 			measurementDate: measurement.date,
 			measuredValueAccumulated:
 				item.accumulatedValue != null ? toNum(item.accumulatedValue) : null,
@@ -62,21 +48,37 @@ export function workMeasurementsToMetricInputs(
 }
 
 function normalizeAccumulatedValues(rows: DbMeasurementInput[]) {
-	const accumulatedByItem = new Map<string, number>();
+	const accumulatedGroups: Array<{
+		reference: DbMeasurementInput;
+		value: number;
+	}> = [];
 	return rows.map((row) => {
-		const key = keyOf(row);
-		if (!key || row.measuredValueAccumulated != null) {
-			if (key && row.measuredValueAccumulated != null) {
-				accumulatedByItem.set(key, toNum(row.measuredValueAccumulated));
+		const group = accumulatedGroups.find((candidate) =>
+			budgetItemReferencesMatch(candidate.reference, row),
+		);
+		if (!group) {
+			if (row.measuredValueAccumulated != null) {
+				accumulatedGroups.push({
+					reference: row,
+					value: toNum(row.measuredValueAccumulated),
+				});
+				return row;
 			}
+			if (row.measuredValue != null) {
+				const value = toNum(row.measuredValue);
+				accumulatedGroups.push({ reference: row, value });
+				return { ...row, measuredValueAccumulated: value };
+			}
+			return row;
+		}
+		if (row.measuredValueAccumulated != null) {
+			group.value = toNum(row.measuredValueAccumulated);
 			return row;
 		}
 		if (row.measuredValue == null) return row;
 
-		const accumulated =
-			(accumulatedByItem.get(key) ?? 0) + toNum(row.measuredValue);
-		accumulatedByItem.set(key, accumulated);
-		return { ...row, measuredValueAccumulated: accumulated };
+		group.value += toNum(row.measuredValue);
+		return { ...row, measuredValueAccumulated: group.value };
 	});
 }
 
@@ -97,12 +99,12 @@ export function composeMeasurementInputs(
 				: null,
 	}));
 	const operational = workMeasurementsToMetricInputs(manualMeasurements);
-	const operationalKeys = new Set(
-		operational.map((measurement) => keyOf(measurement)).filter(Boolean),
-	);
 	const ordered = [
 		...imported.filter(
-			(measurement) => !operationalKeys.has(keyOf(measurement)),
+			(measurement) =>
+				!operational.some((operationalMeasurement) =>
+					budgetItemReferencesMatch(operationalMeasurement, measurement),
+				),
 		),
 		...operational,
 	].sort(

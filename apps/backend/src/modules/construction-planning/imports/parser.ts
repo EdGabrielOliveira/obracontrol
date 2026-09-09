@@ -19,6 +19,9 @@ import type {
 	ParsedWorkbookUnified,
 	ParsedWorkSheet,
 } from "../types";
+import { SHEET_NAME_ALIASES } from "./sheet-aliases";
+
+export { SHEET_NAME_ALIASES } from "./sheet-aliases";
 
 type HeaderMap = Map<string, number>;
 
@@ -329,18 +332,6 @@ function parseActualCostRows(sheet: XLSX.WorkSheet): ParsedActualCostRow[] {
 		return [{ rowNumber: index + 2, ...values }];
 	});
 }
-
-export const SHEET_NAME_ALIASES: Record<string, string[]> = {
-	"Medicoes Obra": [
-		"Medições de Obra",
-		"Medicoes Obra",
-		"Medicoes",
-		"Medições",
-	],
-	Orcamento: ["Orcamento", "Orçamento"],
-	"Cronograma Original": ["Cronograma Original", "Cronograma"],
-	"Itens do Orcamento": ["Itens do Orcamento", "Itens do Orçamento"],
-};
 
 export function findSheetMap(
 	workbook: XLSX.WorkBook,

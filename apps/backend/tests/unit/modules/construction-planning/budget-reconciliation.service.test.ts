@@ -49,6 +49,7 @@ mock.module(
 mock.module(
 	"../../../../src/modules/construction-planning/budget-control/budget-control.repository",
 	() => ({
+		getBudgetItemReferences: mock(async () => ({ found: [], missing: [] })),
 		findActiveImpactsBySource: mock(async () => []),
 	}),
 );

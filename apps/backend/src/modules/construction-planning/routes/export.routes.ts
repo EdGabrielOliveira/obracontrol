@@ -109,11 +109,12 @@ export const exportRoutes = new Elysia({ name: "export-routes" })
 
 exportRoutes.get(
 	"/works/:workId/export/estatisticas",
-	async ({ params, query, scope }) =>
+	async ({ params, query, scope, user }) =>
 		exportService.exportWorkStatistics(
 			scope.resourceOwnerId,
 			params.workId,
 			query.period,
+			{ id: user.id, name: user.name },
 		),
 	{
 		query: t.Object({
@@ -135,11 +136,16 @@ export const generalExportRoutes = new Elysia({ name: "general-export-routes" })
 	.use(requireRole("read"))
 	.get(
 		"/export/fornecedores",
-		({ user }) => exportService.exportSuppliers(user.id),
+		({ user }) =>
+			exportService.exportSuppliers(user.id, { id: user.id, name: user.name }),
 		{ detail: { tags: ["Export"] } },
 	)
 	.get(
 		"/export/estatisticas-gerais",
-		({ user }) => exportService.exportSystemStatistics(user.id),
+		({ user }) =>
+			exportService.exportSystemStatistics(user.id, {
+				id: user.id,
+				name: user.name,
+			}),
 		{ detail: { tags: ["Export"] } },
 	);

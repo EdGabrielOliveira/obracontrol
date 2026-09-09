@@ -48,12 +48,7 @@ export function ManualContractRequestProposalDialog({
 	const submit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
 		const value = parseCurrencyInput(proposalValue);
-		if (
-			!supplierName.trim() ||
-			!cnpj.trim() ||
-			!Number.isFinite(value) ||
-			value <= 0
-		) {
+		if (!supplierName.trim() || !cnpj.trim() || value === null || value <= 0) {
 			return;
 		}
 		onSubmit({

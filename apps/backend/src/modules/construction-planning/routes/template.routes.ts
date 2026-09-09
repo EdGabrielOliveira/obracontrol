@@ -3,6 +3,7 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { xlsxResponse } from "../../../lib/binary-response";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { exportService } from "../export.service";
 import { buildWorkbookTemplate } from "../templates/template-generator";
@@ -17,16 +18,6 @@ const KINDS: { kind: WorkbookKind; filename: string }[] = [
 	{ kind: "custos", filename: "modelo-custos.xlsx" },
 	{ kind: "cotacao", filename: "modelo-cotacao.xlsx" },
 ];
-
-function xlsxResponse(buffer: Uint8Array, filename: string): Response {
-	return new Response(buffer as unknown as Blob, {
-		headers: {
-			"content-type":
-				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-			"content-disposition": `attachment; filename="${filename}"`,
-		},
-	});
-}
 
 export const templateRoutes = new Elysia({ name: "template-routes" });
 

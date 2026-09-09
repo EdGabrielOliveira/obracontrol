@@ -46,31 +46,87 @@ bun run test
 bun run build:frontend
 ```
 
-## Docker
+## Docker para desenvolvimento
 
 Na raiz do monorepo:
 
 ```bash
 cp .env.example .env
-# edite os segredos e as URLs públicas antes do primeiro deploy
-docker compose up -d --build
+docker compose -f docker-compose.development.yml up -d --build
 ```
 
 - Frontend: `http://localhost:7000`
 - Backend: `http://localhost:7001`
-- Banco: SQLite persistido no volume Docker `obracontrol_api_data`
+- Banco: PostgreSQL persistido no volume Docker `obracontrol_postgres_data`
+- Arquivos e anexos: volume Docker `obracontrol_api_data`
 
-### Desenvolvimento com hot reload
-
-O Compose principal inicia o Vite, monta `apps/frontend` no container e ativa
-polling para o Docker Desktop/Windows. Alterações em `src/`, configurações e
-estilos atualizam o navegador via HMR.
+O Compose de desenvolvimento inicia o Vite, monta `apps/frontend` no container e ativa
+polling para o Docker Desktop/Windows. Ele é destinado ao desenvolvimento e
+não deve ser usado como stack de produção.
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.development.yml up -d --build
 # ou: bun run dev:docker
 ```
 
-SQLite é um banco embutido em arquivo e não escuta uma porta TCP; por isso não
-há um mapeamento `7711:7711` no Compose atual. Essa porta fica reservada para
-uma futura migração para um banco cliente-servidor.
+O PostgreSQL local fica acessível somente em `127.0.0.1:5432` para ferramentas
+do host; a API usa o hostname interno `postgres` da rede Docker.
+
+## Deploy em VPS Linux
+
+Na VPS, o `docker-compose.yml` padrão inclui o Compose de produção, que compila o frontend estático com Nginx,
+mantém o backend apenas na rede interna do Compose e publica somente o frontend
+em `127.0.0.1:7000`. Um Nginx, Caddy ou Apache instalado no host deve terminar
+TLS e encaminhar o domínio para essa porta.
+
+Para Nginx no host, há um modelo em
+`ops/nginx/obracontrol.conf.example`; copie-o para `sites-available`, ajuste o
+domínio e habilite o site antes de emitir o certificado TLS.
+
+```bash
+[ -f .env ] || cp .env.production.example .env
+# edite .env: domínio público e segredos fortes
+openssl rand -base64 48
+docker compose config --quiet
+bash ops/update-vps.sh
+```
+
+O fluxo equivalente manual é:
+
+```bash
+git pull --ff-only origin main
+docker compose up -d --build
+```
+
+Na primeira publicação desta versão, faça a conversão do banco SQLite legado
+antes de liberar o domínio:
+
+```bash
+bash ops/migrate-sqlite-to-postgres.sh
+docker compose ps
+docker compose logs --tail=200 backend postgres
+```
+
+Depois da conversão, as atualizações normais continuam exatamente no fluxo
+existente. O backend aplica automaticamente as migrations pendentes com
+`prisma migrate deploy`.
+
+O script `ops/update-vps.sh` automatiza o `git pull` e o deploy normal, exige
+que a VPS esteja na branch `main` com working tree limpo e cria o backup antes
+de subir os containers. A conversão SQLite é uma operação única e explícita;
+para reconstruir sem atualizar o Git, use `bash ops/deploy.sh`.
+
+Comandos de operação:
+
+```bash
+docker compose ps
+docker compose logs -f --tail=200
+bash ops/backup-sqlite.sh
+bash ops/backup-postgres.sh
+docker compose down
+```
+
+O deploy cria um snapshot do volume `obracontrol_api_data` e um dump lógico do
+PostgreSQL antes de reconstruir as imagens. Copie os arquivos de `backups/` para
+outro host ou storage regularmente. Nunca remova volumes durante uma
+atualização: `docker compose down -v` apaga os dados.

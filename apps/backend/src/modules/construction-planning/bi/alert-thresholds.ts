@@ -46,6 +46,15 @@ const RULES: ThresholdRule[] = [
 		message: () => "Atencao: CPI abaixo de 1,00",
 	},
 	{
+		code: "CPI_SUSPICIOUSLY_HIGH",
+		metric: "CPI",
+		direction: "above",
+		threshold: 1.5,
+		severity: "MEDIUM",
+		message: () =>
+			"Qualidade do custo: CPI acima de 1,50; confirme se todas as categorias de custo foram apropriadas",
+	},
+	{
 		code: "EAC_OVER_BUDGET",
 		metric: "EAC",
 		direction: "above",
@@ -61,9 +70,11 @@ const RULES: ThresholdRule[] = [
 export function evaluateThresholds(
 	metrics: Record<string, number | null | undefined>,
 	rules: ThresholdRule[] = RULES,
+	options: { suppressScheduleAlerts?: boolean } = {},
 ): ThresholdAlert[] {
 	const alerts: ThresholdAlert[] = [];
 	for (const rule of rules) {
+		if (options.suppressScheduleAlerts && rule.metric === "SPI") continue;
 		const value = metrics[rule.metric];
 		if (value === null || value === undefined || !Number.isFinite(value)) {
 			continue;

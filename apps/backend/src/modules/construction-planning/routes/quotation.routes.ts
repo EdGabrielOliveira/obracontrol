@@ -4,8 +4,10 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { xlsxResponse } from "../../../lib/binary-response";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { parseInput } from "../../../lib/zod-validation";
+import { parseImportPagination } from "../imports/import-limits";
 import { quotationService } from "../quotation.service";
 import { quotationImportService } from "../quotation-import.service";
 import { createQuotationSchema } from "../schemas/contract.schema";
@@ -57,14 +59,21 @@ export const quotationRoutes = new Elysia({
 	)
 	.get(
 		"/:quotationId/import/:batchId",
-		async ({ params, query, scope }) =>
-			quotationImportService.getPreview(
+		async ({ params, query, scope }) => {
+			const { page, pageSize } = parseImportPagination(
+				query.page,
+				query.pageSize,
+				{ page: 1, pageSize: 500 },
+				500,
+			);
+			return quotationImportService.getPreview(
 				scope.resourceOwnerId,
 				params.workId,
 				params.batchId,
-				query.page ? Number(query.page) : 1,
-				query.pageSize ? Number(query.pageSize) : 500,
-			),
+				page,
+				pageSize,
+			);
+		},
 		{
 			query: t.Object({
 				page: t.Optional(t.String()),
@@ -114,14 +123,7 @@ export const quotationRoutes = new Elysia({
 				params.workId,
 				params.batchId,
 			);
-			return new Response(Buffer.from(sheet), {
-				headers: {
-					"Content-Type":
-						"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-					"Content-Disposition":
-						'attachment; filename="linhas-rejeitadas.xlsx"',
-				},
-			});
+			return xlsxResponse(Buffer.from(sheet), "linhas-rejeitadas.xlsx");
 		},
 		{ detail: { tags: ["Quotation Imports"] } },
 	)

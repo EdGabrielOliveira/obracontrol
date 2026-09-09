@@ -1,3 +1,4 @@
+import { pdfResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import * as managementRepo from "../management.repository";
 import {
@@ -154,10 +155,5 @@ export async function generateContractReportPdf(
 	);
 
 	const safeName = title.replace(/[^\p{L}\p{N}\s-]/gu, "").trim() || "contrato";
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="relatorio-contrato-${safeName}.pdf"`,
-		},
-	});
+	return pdfResponse(pdfBytes, `relatorio-contrato-${safeName}.pdf`);
 }

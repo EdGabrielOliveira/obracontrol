@@ -1,4 +1,5 @@
 import { rgb } from "pdf-lib";
+import { pdfResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import * as cmRepository from "../contract-measurement.repository";
 import * as wmRepository from "../work-measurement.repository";
@@ -253,12 +254,10 @@ export async function generateWorkMeasurementPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="boletim-medicao-${detail.work.code}-${measurement.number}.pdf"`,
-		},
-	});
+	return pdfResponse(
+		pdfBytes,
+		`boletim-medicao-${detail.work.code}-${measurement.number}.pdf`,
+	);
 }
 
 export async function generateContractMeasurementPdf(
@@ -397,10 +396,8 @@ export async function generateContractMeasurementPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="boletim-medicao-contrato-${detail.contract.code}-${measurement.number}.pdf"`,
-		},
-	});
+	return pdfResponse(
+		pdfBytes,
+		`boletim-medicao-contrato-${detail.contract.code}-${measurement.number}.pdf`,
+	);
 }

@@ -268,8 +268,8 @@ export function ImportBatchModal({
 						)}
 						{file && uploadMutation.isError && (
 							<p className="text-sm text-destructive">
-								Não foi possível analisar {file.name}. Corrija o arquivo e
-								tente novamente.
+								Não foi possível analisar {file.name}. Corrija o arquivo e tente
+								novamente.
 							</p>
 						)}
 					</div>

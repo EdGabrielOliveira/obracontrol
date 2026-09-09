@@ -18,7 +18,9 @@ generated/
 **/.local-objects/
 test-results/
 playwright-report/
+/backups/
 apps/frontend/docs
 apps/frontend/AGENTS.md
 apps/frontend/design.md
 apps/backend/AGENTS.md
+.agents

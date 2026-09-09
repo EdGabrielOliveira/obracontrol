@@ -57,8 +57,8 @@ const contractCreationSearchSchema = z.object({
 export const Route = createFileRoute("/app/obras/$workId/contratos/new")({
 	validateSearch: contractCreationSearchSchema,
 	component: RouteComponent,
-	loader: ({ params }) =>
-		Promise.all([
+	loader: ({ params }) => {
+		void Promise.all([
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costBudgetItems(params.workId),
 				queryFn: () => getCurrentCostBudgetItems(params.workId),
@@ -71,7 +71,8 @@ export const Route = createFileRoute("/app/obras/$workId/contratos/new")({
 				queryKey: supplierKeys.list({ pageSize: 100 }),
 				queryFn: () => listSuppliers({ pageSize: 100 }),
 			}),
-		]),
+		]);
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -180,7 +181,7 @@ function RouteComponent() {
 					result.approvalRequest.requiredApproverRole === "GESTOR"
 						? "Gestor"
 						: "Gerente";
-				 toast.success(
+				toast.success(
 					`Solicitação de criação enviada para aprovação do ${approver}.`,
 				);
 				routeQueryClient.invalidateQueries({
@@ -345,7 +346,10 @@ function RouteComponent() {
 	) {
 		return <LoadingSpinner title="Carregando fornecedores..." />;
 	}
-	if (flow === "manual" && (suppliersQuery.error || linkedSuppliersQuery.error)) {
+	if (
+		flow === "manual" &&
+		(suppliersQuery.error || linkedSuppliersQuery.error)
+	) {
 		return (
 			<ErrorFeedback
 				onRetry={() => {
@@ -372,7 +376,9 @@ function RouteComponent() {
 					showServices
 					submitLabel="Criar contrato"
 					contractValueLabel="Valor do fornecedor"
-					suppliers={linkedSuppliersQuery.data?.map((link) => link.supplier) ?? []}
+					suppliers={
+						linkedSuppliersQuery.data?.map((link) => link.supplier) ?? []
+					}
 					linkedSupplierIds={linkedSuppliersQuery.data?.map(
 						(link) => link.supplierId,
 					)}

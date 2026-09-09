@@ -14,20 +14,20 @@ import { listCompanies } from "@/api/companies";
 import { listAllCostCenters, listOrganizations } from "@/api/organizations";
 import { auditKeys } from "@/api/query-keys";
 import { listWorks } from "@/api/works";
-import { EmptyState } from "@/atoms/empty-state";
 import { AccessDenied } from "@/atoms/access-denied";
+import { EmptyState } from "@/atoms/empty-state";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { DataTable } from "@/components/atoms/data-table";
 import { PageHeader } from "@/components/atoms/page-header";
-import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
-import { Button } from "@/components/ui/button";
 import {
 	AUDIT_ACTION_STATUS_MAP,
 	StatusBadge,
 } from "@/components/atoms/status-badge";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
+import { AuditEntryDetail } from "@/components/organisms/works/audit-entry-detail";
+import { Button } from "@/components/ui/button";
 import {
 	Select,
 	SelectContent,
@@ -40,14 +40,14 @@ import {
 	auditEntityLabel,
 	auditUserName,
 } from "@/lib/audit-labels";
-import { queryClient } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth-context";
+import { queryClient } from "@/lib/query-client";
+import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { paginationSchema } from "@/schemas/pagination";
 import type { AuditLogEntry } from "@/types/audit";
 import type { PaginationMeta } from "@/types/shared";
 import { formatDateTime } from "@/utils/format";
 import { getPaginationMeta } from "@/utils/pagination";
-import { requireAuthorizationCapability } from "@/lib/route-authorization";
 
 const auditFilterSchema = z
 	.object({
@@ -273,8 +273,7 @@ function RouteComponent() {
 							auditColumnHelper.display({
 								id: "user",
 								header: "Usuário",
-								cell: ({ row }) =>
-									auditUserName(row.original),
+								cell: ({ row }) => auditUserName(row.original),
 							}),
 							auditColumnHelper.accessor("action", {
 								header: "Ação",

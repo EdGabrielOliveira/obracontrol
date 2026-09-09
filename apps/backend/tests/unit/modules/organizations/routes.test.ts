@@ -138,6 +138,14 @@ const deleteCostCenter = mock(async () => ({
 	organizationId: "org-1",
 	ownerId: "owner-1",
 }));
+const getCostCenterByIdOnly = mock(async () => ({
+	id: "cc-1",
+	name: "Natal",
+	organizationId: "org-1",
+	ownerId: "owner-1",
+}));
+const getCompanyIdsForUser = mock(async () => []);
+const getCompanyManagementContext = mock(async () => null);
 const findUser = mock(async () => ({ role: "GERENTE" }));
 
 mock.module("../../../../src/lib/auth-middleware", () => ({
@@ -153,8 +161,11 @@ mock.module("../../../../src/modules/organizations/repository", () => ({
 	createCostCenter,
 	listCostCenters,
 	getCostCenterById,
+	getCostCenterByIdOnly,
 	updateCostCenter,
 	deleteCostCenter,
+	getCompanyIdsForUser,
+	getCompanyManagementContext,
 }));
 
 mock.module("../../../../src/lib/prisma", () => ({
@@ -168,6 +179,13 @@ mock.module("../../../../src/lib/prisma", () => ({
 				name: "Org Teste",
 			})),
 		},
+		organizationMembership: { findMany: mock(async () => []) },
+		companyMembership: {
+			findMany: mock(async () => []),
+			findFirst: mock(async () => null),
+		},
+		costCenterMembership: { findMany: mock(async () => []) },
+		workMembership: { findMany: mock(async () => []) },
 		costCenter: {
 			findUnique: mock(async () => ({
 				id: "cc-1",
@@ -206,6 +224,8 @@ describe("organizationController", () => {
 	});
 
 	it("creates an organization with owner scope", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValueOnce({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -368,6 +388,7 @@ describe("organizationController", () => {
 
 	it("blocks organization updates for non-admin roles", async () => {
 		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "GERENTE" });
+		findUser.mockResolvedValue({ role: "GERENTE" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -389,6 +410,8 @@ describe("organizationController", () => {
 	});
 
 	it("deletes an organization", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -402,6 +425,8 @@ describe("organizationController", () => {
 	});
 
 	it("creates a cost center within an organization", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -477,6 +502,8 @@ describe("organizationController", () => {
 	});
 
 	it("updates a cost center", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);
@@ -498,6 +525,8 @@ describe("organizationController", () => {
 	});
 
 	it("deletes a cost center", async () => {
+		getSessionUser.mockResolvedValueOnce({ id: "owner-1", role: "ADMIN" });
+		findUser.mockResolvedValue({ role: "ADMIN" });
 		const { organizationController } = await import(
 			"../../../../src/modules/organizations/routes"
 		);

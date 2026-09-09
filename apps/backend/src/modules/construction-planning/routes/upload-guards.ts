@@ -1,6 +1,6 @@
 import { ConstructionError } from "../../../lib/errors";
+import { MAX_IMPORT_UPLOAD_BYTES } from "../imports/import-limits";
 
-const maxUploadBytes = 10 * 1024 * 1024;
 const allowedUploadTypes = new Set([
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 	"application/octet-stream",
@@ -29,10 +29,10 @@ export function assertValidXlsxUpload(file: {
 			400,
 		);
 	}
-	if (file.size > maxUploadBytes) {
+	if (file.size > MAX_IMPORT_UPLOAD_BYTES) {
 		throw new ConstructionError(
 			"FILE_TOO_LARGE",
-			"Arquivo deve ter no maximo 10MB",
+			"Arquivo deve ter no maximo 25MB",
 			413,
 		);
 	}

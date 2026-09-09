@@ -4,7 +4,7 @@ generator client {
 	previewFeatures = ["prismaSchemaFolder"]
 }
 
-// Generated client nodejs usado pelos adapters (PrismaLibSQL) e pela API.
+// Generated client Node.js usado pelo adaptador PostgreSQL e pela API.
 generator prismaClient {
   provider   = "prisma-client"
   engineType = "client"
@@ -13,6 +13,6 @@ generator prismaClient {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+	provider = "postgresql"
+	url      = env("DATABASE_URL")
 }

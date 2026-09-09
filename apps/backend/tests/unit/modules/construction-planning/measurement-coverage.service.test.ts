@@ -66,6 +66,8 @@ const createCoverages = mock(
 );
 const findWorkMeasurementIdsWithContractCoverage = mock(async () => ["wm-1"]);
 const deleteCoveragesForContractMeasurement = mock(async () => ({ count: 0 }));
+const listCoverages = mock(async () => []);
+const findContractMeasurementItemsWithCoverageSums = mock(async () => []);
 
 mock.module(
 	"../../../../src/modules/construction-planning/measurement-coverage.repository",
@@ -90,6 +92,8 @@ mock.module(
 		createCoverages,
 		findWorkMeasurementIdsWithContractCoverage,
 		deleteCoveragesForContractMeasurement,
+		listCoverages,
+		findContractMeasurementItemsWithCoverageSums,
 	}),
 );
 

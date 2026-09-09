@@ -45,6 +45,7 @@ const existingScheduleIndexes = mock(
 		return new Set<string>();
 	},
 );
+const existingActiveBudgetIndexes = existingBudgetIndexes;
 const listWorks = mock(async () => ({
 	data: [],
 	currentPage: 1,
@@ -388,6 +389,7 @@ mock.module(
 		replaceWorkWithImport,
 		replaceBudgetWithImport,
 		existingBudgetIndexes,
+		existingActiveBudgetIndexes,
 		existingScheduleIndexes,
 		getImportById: mock(async () => null),
 		listImports: mock(async () => ({
@@ -1001,7 +1003,7 @@ describe("constructionPlanningController", () => {
 					field: "status",
 					code: "invalid_value",
 					message:
-						'Invalid option: expected one of "NOT_STARTED"|"IN_PROGRESS"|"DONE"|"SUSPENDED"|"IGNORED"',
+						'Invalid option: expected one of "DRAFT"|"NOT_STARTED"|"IN_PROGRESS"|"DONE"|"SUSPENDED"|"IGNORED"',
 				},
 			],
 		});
@@ -1074,7 +1076,8 @@ describe("constructionPlanningController", () => {
 		const json = await response.json();
 		expect(json.indicators.costPerformanceIndex).toMatchObject({
 			formula: "EV / AC",
-			status: "AVAILABLE",
+			status: "UNAVAILABLE",
+			value: null,
 		});
 		expect(json.sCurve[0]).toHaveProperty("trendProjected");
 		expect(json.costByStage[0]).toHaveProperty("actualCost");
@@ -1116,9 +1119,7 @@ describe("constructionPlanningController", () => {
 		expect(response.status).toBe(200);
 		const json = await response.json();
 		expect(json.cards).toMatchObject({ totalWorks: 1, totalActualCost: 200 });
-		expect(json.rankings.costPerformance[0]).toMatchObject({
-			workId: "work-1",
-		});
+		expect(json.rankings.costPerformance).toEqual([]);
 		expect(json.portfolioChart[0]).toMatchObject({
 			workId: "work-1",
 			workName: "Obra Unificada",
@@ -1127,7 +1128,7 @@ describe("constructionPlanningController", () => {
 			actualCost: 200,
 			plannedValue: expect.any(Number),
 			spi: expect.any(Number),
-			cpi: expect.any(Number),
+			cpi: null,
 		});
 		expect(json.works[0]).toMatchObject({ workId: "work-1", actualCost: 200 });
 		expect(json.costsByWork[0]).toMatchObject({
@@ -3025,9 +3026,17 @@ describe("constructionPlanningController", () => {
 			id: "work-1",
 			name: "Obra Atualizada",
 		});
-		expect(updateSpy).toHaveBeenCalledWith("owner-1", "work-1", {
-			name: "Obra Atualizada",
-		});
+		expect(updateSpy).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			{
+				name: "Obra Atualizada",
+			},
+			{
+				userId: "owner-1",
+				role: "GERENTE",
+			},
+		);
 		expect(updateWork).not.toHaveBeenCalled();
 	});
 
@@ -3228,6 +3237,14 @@ describe("constructionPlanningController", () => {
 		).mockResolvedValueOnce({
 			id: "cost-1",
 			workId: "work-1",
+		} as never);
+		spyOn(
+			constructionManualEntryService,
+			"getActualCost",
+		).mockResolvedValueOnce({
+			id: "cost-1",
+			category: "MATERIAL",
+			description: "Custo teste",
 		} as never);
 		const { constructionPlanningController } = await import(
 			"../../../../src/modules/construction-planning/routes"

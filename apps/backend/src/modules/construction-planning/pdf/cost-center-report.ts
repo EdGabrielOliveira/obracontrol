@@ -1,3 +1,4 @@
+import { pdfResponse } from "../../../lib/binary-response";
 import { ConstructionError } from "../../../lib/errors";
 import * as orgRepo from "../../organizations/repository";
 import * as managementRepo from "../management.repository";
@@ -124,12 +125,7 @@ export async function generateCostCenterPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="relatorio-cc-${report.costCenter.name}.pdf"`,
-		},
-	});
+	return pdfResponse(pdfBytes, `relatorio-cc-${report.costCenter.name}.pdf`);
 }
 
 export async function generateOrganizationPdf(
@@ -236,10 +232,5 @@ export async function generateOrganizationPdf(
 		},
 	);
 
-	return new Response(pdfBytes as unknown as Blob, {
-		headers: {
-			"content-type": "application/pdf",
-			"content-disposition": `attachment; filename="relatorio-org-${report.organization.name}.pdf"`,
-		},
-	});
+	return pdfResponse(pdfBytes, `relatorio-org-${report.organization.name}.pdf`);
 }

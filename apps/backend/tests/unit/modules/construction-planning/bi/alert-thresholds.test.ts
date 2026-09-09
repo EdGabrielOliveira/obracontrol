@@ -75,4 +75,24 @@ describe("evaluateThresholds (BI-003) - alertas por limiar", () => {
 
 		expect(alerts).toHaveLength(0);
 	});
+
+	it("sinaliza CPI alto como possível escopo de custo incompleto", () => {
+		const alerts = evaluateThresholds({ CPI: 1.6 });
+
+		expect(alerts).toContainEqual(
+			expect.objectContaining({
+				code: "CPI_SUSPICIOUSLY_HIGH",
+				metric: "CPI",
+				direction: "above",
+			}),
+		);
+	});
+
+	it("permite suprimir alertas de prazo quando o baseline está desatualizado", () => {
+		const alerts = evaluateThresholds({ SPI: 0.5 }, undefined, {
+			suppressScheduleAlerts: true,
+		});
+
+		expect(alerts).toHaveLength(0);
+	});
 });

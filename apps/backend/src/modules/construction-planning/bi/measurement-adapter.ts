@@ -1,7 +1,7 @@
 /** @deprecated Import canonical execution facts from ./execution-facts. */
 export {
 	composeMeasurementInputs,
+	type ManualWorkMeasurementInput,
 	measurementValueDelta,
 	workMeasurementsToMetricInputs,
-	type ManualWorkMeasurementInput,
 } from "./execution-facts";

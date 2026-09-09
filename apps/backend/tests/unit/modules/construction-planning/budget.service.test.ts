@@ -31,11 +31,13 @@ const actualCostAllocationAggregate = mock(
 	}),
 );
 
-const parseWorkbookByKind = mock(() => ({
-	fileName: "budget.xlsx",
-	sheetName: "Orcamento",
-}));
-const validateWorkbookByKind = mock(() => ({
+const parseWorkbookByKind = mock(
+	(_bytes: Uint8Array, _fileName: string, _kind: string) => ({
+		fileName: "budget.xlsx",
+		sheetName: "Orcamento",
+	}),
+);
+const validateWorkbookByKind = mock((_parsed: unknown, _kind: string) => ({
 	valid: true,
 	errors: [],
 	warnings: [],
@@ -69,6 +71,25 @@ const replaceBudgetWithImport = mock(async () => ({
 	workId: "work-1",
 	importId: "import-1",
 }));
+
+const parseAndValidateWorkbook = mock(
+	(bytes: Uint8Array, fileName: string, kind: string) => {
+		const parsed = parseWorkbookByKind(bytes, fileName, kind);
+		const validation = validateWorkbookByKind(parsed, kind);
+		const structural = validation.errors.filter(
+			(error: { row?: number }) => error.row === undefined,
+		);
+		if (structural.length > 0) {
+			throw new ConstructionError(
+				"VALIDATION_FAILED",
+				"Planilha invalida",
+				422,
+				structural,
+			);
+		}
+		return { parsed, validation };
+	},
+);
 
 const assertGovernanceWritable = mock(async () => undefined);
 const isWritableBlockedMock = mock(async (): Promise<boolean> => false);
@@ -105,21 +126,12 @@ mock.module("../../../../src/lib/prisma", () => ({
 }));
 
 mock.module(
-	"../../../../src/modules/construction-planning/imports/parser",
+	"../../../../src/modules/construction-planning/imports/import-service",
 	() => ({
-		parseWorkbook: mock(() => ({})),
-		parseWorkbookByKind,
-		REQUIRED_SHEETS: [],
-		SHEET_NAME_ALIASES: {},
-		findSheetMap: mock(() => new Map()),
-	}),
-);
-
-mock.module(
-	"../../../../src/modules/construction-planning/imports/validator",
-	() => ({
-		validateWorkbook: mock(() => ({})),
-		validateWorkbookByKind,
+		parseAndValidateWorkbook,
+		rejectedRowCount: (errors: Array<{ row?: number; sheet?: string }>) =>
+			new Set(errors.map((error) => `${error.sheet ?? ""}:${error.row ?? ""}`))
+				.size,
 	}),
 );
 

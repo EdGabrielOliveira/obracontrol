@@ -885,7 +885,9 @@ describe("approval service - cadeia fixa (DEC-004/DEC-005)", () => {
 					data.recipientId === "supervisor-1",
 			);
 		expect(notification).toBeDefined();
-		expect(notification?.body).toContain("/app/obras/work-1/contratos/aprovacoes/req-1");
+		expect(notification?.body).toContain(
+			"/app/obras/work-1/contratos/aprovacoes/req-1",
+		);
 		expect(notification?.body).toContain("Valor acima do limite aprovado");
 	});
 

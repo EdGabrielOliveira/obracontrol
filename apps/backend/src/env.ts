@@ -8,7 +8,16 @@ const envSchema = z.object({
 
 	PORT: z.coerce.number().default(7001),
 	HOST: z.string().default("0.0.0.0"),
-	DATABASE_URL: z.string().startsWith("file:").default("file:./prisma/dev.db"),
+	DATABASE_URL: z
+		.string()
+		.refine(
+			(value) =>
+				value.startsWith("postgresql://") || value.startsWith("postgres://"),
+			"DATABASE_URL deve usar uma URL PostgreSQL.",
+		)
+		.default(
+			"postgresql://obracontrol:obracontrol_dev@localhost:5432/obracontrol?schema=public",
+		),
 	OBJECT_STORAGE_DIR: z.string().min(1).default(".local-objects"),
 	BETTER_AUTH_SECRET: z.string().min(32),
 	BETTER_AUTH_URL: z.string().url().optional(),

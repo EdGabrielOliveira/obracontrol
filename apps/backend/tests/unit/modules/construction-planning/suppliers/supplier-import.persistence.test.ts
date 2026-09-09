@@ -43,7 +43,7 @@ function workbookBytes() {
 	const sheet = XLSX.utils.json_to_sheet([
 		{
 			"Nome da empresa": "Fornecedor A",
-			CNPJ: "12.345.678/0001-90",
+			CNPJ: "11.222.333/0001-81",
 			"Tipo PIX": "EMAIL",
 			"Chave PIX": "financeiro@fornecedor.com",
 		},
@@ -75,7 +75,7 @@ describe("importSupplierWorkbook", () => {
 			data: expect.objectContaining({
 				ownerId: "owner-1",
 				name: "Fornecedor A",
-				document: "12345678000190",
+				document: "11222333000181",
 			}),
 		});
 		expect(workSupplierUpsert).toHaveBeenCalledWith({

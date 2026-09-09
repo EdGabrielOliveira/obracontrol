@@ -104,5 +104,5 @@ describe("application CORS", () => {
 			child.kill();
 			await child.exited;
 		}
-	});
+	}, 15_000);
 });

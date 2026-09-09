@@ -6,19 +6,35 @@ function exportParams(asOfDate?: string, mode?: ExportMode) {
 	return { ...(asOfDate ? { asOfDate } : {}), ...(mode ? { mode } : {}) };
 }
 
+async function getBlob(
+	url: string,
+	params?: Record<string, unknown>,
+): Promise<Blob> {
+	const { data } = await api.get<Blob>(url, {
+		responseType: "blob",
+		...(params ? { params } : {}),
+	});
+	return data;
+}
+
+function workExport(
+	workId: string,
+	kind: "orcamento" | "medicoes" | "custos" | "contratos" | "completo",
+	asOfDate?: string,
+	mode?: ExportMode,
+) {
+	return getBlob(
+		`/construction/works/${workId}/export/${kind}`,
+		exportParams(asOfDate, mode),
+	);
+}
+
 export async function exportOrcamento(
 	workId: string,
 	asOfDate?: string,
 	mode?: ExportMode,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/construction/works/${workId}/export/orcamento`,
-		{
-			responseType: "blob",
-			params: exportParams(asOfDate, mode),
-		},
-	);
-	return data;
+	return workExport(workId, "orcamento", asOfDate, mode);
 }
 
 export async function exportMedicoes(
@@ -26,14 +42,7 @@ export async function exportMedicoes(
 	asOfDate?: string,
 	mode?: ExportMode,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/construction/works/${workId}/export/medicoes`,
-		{
-			responseType: "blob",
-			params: exportParams(asOfDate, mode),
-		},
-	);
-	return data;
+	return workExport(workId, "medicoes", asOfDate, mode);
 }
 
 export async function exportCustos(
@@ -41,14 +50,7 @@ export async function exportCustos(
 	asOfDate?: string,
 	mode?: ExportMode,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/construction/works/${workId}/export/custos`,
-		{
-			responseType: "blob",
-			params: exportParams(asOfDate, mode),
-		},
-	);
-	return data;
+	return workExport(workId, "custos", asOfDate, mode);
 }
 
 export async function exportContratos(
@@ -56,14 +58,7 @@ export async function exportContratos(
 	asOfDate?: string,
 	mode?: ExportMode,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/construction/works/${workId}/export/contratos`,
-		{
-			responseType: "blob",
-			params: exportParams(asOfDate, mode),
-		},
-	);
-	return data;
+	return workExport(workId, "contratos", asOfDate, mode);
 }
 
 export async function exportCompleto(
@@ -71,58 +66,38 @@ export async function exportCompleto(
 	asOfDate?: string,
 	mode?: ExportMode,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/construction/works/${workId}/export/completo`,
-		{
-			responseType: "blob",
-			params: exportParams(asOfDate, mode),
-		},
-	);
-	return data;
+	return workExport(workId, "completo", asOfDate, mode);
 }
 
 export async function exportEstatisticasObra(
 	workId: string,
 	period?: "daily" | "weekly" | "monthly",
 ): Promise<Blob> {
-	const { data } = await api.get(
+	return getBlob(
 		`/construction/works/${workId}/export/estatisticas`,
-		{ responseType: "blob", params: period ? { period } : undefined },
+		period ? { period } : undefined,
 	);
-	return data;
 }
 
 export async function exportFornecedores(): Promise<Blob> {
-	const { data } = await api.get("/construction/export/fornecedores", {
-		responseType: "blob",
-	});
-	return data;
+	return getBlob("/construction/export/fornecedores");
 }
 
 export async function exportEstatisticasGerais(): Promise<Blob> {
-	const { data } = await api.get("/construction/export/estatisticas-gerais", {
-		responseType: "blob",
-	});
-	return data;
+	return getBlob("/construction/export/estatisticas-gerais");
 }
 
 export async function exportEstatisticasOrganizacao(
 	organizationId: string,
 ): Promise<Blob> {
-	const { data } = await api.get(
-		`/organizations/${organizationId}/export/estatisticas`,
-		{ responseType: "blob" },
-	);
-	return data;
+	return getBlob(`/organizations/${organizationId}/export/estatisticas`);
 }
 
 export async function exportEstatisticasCentroCusto(
 	organizationId: string,
 	costCenterId: string,
 ): Promise<Blob> {
-	const { data } = await api.get(
+	return getBlob(
 		`/organizations/${organizationId}/cost-centers/${costCenterId}/export/estatisticas`,
-		{ responseType: "blob" },
 	);
-	return data;
 }

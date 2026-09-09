@@ -7,7 +7,9 @@ export type DataQualityIssueCode =
 	| "UNAPPROPRIATED_ACTUAL_COSTS"
 	| "UNAPPROPRIATED_FUTURE_COSTS"
 	| "ZERO_PLANNED_VALUE_DENOMINATOR"
-	| "ZERO_ACTUAL_COST_DENOMINATOR";
+	| "ZERO_ACTUAL_COST_DENOMINATOR"
+	| "SINGLE_ACTUAL_COST_CATEGORY"
+	| "BASELINE_END_BEFORE_WORK_END";
 
 export type DataQualityIssueSeverity = "HIGH" | "MEDIUM" | "LOW";
 
@@ -35,7 +37,8 @@ export function buildDataQualityIssues(
 	metrics: Pick<
 		WorkMetrics,
 		"plannedValue" | "actualCost" | "dataCompleteness" | "indicators"
-	>,
+	> &
+		Pick<WorkMetrics, "baselineEnd" | "contractEnd">,
 	workId?: string,
 ): DataQualityIssue[] {
 	const completeness: DataCompleteness = metrics.dataCompleteness;
@@ -101,6 +104,37 @@ export function buildDataQualityIssues(
 				"Existem custos futuros sem vínculo com item de orçamento.",
 				"Vincule cada custo futuro ao item de orçamento correto antes de projetar o saldo.",
 				"AC",
+				workId,
+			),
+		);
+	}
+
+	if (completeness.hasSingleActualCostCategory) {
+		issues.push(
+			issue(
+				"SINGLE_ACTUAL_COST_CATEGORY",
+				"HIGH",
+				"Os custos realizados estão concentrados em uma única categoria; o IDC/EAC não é confiável.",
+				"Apropie mão de obra, serviços, equipamentos e demais custos, ou mantenha IDC/EAC indisponíveis.",
+				"CPI",
+				workId,
+			),
+		);
+	}
+
+	if (
+		metrics.baselineEnd &&
+		metrics.contractEnd &&
+		new Date(metrics.baselineEnd).getTime() <
+			new Date(metrics.contractEnd).getTime()
+	) {
+		issues.push(
+			issue(
+				"BASELINE_END_BEFORE_WORK_END",
+				"MEDIUM",
+				"A linha de base termina antes do prazo cadastrado da obra.",
+				"Revise o cronograma ou registre um replanejamento até o prazo contratual antes de interpretar o atraso.",
+				"SPI",
 				workId,
 			),
 		);

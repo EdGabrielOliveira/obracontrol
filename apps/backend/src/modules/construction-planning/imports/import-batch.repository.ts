@@ -1,6 +1,7 @@
 import { Prisma } from "../../../../generated/prisma/client";
 import { prisma } from "../../../lib/prisma";
 import type { ImportRowStatus } from "./import-batch.types";
+import { IMPORT_LIMITS } from "./import-limits";
 
 export type NewImportBatch = {
 	ownerId: string;
@@ -87,6 +88,10 @@ export async function createImportRows(
 	});
 }
 
+export async function deleteImportRows(batchId: string): Promise<void> {
+	await prisma.importRow.deleteMany({ where: { batchId } });
+}
+
 export async function countImportRows(
 	batchId: string,
 	status?: string,
@@ -144,8 +149,11 @@ export async function listImportBatches(
 	ownerId: string,
 	filters: { workId?: string | null; page?: number; pageSize?: number } = {},
 ) {
-	const page = filters.page ?? 1;
-	const pageSize = filters.pageSize ?? 20;
+	const page = Math.max(1, Math.floor(filters.page ?? 1));
+	const pageSize = Math.min(
+		Math.max(1, Math.floor(filters.pageSize ?? 20)),
+		IMPORT_LIMITS.batchPageSize,
+	);
 	const where: Prisma.ImportBatchWhereInput = { ownerId };
 	if (filters.workId) where.workId = filters.workId;
 	const [data, total] = await Promise.all([

@@ -10,23 +10,31 @@ import {
 	type DbItemCalculationInput,
 	type DbScheduleRevisionInput,
 	daysBetween,
+	toMetricItem,
 } from "../bi/calculations";
 import {
 	buildHierarchy,
 	type calculateWorkMetrics,
 	type WorkMetricInput,
 } from "../bi/metrics";
+import { budgetItemMatches } from "../bi/metrics-core";
 import { normalizePercentage } from "../bi/percent-utils";
 import type { GanttItem, ScheduleItem, ScheduleResponse } from "../types";
+import {
+	type ActualDates,
+	buildActualDatesByItem,
+	isScheduleStartDelayed,
+} from "./schedule-dates";
+
+export { isScheduleStartDelayed } from "./schedule-dates";
 
 function findBaseline(
 	item: DbItemCalculationInput,
 	baselines: DbBaselineScheduleInput[],
 ): DbBaselineScheduleInput | null {
 	return (
-		baselines.find(
-			(baseline) =>
-				baseline.budgetItemId === item.id || baseline.index === item.index,
+		baselines.find((baseline) =>
+			budgetItemMatches(toMetricItem(item), baseline),
 		) ?? null
 	);
 }
@@ -37,10 +45,7 @@ function findLatestRevision(
 ): DbScheduleRevisionInput | null {
 	return (
 		revisions
-			.filter(
-				(revision) =>
-					revision.budgetItemId === item.id || revision.index === item.index,
-			)
+			.filter((revision) => budgetItemMatches(toMetricItem(item), revision))
 			.sort(
 				(a, b) =>
 					(b.revisionDate?.getTime() ?? 0) - (a.revisionDate?.getTime() ?? 0),
@@ -54,6 +59,8 @@ function buildGanttItems(
 		string,
 		ReturnType<typeof calculateWorkMetrics>["items"][number]
 	>,
+	actualDatesByItem: Map<string, ActualDates>,
+	referenceDate: Date,
 ): GanttItem[] {
 	return rows.items
 		.filter((item) => item.type === "ITEM")
@@ -62,6 +69,10 @@ function buildGanttItems(
 			const baseline = findBaseline(item, rows.baselineSchedules ?? []);
 			const revision = findLatestRevision(item, rows.scheduleRevisions ?? []);
 			const metric = metricById.get(item.id);
+			const actualDates = actualDatesByItem.get(item.id) ?? {
+				actualStart: item.actualStart,
+				actualEnd: item.actualEnd,
+			};
 			const measuredPercentage = metric?.activeBudget
 				? metric.earnedValue / metric.activeBudget
 				: normalizePercentage(toNum(item.completionPercentage));
@@ -76,6 +87,15 @@ function buildGanttItems(
 					(baseline?.plannedStart ?? item.plannedStart)?.toISOString() ?? null,
 				baselineEnd:
 					(baseline?.plannedEnd ?? item.plannedEnd)?.toISOString() ?? null,
+				actualStart: actualDates.actualStart?.toISOString() ?? null,
+				actualEnd: actualDates.actualEnd?.toISOString() ?? null,
+				delayed: isScheduleStartDelayed(
+					{
+						plannedStart: baseline?.plannedStart ?? item.plannedStart,
+						actualStart: actualDates.actualStart,
+					},
+					referenceDate,
+				),
 				replannedStart: revision?.replannedStart?.toISOString() ?? null,
 				replannedEnd: revision?.replannedEnd?.toISOString() ?? null,
 				measuredPercentage,
@@ -108,14 +128,18 @@ export function buildScheduleFromDbItems(
 			? { ...rows, items: sorted, measurements }
 			: { ...rows, items: sorted },
 	);
+	const referenceDate = new Date(metrics.dataDate);
 	const metricById = new Map(metrics.items.map((item) => [item.id, item]));
+	const actualDatesByItem = buildActualDatesByItem(
+		sorted,
+		measurements ?? [],
+		referenceDate,
+	);
+	const baselineStartByItemId = new Map<string, Date | null>();
 	const rollupById = new Map(
 		collectStageRollups(
 			buildHierarchy(metrics.items),
-			buildActualCostByItemKey(
-				rows.actualCosts ?? [],
-				new Date(metrics.dataDate),
-			),
+			buildActualCostByItemKey(rows.actualCosts ?? [], referenceDate),
 		).map((stage) => [stage.stageId, stage]),
 	);
 
@@ -145,6 +169,10 @@ export function buildScheduleFromDbItems(
 				: (metric?.totalCost ?? toNum(item.totalCost));
 
 		const itemBaseline = findBaseline(item, rows.baselineSchedules ?? []);
+		baselineStartByItemId.set(
+			item.id,
+			itemBaseline?.plannedStart ?? item.plannedStart,
+		);
 		const itemRevision = findLatestRevision(item, rows.scheduleRevisions ?? []);
 		const baselineEnd =
 			(itemBaseline?.plannedEnd ?? item.plannedEnd)?.toISOString() ?? null;
@@ -167,6 +195,10 @@ export function buildScheduleFromDbItems(
 				? deltaDays / baselineDuration
 				: null;
 
+		const actualDates = actualDatesByItem.get(item.id) ?? {
+			actualStart: item.actualStart,
+			actualEnd: item.actualEnd,
+		};
 		const scheduleItem: ScheduleItem = {
 			id: item.id,
 			parentId: item.parentId,
@@ -179,8 +211,15 @@ export function buildScheduleFromDbItems(
 			totalCost,
 			plannedStart: item.plannedStart?.toISOString() ?? null,
 			plannedEnd: item.plannedEnd?.toISOString() ?? null,
-			actualStart: item.actualStart?.toISOString() ?? null,
-			actualEnd: item.actualEnd?.toISOString() ?? null,
+			actualStart: actualDates.actualStart?.toISOString() ?? null,
+			actualEnd: actualDates.actualEnd?.toISOString() ?? null,
+			delayed: isScheduleStartDelayed(
+				{
+					plannedStart: itemBaseline?.plannedStart ?? item.plannedStart ?? null,
+					actualStart: actualDates.actualStart,
+				},
+				referenceDate,
+			),
 			durationDays: daysBetween(item.plannedStart, item.plannedEnd),
 			baselineEnd,
 			revisedEnd,
@@ -219,15 +258,55 @@ export function buildScheduleFromDbItems(
 		}
 	}
 
+	function enrichStageDates(item: ScheduleItem, referenceDate: Date) {
+		for (const child of item.children ?? [])
+			enrichStageDates(child, referenceDate);
+		if (item.type !== "STAGE" || !item.children?.length) return;
+
+		const childrenWithStart = item.children.filter(
+			(child) => child.actualStart,
+		);
+		const childrenWithEnd = item.children.filter((child) => child.actualEnd);
+		item.actualStart =
+			childrenWithStart.map((child) => child.actualStart as string).sort()[0] ??
+			item.actualStart;
+		item.actualEnd =
+			childrenWithEnd
+				.map((child) => child.actualEnd as string)
+				.sort()
+				.slice(-1)[0] ?? item.actualEnd;
+		item.delayed = isScheduleStartDelayed(
+			{
+				plannedStart: baselineStartByItemId.get(item.id) ?? null,
+				actualStart: item.actualStart ? new Date(item.actualStart) : null,
+			},
+			referenceDate,
+		);
+	}
+	for (const root of roots) enrichStageDates(root, referenceDate);
+
 	const workSummary = buildWorkSummary(work, metrics);
-	const gantt = buildGanttItems(rows, metricById);
+	const gantt = buildGanttItems(
+		rows,
+		metricById,
+		actualDatesByItem,
+		referenceDate,
+	);
 
 	const revisions = rows.scheduleRevisions ?? [];
-	const revisedItemIds = new Set(
-		revisions
-			.filter((r) => r.replannedStart || r.replannedEnd)
-			.map((r) => r.budgetItemId),
-	);
+	const revisedItemIds = new Set<string>();
+	for (const revision of revisions) {
+		if (!revision.replannedStart && !revision.replannedEnd) continue;
+		const item = sorted.find((candidate) =>
+			budgetItemMatches(toMetricItem(candidate), revision),
+		);
+		if (item) {
+			revisedItemIds.add(item.id);
+			continue;
+		}
+		const fallback = revision.budgetItemId ?? revision.index;
+		if (fallback) revisedItemIds.add(fallback);
+	}
 	const latestRevisionDate = revisions.length
 		? new Date(
 				Math.max(...revisions.map((r) => r.revisionDate?.getTime() ?? 0)),

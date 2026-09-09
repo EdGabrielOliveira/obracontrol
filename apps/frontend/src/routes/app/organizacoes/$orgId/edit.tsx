@@ -23,16 +23,32 @@ import { useAuth } from "@/lib/auth-context";
 import { queryClient } from "@/lib/query-client";
 import { requireAuthorizationCapability } from "@/lib/route-authorization";
 import { OrgForm } from "@/organisms/organizations/org-form";
-import type { CreateOrganizationInput } from "@/types/organizations";
+import type { AddressValue } from "@/types/address";
+import type {
+	CreateOrganizationInput,
+	UpdateOrganizationInput,
+} from "@/types/organizations";
 import { getErrorMessage } from "@/utils/api-error";
+
+function completeAddress(address: AddressValue | null | undefined) {
+	if (!address) return null;
+	const zipCode = address.zipCode.replace(/\D/g, "");
+	return zipCode.length === 8 &&
+		address.city.trim() &&
+		address.state.length === 2
+		? address
+		: null;
+}
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/edit")({
 	beforeLoad: () => requireAuthorizationCapability("canManageStructure"),
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: organizationKeys.detail(params.orgId),
-			queryFn: () => getOrganization(params.orgId),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: organizationKeys.detail(params.orgId),
+				queryFn: () => getOrganization(params.orgId),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({
@@ -56,8 +72,29 @@ function RouteComponent() {
 		queryFn: () => getOrganization(orgId),
 	});
 	const updateMutation = useMutation({
-		mutationFn: (values: CreateOrganizationInput) =>
-			updateOrganization(orgId, values),
+		mutationFn: (values: CreateOrganizationInput) => {
+			const current = query.data;
+			if (!current) throw new Error("Organização não encontrada.");
+
+			// A PATCH should only carry fields the user changed. Older organizations
+			// can have an incomplete legacy address; resending it used to make a
+			// simple name change fail client/server validation before the request.
+			const input: UpdateOrganizationInput = { name: values.name.trim() };
+			if (values.companyId !== (current.companyId ?? "")) {
+				input.companyId = values.companyId;
+			}
+			if ((values.managerName ?? "") !== (current.managerName ?? "")) {
+				input.managerName = values.managerName;
+			}
+			if (
+				JSON.stringify(values.structuredAddress ?? null) !==
+				JSON.stringify(completeAddress(current.structuredAddress))
+			) {
+				input.structuredAddress = values.structuredAddress ?? null;
+			}
+
+			return updateOrganization(orgId, input);
+		},
 		onSuccess: () => {
 			toast.success("Organização atualizada!");
 			client.invalidateQueries({ queryKey: organizationKeys.detail(orgId) });
@@ -99,7 +136,7 @@ function RouteComponent() {
 					name: org.name,
 					companyId: org.companyId ?? "",
 					managerName: org.managerName ?? undefined,
-					structuredAddress: org.structuredAddress,
+					structuredAddress: completeAddress(org.structuredAddress),
 				}}
 				onSubmit={(values) => updateMutation.mutate(values)}
 				onCancel={() =>

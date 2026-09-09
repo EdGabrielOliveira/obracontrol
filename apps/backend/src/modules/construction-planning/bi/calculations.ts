@@ -47,6 +47,7 @@ export type DbItemCalculationInput = {
 
 export type DbBaselineScheduleInput = MetricBaselineScheduleInput & {
 	index?: string | null;
+	budgetIndex?: string | null;
 	plannedWeight?: number | Decimal | null;
 };
 
@@ -62,6 +63,7 @@ export type DbScheduleRevisionInput = {
 
 export type DbMeasurementInput = MetricMeasurementInput & {
 	index?: string | null;
+	budgetIndex?: string | null;
 	measuredPercentageAccumulated?: number | Decimal | null;
 	measuredQuantityAccumulated?: number | Decimal | null;
 };
@@ -240,6 +242,7 @@ export function actualCostForNode(
 export function collectStageRollups(
 	nodes: ItemMetricNode[],
 	costsByKey: Map<string, number> = new Map(),
+	costDataReliable = true,
 ): CostByStage[] {
 	const rows: CostByStage[] = [];
 
@@ -264,15 +267,22 @@ export function collectStageRollups(
 				scheduleVariance: rollup.scheduleVariance,
 				schedulePerformanceIndex: rollup.schedulePerformanceIndex,
 				costPerformanceIndex:
-					actualCost > 0 ? rollup.earnedValue / actualCost : null,
+					costDataReliable && actualCost > 0
+						? rollup.earnedValue / actualCost
+						: null,
 				estimatedExecutedCost: actualCost > 0 ? actualCost : null,
-				variation: actualCost > 0 ? rollup.earnedValue - actualCost : null,
-				balance:
-					actualCost > 0 ? rollup.activeBudget - actualCost : rollup.balance,
+				variation:
+					costDataReliable && actualCost > 0
+						? rollup.earnedValue - actualCost
+						: null,
+				// O saldo financeiro segue a mesma regra do resumo: BAC - AC.
+				balance: rollup.activeBudget - actualCost,
 			});
 		}
 
-		rows.push(...collectStageRollups(node.children, costsByKey));
+		rows.push(
+			...collectStageRollups(node.children, costsByKey, costDataReliable),
+		);
 	}
 
 	return rows;

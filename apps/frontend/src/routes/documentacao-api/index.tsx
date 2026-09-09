@@ -95,10 +95,12 @@ function DocumentationNavigationGroup({
 
 export const Route = createFileRoute("/documentacao-api/")({
 	loader: () => {
-		void queryClient.prefetchQuery({
-			queryKey: documentationKeys.all,
-			queryFn: getApiDocumentation,
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: documentationKeys.all,
+				queryFn: getApiDocumentation,
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

@@ -2,7 +2,8 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const TEST_DATABASE_URL =
-	process.env.TEST_DATABASE_URL ?? "file:./prisma/test.db";
+	process.env.TEST_DATABASE_URL ??
+	"postgresql://obracontrol:obracontrol_dev@localhost:5432/obracontrol_test?schema=public";
 const BACKEND_DIR = resolve(import.meta.dir, "../..");
 
 const createDb = spawnSync(

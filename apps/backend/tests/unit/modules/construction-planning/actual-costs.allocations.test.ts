@@ -219,12 +219,39 @@ function txOf() {
 			update: approvalRequestUpdate,
 		},
 		approvalDecision: { create: approvalDecisionCreate },
+		auditLog: { create: auditLogCreate },
 		contractPayment: { findFirst: mock(async () => null) },
 	};
 }
 
 mock.module("../../../../src/lib/auth-middleware", () => ({
 	getSessionUser,
+}));
+
+mock.module("../../../../src/lib/resource-scope", () => ({
+	resolveResourceScope: mock(async () => ({
+		actorId: "owner-1",
+		resourceType: "WORK",
+		resourceOwnerId: "owner-1",
+		workspaceId: "",
+		path: {
+			organizationId: "org-1",
+			costCenterId: "cc-1",
+			workId: "work-1",
+		},
+		role: "GERENTE",
+		canRead: true,
+		canWrite: true,
+		canApprove: true,
+		canAdmin: false,
+		canAudit: true,
+	})),
+	resolvePortfolioScope: mock(async () => ({
+		actorId: "owner-1",
+		paths: [
+			{ organizationId: "org-1", costCenterId: "cc-1", workId: "work-1" },
+		],
+	})),
 }));
 
 mock.module("../../../../src/lib/prisma", () => ({
@@ -273,6 +300,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 		},
 		approvalRequest: {
 			findUnique: approvalRequestFindUnique,
+			findFirst: mock(async () => null),
 			create: approvalRequestCreate,
 			update: approvalRequestUpdate,
 		},

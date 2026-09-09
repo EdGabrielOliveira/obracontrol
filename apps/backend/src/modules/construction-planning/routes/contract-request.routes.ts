@@ -3,6 +3,7 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
+import { xlsxResponse } from "../../../lib/binary-response";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import {
 	addManualContractRequestProposal,
@@ -31,14 +32,10 @@ export const contractRequestTemplateRoutes = new Elysia({
 	.get(
 		"/contract-request",
 		() =>
-			new Response(buildWorkbookTemplate("quotation-map") as unknown as Blob, {
-				headers: {
-					"content-type":
-						"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-					"content-disposition":
-						'attachment; filename="modelo-mapa-cotacao.xlsx"',
-				},
-			}),
+			xlsxResponse(
+				buildWorkbookTemplate("quotation-map"),
+				"modelo-mapa-cotacao.xlsx",
+			),
 		{ detail: { tags: ["Templates"] } },
 	);
 

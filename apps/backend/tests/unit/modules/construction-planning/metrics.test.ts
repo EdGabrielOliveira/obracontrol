@@ -194,6 +194,15 @@ describe("calculateWorkMetrics", () => {
 			category: "MATERIAL",
 		},
 		{
+			id: "actual-current-labor",
+			budgetItemId: "item-active",
+			budgetItemIndex: "1.1",
+			costDate: new Date("2026-01-10T00:00:00.000Z"),
+			amount: 0,
+			costType: "CURRENT",
+			category: "LABOR",
+		},
+		{
 			id: "actual-future",
 			budgetItemId: "item-active",
 			budgetItemIndex: "1.1",
@@ -220,7 +229,7 @@ describe("calculateWorkMetrics", () => {
 		expect(metrics.earnedValue).toBe(275);
 		expect(metrics.actualCost).toBe(200);
 		expect(metrics.currentBudgetBalance).toBe(550);
-		expect(metrics.projectedBudgetBalance).toBe(500);
+		expect(metrics.projectedBudgetBalance).toBeCloseTo(204.5454545, 7);
 		expect(metrics.scheduleVariance).toBeCloseTo(275 - 550 * (15 / 31), 8);
 		expect(metrics.schedulePerformanceIndex).toBeCloseTo(
 			275 / (550 * (15 / 31)),
@@ -365,6 +374,81 @@ describe("calculateWorkMetrics", () => {
 			}),
 		);
 		expect(curve[0].plannedAccumulated).toBe(1);
+	});
+
+	it("keeps S-curve month buckets in UTC", () => {
+		const metrics = calculateWorkMetrics(
+			{
+				id: "utc-work",
+				name: "Obra",
+				plannedStart: null,
+				plannedEnd: null,
+				baseDate: new Date("2026-02-01T00:00:00.000Z"),
+				createdAt: new Date("2026-01-01T00:00:00.000Z"),
+				lastImportAt: null,
+			},
+			[
+				{
+					id: "utc-item",
+					parentId: null,
+					index: "1.1",
+					type: "ITEM",
+					description: "Item",
+					totalCost: 100,
+					plannedStart: new Date("2026-01-01T00:00:00.000Z"),
+					plannedEnd: new Date("2026-02-01T00:00:00.000Z"),
+					actualStart: null,
+					actualEnd: null,
+					completionPercentage: 0,
+					computedStatus: "NOT_STARTED",
+					sortOrder: 1,
+				},
+			],
+		);
+
+		const curve = buildMonthlySCurve(metrics.items, new Date(metrics.dataDate));
+
+		expect(curve.map((point) => point.period)).toEqual(["2026-01", "2026-02"]);
+	});
+
+	it("builds measured S-curve from historical facts up to the data date", () => {
+		const item = calculateItemMetrics(
+			{
+				id: "curve-item",
+				parentId: null,
+				index: "1.1",
+				type: "ITEM",
+				description: "Item",
+				totalCost: 100,
+				plannedStart: new Date("2026-01-01T00:00:00.000Z"),
+				plannedEnd: new Date("2026-02-28T00:00:00.000Z"),
+				actualStart: null,
+				actualEnd: null,
+				completionPercentage: 0,
+				computedStatus: "IN_PROGRESS",
+				sortOrder: 1,
+			},
+			new Date("2026-02-15T00:00:00.000Z"),
+		);
+		const curve = buildMonthlySCurve(
+			[item],
+			new Date("2026-02-15T00:00:00.000Z"),
+			[
+				{
+					budgetItemId: "curve-item",
+					measurementDate: new Date("2026-01-20T00:00:00.000Z"),
+					measuredPercentageAccumulated: 0.2,
+				},
+				{
+					budgetItemId: "curve-item",
+					measurementDate: new Date("2026-02-20T00:00:00.000Z"),
+					measuredPercentageAccumulated: 1,
+				},
+			],
+		);
+
+		expect(curve[0]?.measuredAccumulated).toBe(0.2);
+		expect(curve[1]?.measuredAccumulated).toBe(0.2);
 	});
 
 	it("calculates PV, EV, SV and IDP without actual cost", () => {

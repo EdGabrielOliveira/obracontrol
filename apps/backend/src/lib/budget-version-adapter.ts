@@ -119,7 +119,9 @@ function isUniqueViolation(error: unknown): boolean {
 function resolveNewItemTotal(item: BudgetVersionNewItemInput): Decimal {
 	if (item.totalCost != null) return toFinite(item.totalCost);
 	if (item.quantity == null || item.unitCost == null) return new Decimal(0);
-	return new Decimal(item.quantity).times(item.unitCost);
+	return new Decimal(item.quantity)
+		.times(item.unitCost)
+		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 }
 
 function assertWorkScope(actorId: string, workId: string) {
@@ -957,10 +959,14 @@ export async function getBudgetVersion(
 			.map((item) => item.parentVersionId)
 			.filter((id): id is string => id !== null),
 	);
-	const totalCost = items.reduce(
-		(sum, item) => sum + (parentIds.has(item.id) ? 0 : Number(item.totalCost)),
-		0,
-	);
+	const totalCost = items
+		.reduce(
+			(sum, item) =>
+				sum.plus(parentIds.has(item.id) ? 0 : (item.totalCost ?? 0)),
+			new Decimal(0),
+		)
+		.toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+		.toNumber();
 
 	return {
 		...serializeVersion(version),

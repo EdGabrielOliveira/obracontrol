@@ -1,5 +1,6 @@
 import { env } from "../env";
 import { redact } from "./redact";
+import { requestContext } from "./request-context";
 
 type SentryModule = typeof import("@sentry/node");
 
@@ -30,7 +31,15 @@ function loadSentry(): Promise<SentryModule> {
 
 export function reportException(error: unknown): void {
 	if (!env.SENTRY_DSN) return;
+	const requestId = requestContext.getRequestId();
+	const userId = requestContext.getUserId();
 	void loadSentry()
-		.then((sentry) => sentry.captureException(error))
+		.then((sentry) => {
+			sentry.withScope((scope) => {
+				if (requestId) scope.setTag("request_id", requestId);
+				if (userId) scope.setUser({ id: userId });
+				sentry.captureException(error);
+			});
+		})
 		.catch(() => undefined);
 }

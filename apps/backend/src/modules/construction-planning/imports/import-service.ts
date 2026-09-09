@@ -14,6 +14,7 @@ import {
 	resolveMeasurementDependencies,
 	resolveReplanningDependencies,
 } from "./dependency-resolver";
+import { assertParsedWorkbookLimits } from "./import-limits";
 import * as importRepository from "./import-repository";
 import type {
 	NormalizedActualCost,
@@ -23,11 +24,8 @@ import type {
 	NormalizedScheduleRevision,
 	ValidationResult,
 } from "./normalized-types";
-import {
-	findSheetMap,
-	parseWorkbookByKind,
-	SHEET_NAME_ALIASES,
-} from "./parser";
+import { findSheetMap, parseWorkbookByKind } from "./parser";
+import { SHEET_NAME_ALIASES } from "./sheet-aliases";
 import { validateWorkbookByKind } from "./validator";
 
 type ImportRepository = Pick<
@@ -62,6 +60,30 @@ export function rejectedRowCount(errors: ImportValidationError[]): number {
 	return new Set(
 		errors.map((error) => `${error.sheet ?? ""}:${error.row ?? ""}`),
 	).size;
+}
+
+export function parseAndValidateWorkbook(
+	bytes: Uint8Array,
+	fileName: string,
+	kind: WorkbookKind,
+	options: { measurementBudgetIndexes?: ReadonlySet<string> } = {},
+) {
+	const parsed = parseWorkbookByKind(bytes, fileName, kind);
+	assertParsedWorkbookLimits(parsed);
+	const validation =
+		Object.keys(options).length === 0
+			? validateWorkbookByKind(parsed, kind)
+			: validateWorkbookByKind(parsed, kind, options);
+	const structural = structuralErrors(validation);
+	if (structural.length > 0) {
+		throw new ConstructionError(
+			"VALIDATION_FAILED",
+			"Planilha invalida",
+			422,
+			structural,
+		);
+	}
+	return { parsed, validation };
 }
 
 function persistedBudgetItemCount(

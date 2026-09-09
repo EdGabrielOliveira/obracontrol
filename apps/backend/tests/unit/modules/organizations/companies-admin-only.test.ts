@@ -16,6 +16,10 @@ mock.module("../../../../src/lib/prisma", () => ({
 		user: { findUnique: userFindUnique },
 		company: {
 			findUnique: mock(async () => null),
+			findFirst: mock(async () => ({
+				id: "company-1",
+				organizations: [{ id: "org-1" }],
+			})),
 			create: mock(async () => ({ id: "company-1" })),
 			update: mock(async () => ({ id: "company-1" })),
 			delete: mock(async () => ({ id: "company-1" })),
@@ -26,7 +30,12 @@ mock.module("../../../../src/lib/prisma", () => ({
 			findUnique: mock(async () => ({ id: "org-1", ownerId: "owner-1" })),
 		},
 		organizationMembership: { findMany: mock(async () => []) },
+		companyMembership: {
+			findFirst: mock(async () => null),
+			findMany: mock(async () => []),
+		},
 		costCenterMembership: { findMany: mock(async () => []) },
+		workMembership: { findMany: mock(async () => []) },
 	},
 }));
 

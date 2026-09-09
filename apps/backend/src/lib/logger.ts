@@ -15,9 +15,31 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
 	error: 40,
 };
 
-export function resolveLogLevel(): LogLevel {
-	if (env.LOG_LEVEL) return env.LOG_LEVEL;
-	return env.NODE_ENV === "production" ? "info" : "debug";
+const SENSITIVE_FIELD_NAMES = new Set([
+	"password",
+	"token",
+	"secret",
+	"apikey",
+	"api_key",
+	"authorization",
+	"cookie",
+	"cpf",
+	"cnpj",
+	"document",
+	"keyhash",
+]);
+
+export function resolveLogLevel(
+	nodeEnv: string = env.NODE_ENV,
+	configuredLevel: LogLevel | undefined = env.LOG_LEVEL,
+): LogLevel {
+	// Debug output may include internal state and query-related details. Never
+	// allow an environment override to enable it in production.
+	if (nodeEnv === "production") {
+		if (!configuredLevel || configuredLevel === "debug") return "info";
+		return configuredLevel;
+	}
+	return configuredLevel ?? "debug";
 }
 
 export interface Logger {
@@ -31,7 +53,14 @@ export type LogSink = (level: LogLevel, line: string) => void;
 
 function formatValue(value: string | number | boolean | null): string {
 	if (typeof value === "string") {
-		return /[\s"=]/.test(value) ? `"${value.replaceAll('"', '\\"')}"` : value;
+		if (!/[\s"=]/.test(value)) return value;
+		const escaped = value
+			.replaceAll("\\", "\\\\")
+			.replaceAll('"', '\\"')
+			.replaceAll("\r", "\\r")
+			.replaceAll("\n", "\\n")
+			.replaceAll("\t", "\\t");
+		return `"${escaped}"`;
 	}
 	return String(value);
 }
@@ -40,7 +69,10 @@ function formatFields(fields: LogFields): string {
 	const parts: string[] = [];
 	for (const [key, value] of Object.entries(fields)) {
 		if (value === undefined) continue;
-		parts.push(`${key}=${formatValue(value)}`);
+		const safeValue = SENSITIVE_FIELD_NAMES.has(key.toLowerCase())
+			? "[redacted]"
+			: value;
+		parts.push(`${key}=${formatValue(safeValue)}`);
 	}
 	return parts.join(" ");
 }

@@ -50,10 +50,12 @@ export const Route = createFileRoute("/app/usuarios/")({
 	loaderDeps: ({ search }) => ({ search }),
 	component: RouteComponent,
 	loader: ({ deps }) => {
-		void queryClient.prefetchQuery({
-			queryKey: adminUserKeys.list(deps.search as Record<string, unknown>),
-			queryFn: () => listAdminUsers(deps.search as AdminUserFilter),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: adminUserKeys.list(deps.search as Record<string, unknown>),
+				queryFn: () => listAdminUsers(deps.search as AdminUserFilter),
+			})
+			.catch(() => undefined);
 	},
 	head: () => ({
 		meta: [

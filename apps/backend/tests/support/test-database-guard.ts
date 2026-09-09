@@ -2,17 +2,23 @@ export type TestDatabaseUrlResult =
 	| { ok: true; url: string }
 	| { ok: false; reason: string };
 
-export const DEFAULT_TEST_DATABASE_URL = "file:./prisma/test.db";
+export const DEFAULT_TEST_DATABASE_URL =
+	"postgresql://obracontrol:obracontrol_dev@localhost:5432/obracontrol_test?schema=public";
 
 export function validateTestDatabaseUrl(url: string): TestDatabaseUrlResult {
-	if (!url.startsWith("file:")) {
+	if (!url.startsWith("postgresql://") && !url.startsWith("postgres://")) {
 		return { ok: false, reason: "URL invalida de banco de teste." };
 	}
-	const database = url.slice("file:".length).split("?")[0];
+	let database = "";
+	try {
+		database = new URL(url).pathname.slice(1);
+	} catch {
+		return { ok: false, reason: "URL invalida de banco de teste." };
+	}
 	if (!database) {
 		return {
 			ok: false,
-			reason: "URL de banco de teste deve apontar para um arquivo SQLite.",
+			reason: "URL de banco de teste deve apontar para um banco PostgreSQL.",
 		};
 	}
 	if (!database.toLowerCase().includes("test")) {

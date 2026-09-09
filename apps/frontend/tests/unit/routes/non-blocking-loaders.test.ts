@@ -14,10 +14,15 @@ async function readRouteFiles() {
 
 test("loaders de rota não bloqueiam a troca de tela", async () => {
 	const routes = await readRouteFiles();
+	const blockingLoaderPattern =
+		/loader:\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*(?:Promise\.(?:all|allSettled)|\w+Client\.fetchQuery|\w+Client\.prefetchQuery)/s;
 
 	for (const { file, source } of routes) {
 		expect(source, `${file} não deve ter loader assíncrono bloqueante`).not.toMatch(
 			/loader:\s*async\b/,
+		);
+		expect(source, `${file} não deve retornar uma Promise no loader`).not.toMatch(
+			blockingLoaderPattern,
 		);
 	}
 });

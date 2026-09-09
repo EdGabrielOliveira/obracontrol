@@ -597,7 +597,7 @@ export function DashboardPage({
 
 				return (
 					<>
-						<WorkKPICards summary={data.summary} />
+						<WorkKPICards summary={data.summary} indicators={data.indicators} />
 						<DataQualityIssues issues={data.qualityIssues} />
 						<div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
 							<DashboardChart

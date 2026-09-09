@@ -34,6 +34,44 @@ export function periodKeyOf(date: Date, period: SchedulePeriod): string {
 	return `${year}-${month}-${Math.min(5, Math.ceil(dayOfMonth / 7))}`;
 }
 
+export function periodBounds(
+	key: string,
+	period: SchedulePeriod,
+): { start: Date; end: Date } {
+	const [year, month, part] = key.split("-").map(Number);
+	if (!Number.isInteger(year) || !Number.isInteger(month)) {
+		throw new Error(`Invalid period key: ${key}`);
+	}
+
+	if (period === "daily") {
+		const start = new Date(`${key}T00:00:00.000Z`);
+		return { start, end: new Date(start.getTime() + 86_400_000 - 1) };
+	}
+
+	const startDay =
+		period === "monthly"
+			? 1
+			: period === "biweekly"
+				? part === 1
+					? 1
+					: 16
+				: 1 + (part - 1) * 7;
+	const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+	const endDay =
+		period === "monthly"
+			? lastDay
+			: period === "biweekly"
+				? part === 1
+					? 15
+					: lastDay
+				: Math.min(startDay + 6, lastDay);
+
+	return {
+		start: new Date(Date.UTC(year, month - 1, startDay)),
+		end: new Date(Date.UTC(year, month - 1, endDay, 23, 59, 59, 999)),
+	};
+}
+
 export function nextPeriodKey(key: string, period: SchedulePeriod): string {
 	const { year, month } = monthParts(key);
 

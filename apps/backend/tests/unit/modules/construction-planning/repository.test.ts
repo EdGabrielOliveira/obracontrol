@@ -624,17 +624,39 @@ describe("construction repository imports", () => {
 				},
 			}),
 		);
-		const scopedManualOrActiveRows = {
-			OR: expect.arrayContaining([
-				{ ownerId: "user-1", workId: "work-1", importId: "import-active" },
-				{ ownerId: "user-1", workId: "work-1", importId: null },
-			]),
+		const measurementQuery = {
+			where: {
+				AND: [
+					{ status: "ACEITO" },
+					{
+						OR: expect.arrayContaining([
+							{
+								ownerId: "user-1",
+								workId: "work-1",
+								importId: "import-active",
+							},
+							{ ownerId: "user-1", workId: "work-1", importId: null },
+						]),
+					},
+				],
+			},
+			orderBy: { measurementDate: "asc" },
 		};
-		expect(measurementFindMany).toHaveBeenCalledWith(
-			expect.objectContaining({ where: scopedManualOrActiveRows }),
-		);
+		expect(measurementFindMany).toHaveBeenCalledWith(measurementQuery);
 		expect(actualCostFindMany).toHaveBeenCalledWith(
-			expect.objectContaining({ where: scopedManualOrActiveRows }),
+			expect.objectContaining({
+				where: {
+					OR: expect.arrayContaining([
+						{
+							ownerId: "user-1",
+							workId: "work-1",
+							importId: "import-active",
+						},
+						{ ownerId: "user-1", workId: "work-1", importId: null },
+					]),
+				},
+				orderBy: { costDate: "asc" },
+			}),
 		);
 		expect(result).toMatchObject({
 			items: [{ id: "budget-1", importId: "import-active" }],
@@ -697,7 +719,12 @@ describe("construction repository imports", () => {
 			}),
 		);
 		expect(measurementFindMany).toHaveBeenCalledWith(
-			expect.objectContaining({ where: { OR: scopedManualOrActiveRows } }),
+			expect.objectContaining({
+				where: {
+					AND: [{ status: "ACEITO" }, { OR: scopedManualOrActiveRows }],
+				},
+				orderBy: { measurementDate: "asc" },
+			}),
 		);
 		expect(actualCostFindMany).toHaveBeenCalledWith(
 			expect.objectContaining({ where: { OR: scopedManualOrActiveRows } }),
@@ -1376,7 +1403,7 @@ describe("listWorks", () => {
 			totalBudget: 400,
 			measuredPercentage: 0.125,
 			balance: 350,
-			computedStatus: "IN_PROGRESS",
+			computedStatus: "NOT_STARTED",
 		});
 	});
 

@@ -14,6 +14,7 @@ export type ScheduleItem = {
 	plannedEnd: string | null;
 	actualStart: string | null;
 	actualEnd: string | null;
+	delayed: boolean;
 	durationDays: number | null;
 	baselineEnd: string | null;
 	revisedEnd: string | null;
@@ -39,6 +40,9 @@ export type GanttItem = {
 	baselineEnd: string | null;
 	replannedStart: string | null;
 	replannedEnd: string | null;
+	actualStart: string | null;
+	actualEnd: string | null;
+	delayed: boolean;
 	measuredPercentage: number | null;
 	status: string;
 	revisionVersion: string | null;

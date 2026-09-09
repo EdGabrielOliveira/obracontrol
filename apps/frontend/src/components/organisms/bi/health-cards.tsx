@@ -67,10 +67,12 @@ export function HealthCards({ cards, works }: HealthCardsProps) {
 	const spiValues = works
 		.map((work) => work.schedulePerformanceIndex)
 		.filter((value): value is number => value != null);
+	const validSpiValues = spiValues.filter((v) => Number.isFinite(v));
 	const averageSpi =
-		spiValues.length > 0
+		validSpiValues.length > 0
 			? (
-					spiValues.reduce((sum, value) => sum + value, 0) / spiValues.length
+					validSpiValues.reduce((sum, value) => sum + value, 0) /
+					validSpiValues.length
 				).toFixed(2)
 			: null;
 	const prazoTone = cards.worksBehindSchedule > 0 ? "critical" : "good";

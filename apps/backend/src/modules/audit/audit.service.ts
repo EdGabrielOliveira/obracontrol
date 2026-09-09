@@ -100,7 +100,8 @@ class AuditService {
 		if (ownerIds.length === 0) {
 			return buildPaginatedResponse([], 0, page, limit);
 		}
-		const ownerIdFilter = ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds };
+		const ownerIdFilter =
+			ownerIds.length === 1 ? ownerIds[0] : { in: ownerIds };
 
 		const entityTypeValues =
 			filters.entityTypes?.split(",").filter(Boolean) ?? [];
@@ -175,7 +176,10 @@ class AuditService {
 		return [...new Set([filters.ownerId, ...users.map((user) => user.id)])];
 	}
 
-	private async resolveScopeEntityIds(filters: AuditFilter, ownerIds: string[]) {
+	private async resolveScopeEntityIds(
+		filters: AuditFilter,
+		ownerIds: string[],
+	) {
 		if (
 			!filters.companyId &&
 			!filters.organizationId &&

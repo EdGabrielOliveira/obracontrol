@@ -2,10 +2,14 @@ import { roundCurrency } from "../../../lib/math-utils";
 import { toFiniteNumber } from "../../../lib/number-utils";
 import {
 	fillPeriodGaps,
+	periodBounds,
 	periodKeyOf,
 	type SchedulePeriod,
 } from "../../../lib/period-utils";
+import { workMeasurementsToMetricInputs } from "./execution-facts";
+import { budgetItemMatches, inclusiveDays } from "./metrics-core";
 import { buildDataQualityIssues } from "./metrics-quality";
+import { normalizePercentage } from "./percent-utils";
 import type { WorkMetricsSnapshot } from "./work-metrics-snapshot";
 
 export type WorkReportIdentity = {
@@ -13,11 +17,11 @@ export type WorkReportIdentity = {
 	costCenter: { id: string; name: string } | null;
 };
 
-function itemKeyMatches(
-	item: { id: string },
-	row: { budgetItemId?: string | null },
-) {
-	return row.budgetItemId === item.id;
+function countMeasuredItems(snapshot: WorkMetricsSnapshot): number {
+	const inputMeasurements = snapshot.input.measurements ?? [];
+	return snapshot.manualMeasurements.length > 0
+		? snapshot.manualMeasurements.length
+		: inputMeasurements.length;
 }
 
 function measuredValueForItem(
@@ -35,7 +39,10 @@ function measuredValueForItem(
 
 	if (measurement.measuredPercentageAccumulated != null) {
 		return (
-			totalCost * toFiniteNumber(measurement.measuredPercentageAccumulated)
+			totalCost *
+			normalizePercentage(
+				toFiniteNumber(measurement.measuredPercentageAccumulated),
+			)
 		);
 	}
 
@@ -50,17 +57,36 @@ function measuredValueForItem(
 	return 0;
 }
 
+function overlapDays(
+	left: Date,
+	right: Date,
+	periodStart: Date,
+	periodEnd: Date,
+): number {
+	const start = new Date(Math.max(left.getTime(), periodStart.getTime()));
+	const end = new Date(Math.min(right.getTime(), periodEnd.getTime()));
+	return start <= end ? inclusiveDays(start, end) : 0;
+}
+
 export function projectPhysicalFinancialSchedule(
 	snapshot: WorkMetricsSnapshot,
 	period: SchedulePeriod = "monthly",
 ) {
 	const budgetItems = snapshot.input.items;
-	const measurements = snapshot.input.measurements ?? [];
+	const measurements = snapshot.sourceMeasurements
+		? [
+				...snapshot.sourceMeasurements,
+				...workMeasurementsToMetricInputs(snapshot.manualMeasurements),
+			]
+		: (snapshot.input.measurements ?? []);
 	const baselines = snapshot.input.baselineSchedules ?? [];
 	const actualCosts = snapshot.input.actualCosts ?? [];
 	const bdiFactor =
 		1 + Math.max(0, toFiniteNumber(snapshot.input.bdiPercentage)) / 100;
 	const allMonths = new Set<string>();
+	for (const date of [snapshot.input.plannedStart, snapshot.input.plannedEnd]) {
+		if (date) allMonths.add(periodKeyOf(date, period));
+	}
 
 	for (const baseline of baselines) {
 		if (baseline.plannedStart)
@@ -80,41 +106,77 @@ export function projectPhysicalFinancialSchedule(
 	}
 
 	const sortedMonths = fillPeriodGaps([...allMonths].sort(), period);
-	const stages = budgetItems
+	const itemPlans = new Map<
+		string,
+		{
+			item: (typeof budgetItems)[number];
+			plannedStart: Date | null;
+			plannedEnd: Date | null;
+			weight: number;
+			measuredByPeriod: Map<string, number>;
+		}
+	>();
+	for (const item of budgetItems.filter((row) => row.type === "ITEM")) {
+		const baseline = baselines.find((row) => budgetItemMatches(item, row));
+		const measuredByPeriod = new Map<string, number>();
+		for (const measurement of measurements) {
+			if (!measurement.measurementDate) continue;
+			if (!budgetItemMatches(item, measurement)) continue;
+			const key = periodKeyOf(measurement.measurementDate, period);
+			measuredByPeriod.set(
+				key,
+				(measuredByPeriod.get(key) ?? 0) +
+					measuredValueForItem(item, measurement, bdiFactor),
+			);
+		}
+		itemPlans.set(item.id, {
+			item,
+			plannedStart: baseline?.plannedStart ?? item.plannedStart,
+			plannedEnd: baseline?.plannedEnd ?? item.plannedEnd,
+			weight:
+				baseline?.plannedWeight == null
+					? 1
+					: toFiniteNumber(baseline.plannedWeight),
+			measuredByPeriod,
+		});
+	}
+
+	const stageRows = budgetItems
 		.filter((item) => item.type === "STAGE")
 		.map((stage) => {
 			const childItems = budgetItems.filter(
 				(item) =>
 					item.type === "ITEM" && item.index.startsWith(`${stage.index}.`),
 			);
+			const preparedItems = childItems
+				.map((item) => itemPlans.get(item.id))
+				.filter((item): item is NonNullable<typeof item> => item != null);
 			const months = sortedMonths.map((month) => {
 				let planned = 0;
 				let measured = 0;
+				const { start: periodStart, end: periodEnd } = periodBounds(
+					month,
+					period,
+				);
 
-				for (const item of childItems) {
-					const baseline = baselines.find((row) => itemKeyMatches(item, row));
-					if (baseline?.plannedStart && baseline?.plannedEnd) {
-						const baselineStart = periodKeyOf(baseline.plannedStart, period);
-						const baselineEnd = periodKeyOf(baseline.plannedEnd, period);
-						if (
-							month >= baselineStart &&
-							month <= baselineEnd &&
-							baseline.plannedWeight != null
-						) {
+				for (const prepared of preparedItems) {
+					const { item, plannedStart, plannedEnd, weight } = prepared;
+					if (plannedStart && plannedEnd && plannedEnd >= plannedStart) {
+						if (weight > 0) {
 							planned +=
-								toFiniteNumber(item.totalCost) *
-								bdiFactor *
-								toFiniteNumber(baseline.plannedWeight);
+								(toFiniteNumber(item.totalCost) *
+									bdiFactor *
+									weight *
+									overlapDays(
+										plannedStart,
+										plannedEnd,
+										periodStart,
+										periodEnd,
+									)) /
+								inclusiveDays(plannedStart, plannedEnd);
 						}
 					}
-
-					for (const measurement of measurements) {
-						if (!measurement.measurementDate) continue;
-						if (periodKeyOf(measurement.measurementDate, period) !== month)
-							continue;
-						if (!itemKeyMatches(item, measurement)) continue;
-						measured += measuredValueForItem(item, measurement, bdiFactor);
-					}
+					measured += prepared.measuredByPeriod.get(month) ?? 0;
 				}
 
 				return {
@@ -138,12 +200,12 @@ export function projectPhysicalFinancialSchedule(
 	}
 
 	const totalsMonths = sortedMonths.map((month) => {
-		const planned = stages.reduce(
+		const planned = stageRows.reduce(
 			(sum, stage) =>
 				sum + (stage.months.find((row) => row.month === month)?.planned ?? 0),
 			0,
 		);
-		const measured = stages.reduce(
+		const measured = stageRows.reduce(
 			(sum, stage) =>
 				sum + (stage.months.find((row) => row.month === month)?.measured ?? 0),
 			0,
@@ -162,7 +224,7 @@ export function projectPhysicalFinancialSchedule(
 	let actualAcc = 0;
 
 	return {
-		stages: stages.map((stage) => ({
+		stages: stageRows.map((stage) => ({
 			...stage,
 			months: stage.months.map((month) => ({
 				...month,
@@ -240,10 +302,7 @@ export function projectWorkReport(
 		},
 		measurements: {
 			total: roundCurrency(metrics.earnedValue),
-			count:
-				(snapshot.input.measurements?.length ?? 0) > 0
-					? (snapshot.input.measurements?.length ?? 0)
-					: snapshot.manualMeasurements.length,
+			count: countMeasuredItems(snapshot),
 			percentage: metrics.measuredPercentage,
 		},
 		costs: {

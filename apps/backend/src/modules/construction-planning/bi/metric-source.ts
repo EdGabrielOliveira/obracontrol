@@ -1,4 +1,7 @@
-import type { WorkMetricCalculationResult } from "./calculations";
+import type {
+	DbMeasurementInput,
+	WorkMetricCalculationResult,
+} from "./calculations";
 import type {
 	ManualWorkMeasurementInput,
 	WorkMetricsSnapshotInput,
@@ -47,6 +50,7 @@ export type ResolvedMetricSource = {
 	fingerprint: string;
 	asOfDate: string;
 	input: WorkMetricsSnapshotInput;
+	sourceMeasurements?: DbMeasurementInput[];
 	metrics: WorkMetricCalculationResult;
 	manualMeasurements: ManualWorkMeasurementInput[];
 	series: PhysicalFinancialSeries;

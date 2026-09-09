@@ -12,10 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ContractMeasurement } from "@/types/contracts";
 import { getErrorMessage } from "@/utils/api-error";
-import {
-	formatPercentage,
-	formatQuantity,
-} from "@/utils/format";
+import { formatPercentage, formatQuantity } from "@/utils/format";
 
 const editSchema = z.object({
 	title: z.string().min(1, "Título obrigatório"),
@@ -170,10 +167,12 @@ export function ContractMeasurementEditForm({
 						<div key={item.id} className="rounded-lg border p-4">
 							<div className="mb-3">
 								<p className="font-medium">
-									{serviceMap.get(item.serviceId)?.description ?? item.serviceId}
+									{serviceMap.get(item.serviceId)?.description ??
+										item.serviceId}
 								</p>
 								<p className="text-xs text-muted-foreground">
-									Quantidade contratada: {formatQuantity(serviceMap.get(item.serviceId)?.quantity)}{" "}
+									Quantidade contratada:{" "}
+									{formatQuantity(serviceMap.get(item.serviceId)?.quantity)}{" "}
 									{serviceMap.get(item.serviceId)?.unit ?? ""}
 								</p>
 							</div>
@@ -197,8 +196,12 @@ export function ContractMeasurementEditForm({
 									<p className="text-xs text-muted-foreground">% referente</p>
 									<p className="font-medium">
 										{(() => {
-											const quantity = Number(form.watch(`items.${index}.measuredQuantity`));
-											const contracted = Number(serviceMap.get(item.serviceId)?.quantity);
+											const quantity = Number(
+												form.watch(`items.${index}.measuredQuantity`),
+											);
+											const contracted = Number(
+												serviceMap.get(item.serviceId)?.quantity,
+											);
 											return quantity > 0 && contracted > 0
 												? formatPercentage((quantity / contracted) * 100)
 												: "—";

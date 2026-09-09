@@ -61,8 +61,7 @@ function RouteComponent() {
 	const [submitting, setSubmitting] = useState(false);
 	const budget = useQuery({
 		queryKey: workKeys.budget(workId),
-		queryFn: () =>
-			getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
 	});
 	const effectiveBudget = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),

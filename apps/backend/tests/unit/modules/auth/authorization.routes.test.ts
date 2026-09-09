@@ -32,12 +32,14 @@ const ccMembershipFindMany = mock(
 		}>
 	> => [],
 );
+const companyMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 
 mock.module("../../../../src/lib/auth-middleware", () => ({ getSessionUser }));
 mock.module("../../../../src/lib/prisma", () => ({
 	prisma: {
 		user: { findUnique: userFindUnique },
 		organizationMembership: { findMany: orgMembershipFindMany },
+		companyMembership: { findMany: companyMembershipFindMany },
 		costCenterMembership: { findMany: ccMembershipFindMany },
 		workMembership: { findMany: mock(async () => []) },
 	},
@@ -66,6 +68,7 @@ describe("authorization session", () => {
 			role: "GERENTE",
 		});
 		orgMembershipFindMany.mockResolvedValue([]);
+		companyMembershipFindMany.mockResolvedValue([]);
 		ccMembershipFindMany.mockResolvedValue([]);
 	});
 
@@ -99,7 +102,10 @@ describe("authorization session", () => {
 		expect(session.capabilities).toEqual({
 			canManageUsers: true,
 			canAdministerCompanies: false,
+			canManageScopedCompanies: true,
+			canManageStructure: true,
 			canManageApiKeys: false,
+			canViewAudit: true,
 			canDecideSupervisorRequests: true,
 			canReviewExecutedSupervisorRequests: true,
 			canRequestSupervisorDecisionReversal: true,
@@ -119,7 +125,10 @@ describe("authorization session", () => {
 		expect(session.capabilities).toEqual({
 			canManageUsers: true,
 			canAdministerCompanies: true,
+			canManageScopedCompanies: true,
+			canManageStructure: true,
 			canManageApiKeys: true,
+			canViewAudit: true,
 			canDecideSupervisorRequests: true,
 			canReviewExecutedSupervisorRequests: true,
 			canRequestSupervisorDecisionReversal: true,

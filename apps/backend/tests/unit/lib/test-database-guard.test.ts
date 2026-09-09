@@ -9,8 +9,10 @@ const DATABASE_URL_KEY = "DATABASE_URL";
 const TEST_DATABASE_URL_KEY = "TEST_DATABASE_URL";
 
 describe("validateTestDatabaseUrl", () => {
-	test("rejeita arquivo SQLite sem nome marcado como teste", () => {
-		const result = validateTestDatabaseUrl("file:./prisma/prod.db");
+	test("rejeita banco PostgreSQL sem nome marcado como teste", () => {
+		const result = validateTestDatabaseUrl(
+			"postgresql://localhost:5432/obracontrol_prod",
+		);
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
 			expect(result.reason).toContain("test");
@@ -37,8 +39,10 @@ describe("validateTestDatabaseUrl", () => {
 		}
 	});
 
-	test("aceita arquivo SQLite descartavel com test no nome", () => {
-		const result = validateTestDatabaseUrl("file:./prisma/ci-test.db");
+	test("aceita banco PostgreSQL descartavel com test no nome", () => {
+		const result = validateTestDatabaseUrl(
+			"postgresql://localhost:5432/obracontrol_ci_test",
+		);
 		expect(result.ok).toBe(true);
 	});
 });
@@ -63,7 +67,8 @@ describe("resolveTestDatabaseUrl", () => {
 	});
 
 	test("recusa DATABASE_URL sem TEST_DATABASE_URL explicita", () => {
-		process.env[DATABASE_URL_KEY] = "file:./prisma/dev.db";
+		process.env[DATABASE_URL_KEY] =
+			"postgresql://localhost:5432/obracontrol_dev";
 		const result = resolveTestDatabaseUrl();
 		expect(result.ok).toBe(false);
 		if (!result.ok) {
@@ -72,13 +77,15 @@ describe("resolveTestDatabaseUrl", () => {
 	});
 
 	test("recusa TEST_DATABASE_URL apontando para banco nao descartavel", () => {
-		process.env[TEST_DATABASE_URL_KEY] = "file:./prisma/prod.db";
+		process.env[TEST_DATABASE_URL_KEY] =
+			"postgresql://localhost:5432/obracontrol_prod";
 		const result = resolveTestDatabaseUrl();
 		expect(result.ok).toBe(false);
 	});
 
 	test("aceita TEST_DATABASE_URL descartavel mesmo com DATABASE_URL presente", () => {
-		process.env[DATABASE_URL_KEY] = "file:./prisma/dev.db";
+		process.env[DATABASE_URL_KEY] =
+			"postgresql://localhost:5432/obracontrol_dev";
 		process.env[TEST_DATABASE_URL_KEY] = DEFAULT_TEST_DATABASE_URL;
 		const result = resolveTestDatabaseUrl();
 		expect(result.ok).toBe(true);

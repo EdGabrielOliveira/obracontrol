@@ -128,7 +128,7 @@ model Notification {
 
 model AuditLog {
   id                String   @id @default(cuid())
-  userId            String
+  userId            String?
   action            String
   entityType        String
   entityId          String
@@ -140,7 +140,7 @@ model AuditLog {
 
   ownerId String
 
-  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   comments AuditComment[]
 
   @@index([ownerId])

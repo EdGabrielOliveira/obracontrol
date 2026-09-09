@@ -3,7 +3,6 @@ import {
 	requireRole,
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
-import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { throwInvalidInput } from "../../../lib/zod-validation";
 import { auditService } from "../../audit/audit.service";
@@ -130,9 +129,11 @@ export const budgetRoutes = new Elysia({
 		async ({ params, body, user, scope }) => {
 			const parsed = updateBudgetItemSchema.safeParse(body);
 			if (!parsed.success) throwInvalidInput(parsed.error);
-			const old = await prisma.constructionBudgetItem.findUnique({
-				where: { id: params.itemId },
-			});
+			const old = await budgetService.getBudgetItem(
+				scope.resourceOwnerId,
+				params.workId,
+				params.itemId,
+			);
 			const updatedItem = await budgetService.updateItem(
 				scope.resourceOwnerId,
 				params.workId,
@@ -189,22 +190,25 @@ export const budgetRoutes = new Elysia({
 	.delete(
 		"/items/:itemId",
 		async ({ params, user, scope }) => {
-			const old = await prisma.constructionBudgetItem.findUnique({
-				where: { id: params.itemId },
-			});
+			const old = await budgetService.getBudgetItem(
+				scope.resourceOwnerId,
+				params.workId,
+				params.itemId,
+			);
 			await budgetService.deleteItem(
 				scope.resourceOwnerId,
 				params.workId,
 				params.itemId,
 			);
 			if (old) {
+				const item = old.item;
 				auditService.log({
 					userId: user.id,
 					ownerId: scope.resourceOwnerId,
 					action: "DELETE",
 					entityType: "BUDGET_ITEM",
 					entityId: params.itemId,
-					entityDescription: `Item ${old.index} - ${old.description}`,
+					entityDescription: `Item ${item.index} - ${item.description}`,
 					previousState: old as unknown as Record<string, unknown>,
 				});
 			}

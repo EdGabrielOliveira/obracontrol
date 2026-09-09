@@ -32,10 +32,12 @@ export const Route = createFileRoute("/app/obras/$workId/configuracoes/")({
 	beforeLoad: requireManagementAccess,
 	validateSearch: settingsSearchSchema,
 	loader: ({ params }) => {
-		void prefetchClient.prefetchQuery({
-			queryKey: workKeys.detail(params.workId),
-			queryFn: () => getWork(params.workId),
-		}).catch(() => undefined);
+		void prefetchClient
+			.prefetchQuery({
+				queryKey: workKeys.detail(params.workId),
+				queryFn: () => getWork(params.workId),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

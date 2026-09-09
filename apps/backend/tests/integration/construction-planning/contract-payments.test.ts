@@ -102,6 +102,7 @@ const prismaModels = {
 	constructionWork: {
 		findUnique: mock(async () => ({
 			id: TEST_WORK_ID,
+			ownerId: TEST_OWNER,
 			costCenterId: TEST_CC_ID,
 		})),
 	},
@@ -511,7 +512,7 @@ describe("Contract Payments E2E", () => {
 		expect(response.status).toBe(200);
 	});
 
-	it("POST - override GERENTE acima do saldo -> 403 GOVERNANCE_OVERRIDE_REQUIRED", async () => {
+	it("POST - campos de override do cliente sao ignorados e saldo continua bloqueando", async () => {
 		const { constructionPlanningController } = await import(
 			"../../../src/modules/construction-planning/routes"
 		);
@@ -528,14 +529,12 @@ describe("Contract Payments E2E", () => {
 			}),
 		);
 
-		expect(response.status).toBe(403);
+		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe(
-			"Somente ADMIN pode executar override administrativo",
-		);
+		expect(body.message).toBe("Pagamento acima do saldo do contrato");
 	});
 
-	it("POST - override ADMIN sem motivo -> 422 OVERRIDE_REASON_REQUIRED", async () => {
+	it("POST - override ADMIN sem motivo nao ignora o saldo", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -559,10 +558,10 @@ describe("Contract Payments E2E", () => {
 
 		expect(response.status).toBe(422);
 		const body = await response.json();
-		expect(body.message).toBe("Motivo do override e obrigatorio");
+		expect(body.message).toBe("Pagamento acima do saldo do contrato");
 	});
 
-	it("POST - override ADMIN com motivo cria pagamento e audita CONTRACT_PAYMENT com motivo", async () => {
+	it("POST - override ADMIN com motivo nao altera o gate publico de saldo", async () => {
 		getSessionUser.mockImplementation(async () => ({
 			id: TEST_OWNER,
 			email: "teste@obra.bi",
@@ -586,17 +585,9 @@ describe("Contract Payments E2E", () => {
 			}),
 		);
 
-		expect(response.status).toBe(200);
-		expect(auditLogCreate).toHaveBeenCalledTimes(1);
-		expect(auditLogCreate).toHaveBeenCalledWith({
-			data: expect.objectContaining({
-				entityType: "CONTRACT_PAYMENT",
-				newState: expect.objectContaining({
-					balanceOverride: true,
-					reason: "Aprovado pela diretoria",
-				}),
-			}),
-		});
+		expect(response.status).toBe(422);
+		const body = await response.json();
+		expect(body.message).toBe("Pagamento acima do saldo do contrato");
 	});
 
 	it("POST - pagamento igual ao saldo exibido (com centavos) passa pelo gate", async () => {

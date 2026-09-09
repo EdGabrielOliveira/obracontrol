@@ -7,7 +7,9 @@ export type DataQualityIssueCode =
 	| "UNAPPROPRIATED_ACTUAL_COSTS"
 	| "UNAPPROPRIATED_FUTURE_COSTS"
 	| "ZERO_PLANNED_VALUE_DENOMINATOR"
-	| "ZERO_ACTUAL_COST_DENOMINATOR";
+	| "ZERO_ACTUAL_COST_DENOMINATOR"
+	| "SINGLE_ACTUAL_COST_CATEGORY"
+	| "BASELINE_END_BEFORE_WORK_END";
 
 export type DataQualityIssue = {
 	code: DataQualityIssueCode;
@@ -64,6 +66,31 @@ export type WorkBISummary = {
 	tcpi: number | null;
 	dataCompleteness: DataCompleteness;
 };
+
+export type WorkMetricIndicatorKey =
+	| "plannedValue"
+	| "earnedValue"
+	| "actualCost"
+	| "currentBudgetBalance"
+	| "projectedBudgetBalance"
+	| "scheduleVariance"
+	| "schedulePerformanceIndex"
+	| "idp"
+	| "costVariance"
+	| "costPerformanceIndex"
+	| "idc"
+	| "bac"
+	| "eacTypical"
+	| "eacAtypical"
+	| "selectedEac"
+	| "etc"
+	| "vac"
+	| "tcpi";
+
+export type WorkMetricIndicators = Record<
+	WorkMetricIndicatorKey,
+	Indicator<number>
+>;
 
 export type SCurvePoint = {
 	period: string;
@@ -158,7 +185,7 @@ export type FinancialBreakdown = {
 
 export type WorkBIResponse = {
 	summary: WorkBISummary;
-	indicators: Record<string, Indicator<number>>;
+	indicators: WorkMetricIndicators;
 	sCurve: SCurvePoint[];
 	costByStage: CostByStage[];
 	unappropriatedCosts: UnappropriatedCosts;

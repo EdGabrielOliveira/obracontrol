@@ -21,21 +21,15 @@ function requireContextId(value: string | undefined, label: string): string {
 	return value;
 }
 
-async function postImport(
+async function sendImport(
+	method: "POST" | "PUT",
 	url: string,
 	formData: FormData,
 ): Promise<ImportWorkbookResponse> {
-	const { data } = await api.post<ImportWorkbookResponse>(url, formData, {
-		headers: { "Content-Type": "multipart/form-data" },
-	});
-	return data;
-}
-
-async function putImport(
-	url: string,
-	formData: FormData,
-): Promise<ImportWorkbookResponse> {
-	const { data } = await api.put<ImportWorkbookResponse>(url, formData, {
+	const { data } = await api.request<ImportWorkbookResponse>({
+		method,
+		url,
+		data: formData,
 		headers: { "Content-Type": "multipart/form-data" },
 	});
 	return data;
@@ -61,7 +55,11 @@ export async function importWorkbookKind(
 	switch (kind) {
 		case "orcamento": {
 			const workId = requireContextId(context.workId, "Obra");
-			return putImport(`/construction/works/${workId}/budget/import`, formData);
+			return sendImport(
+				"PUT",
+				`/construction/works/${workId}/budget/import`,
+				formData,
+			);
 		}
 		case "orcamento-aditivo":
 			throw new Error(
@@ -69,21 +67,24 @@ export async function importWorkbookKind(
 			);
 		case "cronograma": {
 			const workId = requireContextId(context.workId, "Obra");
-			return postImport(
+			return sendImport(
+				"POST",
 				`/construction/works/${workId}/schedule/import`,
 				formData,
 			);
 		}
 		case "medicao-obra": {
 			const workId = requireContextId(context.workId, "Obra");
-			return postImport(
+			return sendImport(
+				"POST",
 				`/construction/works/${workId}/measurements/import`,
 				formData,
 			);
 		}
 		case "custos": {
 			const workId = requireContextId(context.workId, "Obra");
-			return postImport(
+			return sendImport(
+				"POST",
 				`/construction/works/${workId}/actual-costs/import`,
 				formData,
 			);
@@ -91,7 +92,8 @@ export async function importWorkbookKind(
 		case "medicao-contrato": {
 			const workId = requireContextId(context.workId, "Obra");
 			const contractId = requireContextId(context.contractId, "Contrato");
-			return postImport(
+			return sendImport(
+				"POST",
 				`/construction/works/${workId}/contracts/${contractId}/measurements/import`,
 				formData,
 			);

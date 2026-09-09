@@ -36,6 +36,7 @@ export type DataCompleteness = {
 	hasFutureCosts: boolean;
 	hasUnappropriatedActualCosts: boolean;
 	hasUnappropriatedFutureCosts: boolean;
+	hasSingleActualCostCategory?: boolean;
 };
 
 export const scheduleRiskSchema = z.enum([

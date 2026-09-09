@@ -343,6 +343,14 @@ export async function getContractById(
 	};
 }
 
+export async function getContractWorkId(contractId: string) {
+	const contract = await prisma.contract.findUnique({
+		where: { id: contractId },
+		select: { workId: true },
+	});
+	return contract?.workId ?? null;
+}
+
 export async function createContract(
 	ownerId: string,
 	workId: string,

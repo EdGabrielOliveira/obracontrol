@@ -3,9 +3,11 @@ set -eu
 
 mkdir -p "${OBJECT_STORAGE_DIR:-/data/objects}"
 
-# Prepara o SQLite persistente e aplica somente migrations ainda não
-# registradas. Incompatibilidades de schema abortam o boot sem alterar dados.
-bun /app/scripts/prepare-sqlite-database.ts
+# Aplica somente as migrations PostgreSQL ainda pendentes. Uma falha aborta o
+# boot para que o proxy nao encaminhe trafego para um schema incompleto.
+if [ "${RUN_DATABASE_MIGRATIONS:-true}" = "true" ]; then
+	bunx --bun prisma migrate deploy
+fi
 
 # O backfill pertence ao mesmo deploy da migration de schema. Ele usa uma
 # transacao unica e interrompe o boot se encontrar divergencias, preservando o

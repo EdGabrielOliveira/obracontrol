@@ -50,19 +50,21 @@ export const Route = createFileRoute(
 	"/app/obras/$workId/contratos/$contractId/medicoes/$measurementId/",
 )({
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: contractKeys.measurementDetail(
-				params.workId,
-				params.contractId,
-				params.measurementId,
-			),
-			queryFn: () =>
-				getContractMeasurement(
+		void queryClient
+			.prefetchQuery({
+				queryKey: contractKeys.measurementDetail(
 					params.workId,
 					params.contractId,
 					params.measurementId,
 				),
-		}).catch(() => undefined);
+				queryFn: () =>
+					getContractMeasurement(
+						params.workId,
+						params.contractId,
+						params.measurementId,
+					),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({
@@ -262,8 +264,8 @@ function RouteComponent() {
 										</TableCell>
 										<TableCell className="text-right">
 											{item.measuredQuantity != null
-													? formatQuantity(item.measuredQuantity)
-													: "—"}
+												? formatQuantity(item.measuredQuantity)
+												: "—"}
 										</TableCell>
 										<TableCell className="text-right">
 											{item.measuredPercentage != null

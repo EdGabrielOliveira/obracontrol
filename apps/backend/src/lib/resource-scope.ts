@@ -185,10 +185,10 @@ async function resolveActiveMemberships(
 			where: { userId: actorId, revokedAt: null },
 			select: { organizationId: true },
 		}),
-		prisma.companyMembership.findMany({
+		prisma.companyMembership?.findMany({
 			where: { userId: actorId, revokedAt: null },
 			select: { companyId: true },
-		}),
+		}) ?? [],
 		prisma.costCenterMembership.findMany({
 			where: { userId: actorId, revokedAt: null },
 			select: { costCenterId: true },
@@ -372,7 +372,7 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 					},
 				},
 			}),
-			prisma.companyMembership.findMany({
+			prisma.companyMembership?.findMany({
 				where: { userId: actorId, revokedAt: null },
 				select: {
 					company: {
@@ -388,7 +388,7 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 						},
 					},
 				},
-			}),
+			}) ?? [],
 		]);
 		const organizations = [
 			...orgMemberships.map((membership) => membership.organization),
@@ -485,15 +485,23 @@ export async function resolvePortfolioScope(actorId: string): Promise<{
 				});
 			}
 		}
-		for (const membership of workMemberships) {
-			if (role !== "GESTOR") continue;
-			const work = membership.work;
-			if (!work.costCenter) continue;
-			candidates.push({
-				organizationId: work.costCenter.organizationId,
-				costCenterId: work.costCenter.id,
-				workId: work.id,
-			});
+		// A broader organization/center grant is authoritative for the
+		// portfolio. Legacy work memberships must not add orphan works outside
+		// that hierarchy; they are only useful when no broader grant exists.
+		if (
+			role === "GESTOR" &&
+			grantedOrgIds.size === 0 &&
+			grantedCenterIds.size === 0
+		) {
+			for (const membership of workMemberships) {
+				const work = membership.work;
+				if (!work.costCenter) continue;
+				candidates.push({
+					organizationId: work.costCenter.organizationId,
+					costCenterId: work.costCenter.id,
+					workId: work.id,
+				});
+			}
 		}
 	}
 

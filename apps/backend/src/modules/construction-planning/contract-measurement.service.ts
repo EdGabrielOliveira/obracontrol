@@ -97,6 +97,8 @@ export class ContractMeasurementService {
 						: {}),
 				},
 				select: {
+					date: true,
+					number: true,
 					items: {
 						select: {
 							serviceId: true,
@@ -107,25 +109,49 @@ export class ContractMeasurementService {
 				},
 			}),
 		]);
+		const orderedPreviousMeasurements = [...previousMeasurements].sort(
+			(a, b) => a.date.getTime() - b.date.getTime() || a.number - b.number,
+		);
 		const previousQuantityByService = new Map<string, number>();
-		for (const measurement of previousMeasurements) {
+		for (const measurement of orderedPreviousMeasurements) {
 			for (const item of measurement.items) {
-				const quantity = toFiniteNumber(
-					item.measuredQuantity ?? item.accumulatedQuantity,
-				);
+				if (item.accumulatedQuantity != null) {
+					previousQuantityByService.set(
+						item.serviceId,
+						toFiniteNumber(item.accumulatedQuantity),
+					);
+					continue;
+				}
 				previousQuantityByService.set(
 					item.serviceId,
-					(previousQuantityByService.get(item.serviceId) ?? 0) + quantity,
+					(previousQuantityByService.get(item.serviceId) ?? 0) +
+						toFiniteNumber(item.measuredQuantity),
 				);
 			}
 		}
 		const currentQuantityByService = new Map<string, number>();
+		const currentMeasurementByService = new Map<
+			string,
+			{ accumulatedQuantity: number | null; measuredQuantity: number }
+		>();
 		for (const item of items) {
-			currentQuantityByService.set(
-				item.serviceId,
-				(currentQuantityByService.get(item.serviceId) ?? 0) +
-					toFiniteNumber(item.measuredQuantity ?? item.accumulatedQuantity),
-			);
+			const current = currentMeasurementByService.get(item.serviceId) ?? {
+				accumulatedQuantity: null,
+				measuredQuantity: 0,
+			};
+			if (item.accumulatedQuantity != null) {
+				current.accumulatedQuantity = toFiniteNumber(item.accumulatedQuantity);
+			} else {
+				current.measuredQuantity += toFiniteNumber(item.measuredQuantity);
+			}
+			currentMeasurementByService.set(item.serviceId, current);
+		}
+		for (const [serviceId, current] of currentMeasurementByService) {
+			const previousQuantity = previousQuantityByService.get(serviceId) ?? 0;
+			const currentTotal =
+				current.accumulatedQuantity ??
+				previousQuantity + current.measuredQuantity;
+			currentQuantityByService.set(serviceId, currentTotal - previousQuantity);
 		}
 		const exceeding: ExceedingItem[] = [];
 		for (const [serviceId, currentQuantity] of currentQuantityByService) {
@@ -614,9 +640,12 @@ export class ContractMeasurementService {
 				);
 			}
 
+			const availableBalance = new Decimal(balance.derivedTotal)
+				.minus(balance.totalPaid)
+				.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 			const exceeds =
 				effectiveStatus === "PAGO" &&
-				input.paidValue > balance.derivedTotal - balance.totalPaid;
+				new Decimal(input.paidValue).greaterThan(availableBalance);
 			if (exceeds) {
 				throw new ConstructionError(
 					"PAYMENT_EXCEEDS_BALANCE",
@@ -692,9 +721,12 @@ export class ContractMeasurementService {
 		const effectiveStatus = input.status ?? existing.status;
 		const effectivePaidValue =
 			input.paidValue ?? toFiniteNumber(existing.paidValue);
-		const availableBalance = balance.derivedTotal - balance.totalPaid;
+		const availableBalance = new Decimal(balance.derivedTotal)
+			.minus(balance.totalPaid)
+			.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
 		const exceeds =
-			effectiveStatus === "PAGO" && effectivePaidValue > availableBalance;
+			effectiveStatus === "PAGO" &&
+			new Decimal(effectivePaidValue).greaterThan(availableBalance);
 		if (exceeds) {
 			throw new ConstructionError(
 				"PAYMENT_EXCEEDS_BALANCE",

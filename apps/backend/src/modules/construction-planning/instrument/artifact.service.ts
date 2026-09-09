@@ -320,8 +320,6 @@ export async function generateContractInstrumentArtifact(
 		{ tables: { "contrato.atividades": activities } },
 	);
 	const pdfBytes = await convertDocxToPdf(bytes);
-	const persistedPdf = new Uint8Array(new ArrayBuffer(pdfBytes.byteLength));
-	persistedPdf.set(pdfBytes);
 	if (pdfBytes.byteLength > MAX_ARTIFACT_BYTES) {
 		throw new ConstructionError(
 			"FILE_TOO_LARGE",
@@ -332,7 +330,7 @@ export async function generateContractInstrumentArtifact(
 	const sha256 = createHash("sha256").update(pdfBytes).digest("hex");
 	const templateSha256 = company.contractTemplateSha256 ?? sha256Docx(template);
 	const storageKey = `contracts/${ownerId}/${contractId}/instrument-${sha256}.pdf`;
-	await objectStorage.put(storageKey, persistedPdf, "application/pdf");
+	await objectStorage.put(storageKey, pdfBytes, "application/pdf");
 	let row: Awaited<ReturnType<typeof prisma.contractInstrumentArtifact.upsert>>;
 	try {
 		row = await prisma.$transaction(async (tx) => {

@@ -2,10 +2,10 @@ import { Elysia, t } from "elysia";
 import { parseAsOfDate } from "../../lib/as-of-date";
 import { assertRoleCan, normalizeRole } from "../../lib/authorization";
 import { requireRole } from "../../lib/authorization-middleware";
+import { binaryResponse } from "../../lib/binary-response";
 import { cepClient } from "../../lib/cep-client";
 import { handleConstructionError } from "../../lib/construction-error-handler";
 import { ConstructionError } from "../../lib/errors";
-import { prisma } from "../../lib/prisma";
 import { resolveAuth } from "../../lib/resolve-auth";
 import { resolveResourceScope } from "../../lib/resource-scope";
 import { auditService } from "../audit/audit.service";
@@ -45,36 +45,11 @@ async function companyAccessForUser(user: {
 		return companyAccessFor(user.role, user.workspaceId);
 	if (normalizeRole(user.role) !== "GERENTE")
 		return companyAccessFor(user.role, user.workspaceId);
-	const [memberships, organizationMemberships] = await Promise.all([
-		prisma.companyMembership.findMany({
-			where: {
-				userId: user.id,
-				revokedAt: null,
-				company: user.workspaceId
-					? { workspaceId: user.workspaceId }
-					: { workspaceId: null },
-			},
-			select: { companyId: true },
-		}),
-		prisma.organizationMembership.findMany({
-			where: {
-				userId: user.id,
-				revokedAt: null,
-				organization: user.workspaceId
-					? { workspaceId: user.workspaceId }
-					: { workspaceId: null },
-			},
-			select: { organization: { select: { companyId: true } } },
-		}),
-	]);
-	return companyAccessFor(user.role, user.workspaceId, [
-		...new Set([
-			...memberships.map((m) => m.companyId),
-			...organizationMemberships.flatMap((m) =>
-				m.organization.companyId ? [m.organization.companyId] : [],
-			),
-		]),
-	]);
+	return companyAccessFor(
+		user.role,
+		user.workspaceId,
+		await repo.getCompanyIdsForUser(user.id, user.workspaceId),
+	);
 }
 
 async function assertCompanyManagement(
@@ -89,23 +64,17 @@ async function assertCompanyManagement(
 			403,
 		);
 	}
-	const company = await prisma.company.findFirst({
-		where: {
-			id: companyId,
-			workspaceId: user.workspaceId ?? null,
-		},
-		select: { organizations: { select: { id: true } } },
-	});
-	if (!company)
+	const context = await repo.getCompanyManagementContext(
+		user.id,
+		companyId,
+		user.workspaceId,
+	);
+	if (!context)
 		throw new ConstructionError("NOT_FOUND", "Empresa nao encontrada", 404);
-	const directMembership = await prisma.companyMembership.findFirst({
-		where: { companyId, userId: user.id, revokedAt: null },
-		select: { id: true },
-	});
-	if (directMembership) return;
-	for (const organization of company.organizations) {
+	if (context.hasDirectMembership) return;
+	for (const organizationId of context.organizationIds) {
 		const scope = await resolveResourceScope(user.id, {
-			organizationId: organization.id,
+			organizationId,
 		});
 		if (scope.canWrite) return;
 	}
@@ -399,11 +368,20 @@ export const organizationController = new Elysia({
 	.get(
 		"/:id/reports/pdf",
 		async ({ params, user }) => {
-			const scope = await resolveResourceScope(user.id, { organizationId: params.id });
+			const scope = await resolveResourceScope(user.id, {
+				organizationId: params.id,
+			});
 			if (!scope.canRead) {
-				throw new ConstructionError("NOT_FOUND", "Organização não encontrada", 404);
+				throw new ConstructionError(
+					"NOT_FOUND",
+					"Organização não encontrada",
+					404,
+				);
 			}
-			return pdfReportService.generateOrganizationPdf(scope.resourceOwnerId, params.id);
+			return pdfReportService.generateOrganizationPdf(
+				scope.resourceOwnerId,
+				params.id,
+			);
 		},
 		{
 			detail: {
@@ -417,23 +395,40 @@ export const organizationController = new Elysia({
 	.get(
 		"/:id/export/estatisticas",
 		({ params, user }) =>
-			exportService.exportOrganizationStatistics(user.id, params.id),
+			exportService.exportOrganizationStatistics(user.id, params.id, {
+				id: user.id,
+				name: user.name,
+			}),
 		{ detail: { tags: ["Export", "Organizations"] } },
 	)
 	.get(
 		"/:id/cost-centers/:ccId/export/estatisticas",
 		({ params, user }) =>
-			exportService.exportCostCenterStatistics(user.id, params.id, params.ccId),
+			exportService.exportCostCenterStatistics(
+				user.id,
+				params.id,
+				params.ccId,
+				{ id: user.id, name: user.name },
+			),
 		{ detail: { tags: ["Export", "Organizations"] } },
 	)
 	.get(
 		"/:id/cost-centers/:ccId/reports/pdf",
 		async ({ params, user }) => {
-			const scope = await resolveResourceScope(user.id, { costCenterId: params.ccId });
+			const scope = await resolveResourceScope(user.id, {
+				costCenterId: params.ccId,
+			});
 			if (!scope.canRead) {
-				throw new ConstructionError("NOT_FOUND", "Centro de custo não encontrado", 404);
+				throw new ConstructionError(
+					"NOT_FOUND",
+					"Centro de custo não encontrado",
+					404,
+				);
 			}
-			return pdfReportService.generateCostCenterPdf(scope.resourceOwnerId, params.ccId);
+			return pdfReportService.generateCostCenterPdf(
+				scope.resourceOwnerId,
+				params.ccId,
+			);
 		},
 		{
 			detail: {
@@ -453,9 +448,7 @@ export const organizationController = new Elysia({
 			const parsed = updateCostCenterSchema.safeParse(body);
 			if (!parsed.success)
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
-			const previous = await prisma.costCenter.findUnique({
-				where: { id: params.ccId },
-			});
+			const previous = await repo.getCostCenterByIdOnly(user.id, params.ccId);
 			const cc = await repo.updateCostCenterByIdOnly(
 				user.id,
 				params.ccId,
@@ -493,9 +486,7 @@ export const organizationController = new Elysia({
 		"/cost-centers/:ccId",
 		async ({ params, user }) => {
 			assertStructuralRole(user.role);
-			const old = await prisma.costCenter.findUnique({
-				where: { id: params.ccId },
-			});
+			const old = await repo.getCostCenterByIdOnly(user.id, params.ccId);
 			const cc = await repo.deleteCostCenterByIdOnly(user.id, params.ccId);
 			if (!cc)
 				throw new ConstructionError(
@@ -573,9 +564,7 @@ export const organizationController = new Elysia({
 					);
 				}
 			}
-			const previous = await prisma.organization.findUnique({
-				where: { id: params.id },
-			});
+			const previous = await repo.getOrganizationById(user.id, params.id);
 			const org = await repo.updateOrganization(
 				user.id,
 				params.id,
@@ -619,9 +608,7 @@ export const organizationController = new Elysia({
 					"Organizacao fora do escopo",
 					403,
 				);
-			const old = await prisma.organization.findUnique({
-				where: { id: params.id },
-			});
+			const old = await repo.getOrganizationById(user.id, params.id);
 			const org = await repo.deleteOrganization(user.id, params.id);
 			if (!org) {
 				throw new ConstructionError("NOT_FOUND", "Orgao nao encontrado", 404);
@@ -698,9 +685,7 @@ export const organizationController = new Elysia({
 			if (!parsed.success) {
 				throw new ConstructionError("INVALID_INPUT", "Dados invalidos", 400);
 			}
-			const previous = await prisma.costCenter.findUnique({
-				where: { id: params.ccId },
-			});
+			const previous = await repo.getCostCenterByIdOnly(user.id, params.ccId);
 			const cc = await repo.updateCostCenter(
 				user.id,
 				params.id,
@@ -749,9 +734,7 @@ export const organizationController = new Elysia({
 					"Centro de custo fora do escopo",
 					403,
 				);
-			const old = await prisma.costCenter.findUnique({
-				where: { id: params.ccId },
-			});
+			const old = await repo.getCostCenterByIdOnly(user.id, params.ccId);
 			const cc = await repo.deleteCostCenter(user.id, params.id, params.ccId);
 			if (!cc) {
 				throw new ConstructionError(
@@ -1046,12 +1029,11 @@ export const organizationController = new Elysia({
 				params.companyId,
 				companyAccessFor(user.role, user.workspaceId),
 			);
-			return new Response(new Blob([template.bytes.buffer as ArrayBuffer]), {
-				headers: {
-					"content-type": template.contentType,
-					"content-disposition": `attachment; filename="${template.filename}"`,
-				},
-			});
+			return binaryResponse(
+				template.bytes,
+				template.contentType,
+				template.filename,
+			);
 		},
 		{
 			detail: {

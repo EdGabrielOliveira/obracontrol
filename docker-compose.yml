@@ -1,84 +1,165 @@
 name: obracontrol
 
+# Compose padrão da VPS Linux. O proxy reverso do host deve encaminhar HTTPS
+# para 127.0.0.1:${WEB_PORT}; o backend permanece na rede interna.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-obracontrol}
+      POSTGRES_USER: ${POSTGRES_USER:-obracontrol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
+    volumes:
+      - obracontrol_postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 768M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
   backend:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
-      network: host
+      target: production
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 7001
-      DATABASE_URL: file:/data/obracontrol.db
+      DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL no arquivo .env}
+      RUN_DATABASE_MIGRATIONS: ${RUN_DATABASE_MIGRATIONS:-true}
       OBJECT_STORAGE_DIR: /data/objects
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-only-change-this-secret-0123456789abcdef}
-      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:-dev-only-admin-key-0123456789}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:7001}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:7000}
-      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://localhost:7000}
+      WORKSPACE_BACKFILL_ON_BOOT: ${WORKSPACE_BACKFILL_ON_BOOT:-true}
+      WORKSPACE_MIGRATION_REPORT_PATH: /data/workspace-migration-report.json
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Defina BETTER_AUTH_SECRET no arquivo .env}
+      ADMIN_REGISTRATION_KEY: ${ADMIN_REGISTRATION_KEY:?Defina ADMIN_REGISTRATION_KEY no arquivo .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Defina BETTER_AUTH_URL no arquivo .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Defina FRONTEND_ORIGIN no arquivo .env}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?Defina AUTH_TRUSTED_ORIGINS no arquivo .env}
       TRUSTED_PROXY: ${TRUSTED_PROXY:-127.0.0.1,::1}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
-    ports:
-      - "${BACKEND_PORT:-7001}:7001"
+      PDF_CONVERSION_TIMEOUT_SECONDS: ${PDF_CONVERSION_TIMEOUT_SECONDS:-45}
+      PDF_CONVERSION_QUEUE_LIMIT: ${PDF_CONVERSION_QUEUE_LIMIT:-2}
+    expose:
+      - "7001"
     volumes:
       - obracontrol_api_data:/data
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=256m
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 30s
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    logging: *default-logging
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "curl --fail --silent http://127.0.0.1:7001/health > /dev/null",
-        ]
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:7001/health > /dev/null || exit 1"]
       interval: 30s
       timeout: 5s
-      start_period: 20s
+      start_period: 30s
       retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sqlite-import:
+    profiles: ["migration"]
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+      target: production
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL no arquivo .env}
+      RUN_DATABASE_MIGRATIONS: "true"
+      WORKSPACE_BACKFILL_ON_BOOT: "false"
+      SQLITE_PATH: /legacy-data/obracontrol.db
+    volumes:
+      - obracontrol_api_data:/legacy-data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    init: true
+    command: ["bun", "/app/scripts/migrate-sqlite-to-postgres.ts"]
 
   frontend:
     build:
       context: .
       dockerfile: apps/frontend/Dockerfile
-      network: host
-      target: development
-    command: npm run dev -- --host 0.0.0.0
+      target: production
+      args:
+        VITE_SERVER_URL: ${VITE_SERVER_URL:-}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
     environment:
-      VITE_BACKEND_TARGET: http://backend:7001
-      VITE_USE_POLLING: "true"
-      CHOKIDAR_USEPOLLING: "true"
-      VITE_HMR_CLIENT_PORT: "${FRONTEND_PORT:-7000}"
+      API_UPSTREAM: http://backend:7001
     ports:
-      - "${FRONTEND_PORT:-7000}:7000"
-    volumes:
-      - type: bind
-        source: ./apps/frontend
-        target: /app
-        consistency: delegated
-      - type: volume
-        source: frontend_node_modules
-        target: /app/node_modules
+      - "127.0.0.1:${WEB_PORT:-7000}:8080"
     depends_on:
       backend:
         condition: service_healthy
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    logging: *default-logging
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "node -e \"fetch('http://127.0.0.1:7000/').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\"",
-        ]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -q '\"status\":\"ok\"' || exit 1"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
 
-# O banco atual é SQLite e fica persistido no volume acima; SQLite não abre
-# uma porta TCP. A porta 7711 fica reservada para uma futura migração para um
-# banco cliente-servidor, sem criar um serviço fictício que a API não utiliza.
 volumes:
   obracontrol_api_data:
     name: obracontrol_api_data
-  frontend_node_modules:
-    name: obracontrol_frontend_node_modules
+  obracontrol_postgres_data:
+    name: obracontrol_postgres_data

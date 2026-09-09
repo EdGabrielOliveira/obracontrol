@@ -47,17 +47,20 @@ function normalizeMetricRoute(path: string | undefined): string {
 	);
 }
 
-function safePrismaMessage(message: string): string {
-	return message.replace(/[\r\n\t]+/g, " ").slice(0, 1000);
-}
-
-function safePrismaMeta(meta: unknown): string | null {
-	if (meta == null) return null;
-	try {
-		return JSON.stringify(meta).slice(0, 1000);
-	} catch {
-		return null;
+function errorLogFields(error: unknown): {
+	errorType: string;
+	errorMessage?: string;
+} {
+	if (!(error instanceof Error)) {
+		return { errorType: typeof error };
 	}
+
+	return {
+		errorType: error.name,
+		// Error messages can contain SQL fragments or submitted values. Keep
+		// them only in development; Sentry receives the full exception safely.
+		...(env.NODE_ENV === "development" ? { errorMessage: error.message } : {}),
+	};
 }
 
 export function handleConstructionError(context: ErrorHandlerContext) {
@@ -177,9 +180,8 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 		}
 		logger.error("db.error", {
 			prismaCode: error.code,
-			prismaMessage: safePrismaMessage(error.message),
-			prismaMeta: safePrismaMeta(error.meta),
 			path,
+			...errorLogFields(error),
 		});
 		reportException(error);
 		return new Response(
@@ -192,11 +194,10 @@ export function handleConstructionError(context: ErrorHandlerContext) {
 	if (error instanceof Error) {
 		logger.error("internal.error", {
 			path,
-			name: error.name,
-			message: error.message,
+			...errorLogFields(error),
 		});
 	} else {
-		logger.error("internal.error", { path, type: typeof error });
+		logger.error("internal.error", { path, ...errorLogFields(error) });
 	}
 	reportException(error);
 

@@ -140,7 +140,7 @@ describe("apiKeyRoutes", () => {
 		expect(allowed.status).toBe(200);
 		expect(findUser).toHaveBeenCalledWith({
 			where: { id: "seed-admin-user" },
-			select: { role: true, banned: true },
+			select: { role: true, banned: true, workspaceId: true },
 		});
 	});
 

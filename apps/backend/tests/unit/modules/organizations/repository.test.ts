@@ -162,7 +162,10 @@ describe("organizations repository", () => {
 		});
 		expect(organizationFindFirst).toHaveBeenCalledWith({
 			where: { id: "org-1" },
-			include: { costCenters: true, structuredAddress: true },
+			include: {
+				costCenters: { where: { id: { in: ["cc-1", "cc-2"] } } },
+				structuredAddress: true,
+			},
 		});
 
 		organizationFindFirst.mockResolvedValue(null);

@@ -14,6 +14,14 @@ const isE2E = process.env.E2E === "1";
 const usePolling =
 	process.env.VITE_USE_POLLING === "true" ||
 	process.env.CHOKIDAR_USEPOLLING === "true";
+const parsedPollingInterval = Number.parseInt(
+	process.env.VITE_POLLING_INTERVAL ?? "250",
+	10,
+);
+const pollingInterval =
+	Number.isFinite(parsedPollingInterval) && parsedPollingInterval > 0
+		? parsedPollingInterval
+		: 250;
 const hmrClientPort = Number(process.env.VITE_HMR_CLIENT_PORT ?? "7000");
 const allowedHosts = ["obracontrol.engpac.com.br"];
 const apiProxy = {
@@ -71,7 +79,9 @@ export default defineConfig({
 		host: true,
 		port: 7000,
 		strictPort: true,
-		watch: usePolling ? { usePolling: true, interval: 250 } : undefined,
+		watch: usePolling
+			? { usePolling: true, interval: pollingInterval }
+			: undefined,
 		hmr: {
 			clientPort: hmrClientPort,
 		},

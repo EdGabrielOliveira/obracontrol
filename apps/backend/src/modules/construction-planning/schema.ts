@@ -145,7 +145,9 @@ export const actualCostAllocationSchema = z
 			.optional(),
 		value: z
 			.number()
-			.positive("Valor de alocação deve ser positivo")
+			.refine((val) => val !== 0, {
+				message: "Valor de alocação não pode ser zero",
+			})
 			.optional(),
 	})
 	.superRefine((data, ctx) => {
@@ -180,7 +182,9 @@ export const createActualCostSchema = z
 		category: actualCostCategorySchema,
 		categoryDetail: z.string().trim().optional(),
 		description: z.string().trim().optional(),
-		amount: z.number().positive(),
+		amount: z
+			.number()
+			.refine((val) => val !== 0, { message: "O valor não pode ser zero" }),
 		costType: actualCostTypeSchema,
 		sourceDocument: z.string().optional(),
 		supplierId: z.string().min(1).nullable().optional(),
@@ -240,7 +244,10 @@ export const updateActualCostSchema = z
 		category: actualCostCategorySchema.optional(),
 		categoryDetail: z.string().trim().optional(),
 		description: z.string().optional(),
-		amount: z.number().positive().optional(),
+		amount: z
+			.number()
+			.refine((val) => val !== 0, { message: "O valor não pode ser zero" })
+			.optional(),
 		costType: actualCostTypeSchema.optional(),
 		sourceDocument: z.string().optional(),
 		supplierId: z.string().min(1).nullable().optional(),

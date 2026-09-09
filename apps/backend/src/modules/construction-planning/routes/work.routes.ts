@@ -6,12 +6,11 @@ import {
 	requireWorkAccess,
 } from "../../../lib/authorization-middleware";
 import { ConstructionError } from "../../../lib/errors";
-import { prisma } from "../../../lib/prisma";
 import { resolveAuth } from "../../../lib/resolve-auth";
 import { resolveResourceScope } from "../../../lib/resource-scope";
-import { getAccessibleCostCenterIds } from "../../../lib/scope-access";
 import { throwInvalidInput } from "../../../lib/zod-validation";
 import { auditService } from "../../audit/audit.service";
+import { userService } from "../../users/service";
 import { budgetService } from "../budget.service";
 import { constructionManualEntryService } from "../entries/manual-entry-service";
 import {
@@ -21,10 +20,11 @@ import {
 	resolveMeasurementDependencies,
 	resolveReplanningDependencies,
 } from "../imports/dependency-resolver";
-import { rejectedRowCount } from "../imports/import-service";
+import {
+	parseAndValidateWorkbook,
+	rejectedRowCount,
+} from "../imports/import-service";
 import { isoDateString } from "../imports/normalizers";
-import { parseWorkbookByKind } from "../imports/parser";
-import { validateWorkbookByKind } from "../imports/validator";
 import * as repository from "../repository";
 import { ConstructionScheduleService } from "../schedule/schedule-service";
 import {
@@ -99,37 +99,14 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			},
 		},
 	)
-	.get(
-		"/gestores",
-		async ({ user }) => {
-			const where =
-				normalizeRole(user.role) === "ADMIN"
-					? { role: "GESTOR" }
-					: {
-							role: "GESTOR",
-							costCenterMemberships: {
-								some: {
-									costCenterId: {
-										in: await getAccessibleCostCenterIds(user.id),
-									},
-								},
-							},
-						};
-			return prisma.user.findMany({
-				where,
-				select: { id: true, name: true },
-				orderBy: { name: "asc" },
-			});
+	.get("/gestores", async ({ user }) => userService.listManagers(user.id), {
+		detail: {
+			tags: ["Works"],
+			summary: "Listar gestores disponíveis",
+			description:
+				"Lista os gestores que podem ser associados a ações no escopo do ator autenticado.",
 		},
-		{
-			detail: {
-				tags: ["Works"],
-				summary: "Listar gestores disponíveis",
-				description:
-					"Lista os gestores que podem ser associados a ações no escopo do ator autenticado.",
-			},
-		},
-	)
+	})
 	.use(requireWorkAccess("read"))
 	.get(
 		"/:workId",
@@ -439,9 +416,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					400,
 				);
 			}
-			const old = await prisma.constructionWork.findUnique({
-				where: { id: params.workId },
-			});
+			const old = await constructionWorkService.get(
+				scope.resourceOwnerId,
+				params.workId,
+				scope.workspaceId ? { workspaceId: scope.workspaceId } : undefined,
+			);
 			const result = await constructionWorkService.update(
 				scope.resourceOwnerId,
 				params.workId,
@@ -523,9 +502,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		"/:workId",
 		async ({ params, user, scope }) => {
 			assertStructuralRole(user.role);
-			const old = await prisma.constructionWork.findUnique({
-				where: { id: params.workId },
-			});
+			const old = await constructionWorkService.get(
+				scope.resourceOwnerId,
+				params.workId,
+				scope.workspaceId ? { workspaceId: scope.workspaceId } : undefined,
+			);
 			const result = await constructionWorkService.delete(
 				scope.resourceOwnerId,
 				params.workId,
@@ -627,9 +608,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 					422,
 				);
 			}
-			const old = await prisma.constructionActualCost.findUnique({
-				where: { id: params.id },
-			});
+			const old = await constructionManualEntryService.getActualCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
 			const result = await constructionManualEntryService.updateActualCost(
 				scope.resourceOwnerId,
 				params.workId,
@@ -680,9 +663,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.delete(
 		"/:workId/actual-costs/:id",
 		async ({ params, user, scope }) => {
-			const old = await prisma.constructionActualCost.findUnique({
-				where: { id: params.id },
-			});
+			const old = await constructionManualEntryService.getActualCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
 			await constructionManualEntryService.deleteActualCost(
 				scope.resourceOwnerId,
 				params.workId,
@@ -809,19 +794,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			assertStructuralRole(user.role);
 			assertValidXlsxUpload(body.file);
 			const bytes = new Uint8Array(await body.file.arrayBuffer());
-			const parsed = parseWorkbookByKind(bytes, body.file.name, "cronograma");
-			const validation = validateWorkbookByKind(parsed, "cronograma");
-			const structural = validation.errors.filter(
-				(error) => error.row === undefined,
+			const { validation } = parseAndValidateWorkbook(
+				bytes,
+				body.file.name,
+				"cronograma",
 			);
-			if (structural.length > 0) {
-				throw new ConstructionError(
-					"VALIDATION_FAILED",
-					"Planilha invalida",
-					422,
-					structural,
-				);
-			}
 
 			const context = { ownerId: scope.resourceOwnerId, workId: params.workId };
 			const acceptedBaselines = await resolveBaselineDependencies(
@@ -895,19 +872,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		async ({ params, body, scope }) => {
 			assertValidXlsxUpload(body.file);
 			const bytes = new Uint8Array(await body.file.arrayBuffer());
-			const parsed = parseWorkbookByKind(bytes, body.file.name, "medicao-obra");
-			const validation = validateWorkbookByKind(parsed, "medicao-obra");
-			const structural = validation.errors.filter(
-				(error) => error.row === undefined,
+			const { validation } = parseAndValidateWorkbook(
+				bytes,
+				body.file.name,
+				"medicao-obra",
 			);
-			if (structural.length > 0) {
-				throw new ConstructionError(
-					"VALIDATION_FAILED",
-					"Planilha invalida",
-					422,
-					structural,
-				);
-			}
 
 			const accepted = await resolveMeasurementDependencies(
 				validation.measurements,
@@ -964,19 +933,11 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 		async ({ params, body, scope }) => {
 			assertValidXlsxUpload(body.file);
 			const bytes = new Uint8Array(await body.file.arrayBuffer());
-			const parsed = parseWorkbookByKind(bytes, body.file.name, "custos");
-			const validation = validateWorkbookByKind(parsed, "custos");
-			const structural = validation.errors.filter(
-				(error) => error.row === undefined,
+			const { validation } = parseAndValidateWorkbook(
+				bytes,
+				body.file.name,
+				"custos",
 			);
-			if (structural.length > 0) {
-				throw new ConstructionError(
-					"VALIDATION_FAILED",
-					"Planilha invalida",
-					422,
-					structural,
-				);
-			}
 
 			const accepted = await resolveActualCostDependencies(
 				validation.actualCosts,

@@ -7,6 +7,7 @@ import { constructionImportBatchService } from "./imports/import-batch.service";
 import { normalizeDate } from "./imports/normalizers";
 import { quotationService } from "./quotation.service";
 import { findSupplierByDocument } from "./suppliers/supplier.repository";
+import { isValidCnpj } from "./suppliers/supplier-document";
 
 function parseIntValue(value: unknown): number | null {
 	const parsed = parseNumber(value);
@@ -49,7 +50,7 @@ function textValue(value: unknown): string | null {
 
 function normalizeSupplierDocument(value: unknown, rowNumber: number): string {
 	const document = textValue(value)?.replace(/\D/g, "") ?? "";
-	if (document.length !== 14) {
+	if (!isValidCnpj(document)) {
 		throw new ConstructionError(
 			"INVALID_CNPJ",
 			`CNPJ invalido na linha ${rowNumber}`,
@@ -96,7 +97,7 @@ export const quotationImportService = {
 		workId: string,
 		batchId: string,
 		page = 1,
-		pageSize = 500,
+		pageSize: number = 500,
 	) {
 		return constructionImportBatchService.getPreviewPage(
 			ownerId,

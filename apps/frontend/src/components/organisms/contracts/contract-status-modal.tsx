@@ -48,8 +48,7 @@ export function ContractStatusModal({
 
 	const requiresReason = status === "PARALISADO" || status === "ARQUIVADO";
 	const availableOptions = useMemo(
-		() =>
-			optionsForStatus(options, currentStatus, CONTRACT_STATUS_TRANSITIONS),
+		() => optionsForStatus(options, currentStatus, CONTRACT_STATUS_TRANSITIONS),
 		[currentStatus],
 	);
 

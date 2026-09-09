@@ -35,10 +35,13 @@ mock.module(
 mock.module(
 	"../../../../src/modules/construction-planning/suppliers/supplier.repository",
 	() => ({
-	getSupplierById: mock(async () => ({ id: "sup-1", name: "Fornecedor" })),
-	findSupplierByDocument: mock(async () => null),
-	findSupplierByDocumentOrName: mock(async () => ({ id: "sup-1", name: "Fornecedor" })),
-	findWorkSupplier: mock(async () => ({ supplierId: "sup-1" })),
+		getSupplierById: mock(async () => ({ id: "sup-1", name: "Fornecedor" })),
+		findSupplierByDocument: mock(async () => null),
+		findSupplierByDocumentOrName: mock(async () => ({
+			id: "sup-1",
+			name: "Fornecedor",
+		})),
+		findWorkSupplier: mock(async () => ({ supplierId: "sup-1" })),
 	}),
 );
 

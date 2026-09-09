@@ -16,10 +16,12 @@ import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/obras/$workId/cronograma")({
 	loader: ({ params }) => {
-		void queryClient.prefetchQuery({
-			queryKey: workKeys.schedule(params.workId),
-			queryFn: () => getSchedule(params.workId),
-		}).catch(() => undefined);
+		void queryClient
+			.prefetchQuery({
+				queryKey: workKeys.schedule(params.workId),
+				queryFn: () => getSchedule(params.workId),
+			})
+			.catch(() => undefined);
 	},
 	component: RouteComponent,
 	head: () => ({

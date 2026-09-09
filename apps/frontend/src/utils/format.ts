@@ -31,9 +31,9 @@ export function formatCurrencyInput(value: string): string {
 	}).format(Number(digits) / 100);
 }
 
-export function parseCurrencyInput(value: string): number {
+export function parseCurrencyInput(value: string): number | null {
 	const digits = value.replace(/\D/g, "");
-	return digits ? Number(digits) / 100 : Number.NaN;
+	return digits ? Number(digits) / 100 : null;
 }
 
 export function formatNullableCurrency(
@@ -59,6 +59,11 @@ export function formatCurrencyTick(value: number): string {
 	}).format(value);
 }
 
+/**
+ * Formata um valor numérico em percentual (escala 0..100).
+ * Exemplo: 50 -> "50%" ou 12.5 -> "12,5%"
+ * O valor é dividido por 100 antes de ser formatado com Intl.NumberFormat style: "percent".
+ */
 export function formatPercentage(value: number | null | undefined): string {
 	if (value == null || !Number.isFinite(value)) return "-";
 	return new Intl.NumberFormat("pt-BR", {
@@ -68,6 +73,11 @@ export function formatPercentage(value: number | null | undefined): string {
 	}).format(value / 100);
 }
 
+/**
+ * Formata uma proporção / ratio em percentual (escala 0..1).
+ * Exemplo: 0.5 -> "50%" ou 0.125 -> "12,5%"
+ * O valor já é tratado nativamente pelo Intl.NumberFormat style: "percent" (onde 1.0 = 100%).
+ */
 export function formatRatioAsPercentage(
 	value: number | null | undefined,
 ): string {

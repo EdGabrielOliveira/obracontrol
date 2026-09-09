@@ -6,6 +6,7 @@ import { ConstructionError } from "../../lib/errors";
 import { buildPaginatedResponse } from "../../lib/pagination";
 import { hashPassword } from "../../lib/password-hasher";
 import { prisma } from "../../lib/prisma";
+import { getAccessibleCostCenterIds } from "../../lib/scope-access";
 import { createWorkspace, ensureWorkspaceForUser } from "../../lib/workspace";
 import type {
 	CreateUserInput,
@@ -619,7 +620,6 @@ async function applyScope(
 export const userService = {
 	async create(input: CreateUserInput, ctx?: { actorId: string }) {
 		const scope = normalizeScope(input.scope);
-		await assertValidScope(input.role, scope);
 		let inheritedWorkspaceId: string | null = null;
 
 		if (ctx?.actorId) {
@@ -631,6 +631,10 @@ export const userService = {
 			if (!isAuthorizationRole(actorRole)) {
 				throw new ConstructionError("FORBIDDEN", "Acesso negado", 403);
 			}
+			// Reject an unauthorized target role before validating the target
+			// scope. The actor must not be able to use malformed scope data to
+			// probe validation details for roles they cannot administer.
+			assertActorCanManage(actorRole as AuthorizationRole, [], input.role, []);
 			const adminScope = await resolveAdminScope(ctx.actorId);
 			const orgIds = await resolveScopeOrganizationIds(scope);
 			assertActorCanManage(
@@ -641,6 +645,7 @@ export const userService = {
 			);
 			inheritedWorkspaceId = await ensureWorkspaceForUser(ctx.actorId);
 		}
+		await assertValidScope(input.role, scope);
 
 		let userId: string;
 		try {
@@ -737,6 +742,33 @@ export const userService = {
 		);
 	},
 
+	async listManagers(actorId: string) {
+		const scope = await resolveAdminScope(actorId);
+		const costCenterIds = scope.isGlobalAdmin
+			? []
+			: await getAccessibleCostCenterIds(actorId);
+		const actor = await prisma.user.findUnique({
+			where: { id: actorId },
+			select: { workspaceId: true },
+		});
+		const where = scope.isGlobalAdmin
+			? {
+					role: "GESTOR",
+					...(actor?.workspaceId ? { workspaceId: actor.workspaceId } : {}),
+				}
+			: {
+					role: "GESTOR",
+					costCenterMemberships: {
+						some: { costCenterId: { in: costCenterIds } },
+					},
+				};
+		return prisma.user.findMany({
+			where,
+			select: { id: true, name: true },
+			orderBy: { name: "asc" },
+		});
+	},
+
 	async getByIdScoped(actorId: string, id: string) {
 		const scope = await resolveAdminScope(actorId);
 		await assertUserInScope(actorId, id, scope);
@@ -768,8 +800,12 @@ export const userService = {
 		if (!target) throw notFoundUser();
 		assertAdminWorkspace(adminScope, target.workspaceId);
 
-		const nextRole = normalizeRole(input.role ?? target.role) as AuthorizationRole;
-		const requestedScope = input.scope ? normalizeScope(input.scope) : undefined;
+		const nextRole = normalizeRole(
+			input.role ?? target.role,
+		) as AuthorizationRole;
+		const requestedScope = input.scope
+			? normalizeScope(input.scope)
+			: undefined;
 		const effectiveScope = input.role
 			? (requestedScope ?? (await getCurrentScope(id, target.workspaceId)))
 			: requestedScope;

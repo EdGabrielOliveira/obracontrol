@@ -83,7 +83,10 @@ mock.module("../../../../src/lib/prisma", () => ({
 }));
 
 mock.module("../../../../src/lib/resource-scope", () => ({
-	resolveResourceScope: mock(async () => ({ canWrite: true })),
+	resolveResourceScope: mock(async () => ({
+		canWrite: true,
+		resourceOwnerId: "user-1",
+	})),
 }));
 
 mock.module(

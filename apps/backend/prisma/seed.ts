@@ -199,17 +199,18 @@ const SUPPLIERS = [
 
 async function clearDatabase() {
 	const tables = await prisma.$queryRaw<Array<{ name: string }>>`
-		SELECT name FROM sqlite_master
-		WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+		SELECT tablename AS name
+		FROM pg_catalog.pg_tables
+		WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
 	`;
-	await prisma.$executeRaw`PRAGMA foreign_keys = OFF`;
-	for (const { name } of tables.filter(
-		(table) => table.name !== "_prisma_migrations",
-	)) {
-		const escapedName = name.replaceAll('"', '""');
-		await prisma.$executeRawUnsafe(`DELETE FROM "${escapedName}"`);
+	const tableNames = tables
+		.map(({ name }) => `"${name.replaceAll('"', '""')}"`)
+		.join(", ");
+	if (tableNames) {
+		await prisma.$executeRawUnsafe(
+			`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE`,
+		);
 	}
-	await prisma.$executeRaw`PRAGMA foreign_keys = ON`;
 }
 
 async function createUser(

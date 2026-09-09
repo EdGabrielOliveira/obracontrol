@@ -3,8 +3,8 @@ import {
 	CONTRACT_STATUS_MAP,
 	MEASUREMENT_STATUS_MAP,
 	PAYMENT_STATUS_MAP,
-	WORK_STATUS_MAP,
 	StatusBadge,
+	WORK_STATUS_MAP,
 } from "@/components/atoms/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -139,11 +139,16 @@ export function AuditEntryDetail({
 							</div>
 							<div>
 								<p className="text-muted-foreground">Ação</p>
-								<StatusBadge status={entry.action} map={AUDIT_ACTION_STATUS_MAP} />
+								<StatusBadge
+									status={entry.action}
+									map={AUDIT_ACTION_STATUS_MAP}
+								/>
 							</div>
 							<div>
 								<p className="text-muted-foreground">Entidade</p>
-								<p className="font-medium">{auditEntityLabel(entry.entityType)}</p>
+								<p className="font-medium">
+									{auditEntityLabel(entry.entityType)}
+								</p>
 							</div>
 							<div>
 								<p className="text-muted-foreground">Usuário</p>

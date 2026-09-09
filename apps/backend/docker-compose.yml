@@ -1,19 +1,32 @@
-# Um único Compose para desenvolvimento via Docker e produção no cPanel.
-# Ajuste apenas o arquivo .env de cada ambiente. Em produção, o Apache/cPanel
-# encaminha o subdomínio da API para 127.0.0.1:${API_PORT}.
+# Compose auxiliar apenas para executar o backend isoladamente. Para a VPS,
+# prefira docker-compose.yml pela raiz do monorepo.
 # No monorepo, prefira executar o Compose pela raiz.
 services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-obracontrol}
+      POSTGRES_USER: ${POSTGRES_USER:-obracontrol}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-obracontrol_dev}
+    volumes:
+      - obracontrol_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
   backend:
     build:
       context: ../..
       dockerfile: apps/backend/Dockerfile
-      # Usa a rede do host apenas durante o build para resolver o DNS da VPS.
-      network: host
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       HOST: 0.0.0.0
       PORT: 7001
-      DATABASE_URL: ${DATABASE_URL:-file:/data/obracontrol.db}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://obracontrol:obracontrol_dev@postgres:5432/obracontrol?schema=public}
+      RUN_DATABASE_MIGRATIONS: ${RUN_DATABASE_MIGRATIONS:-true}
       WORKSPACE_BACKFILL_ON_BOOT: ${WORKSPACE_BACKFILL_ON_BOOT:-true}
       WORKSPACE_MIGRATION_REPORT_PATH: ${WORKSPACE_MIGRATION_REPORT_PATH:-/data/workspace-migration-report.json}
       OBJECT_STORAGE_DIR: ${OBJECT_STORAGE_DIR:-/data/objects}
@@ -27,10 +40,21 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       AUDIT_LOG_RETENTION_DAYS: ${AUDIT_LOG_RETENTION_DAYS:-180}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
     ports:
       - "127.0.0.1:${API_PORT:-7001}:7001"
     volumes:
       - obracontrol_api_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:7001/health > /dev/null || exit 1"]
       interval: 30s
@@ -41,3 +65,5 @@ services:
 volumes:
   obracontrol_api_data:
     name: obracontrol_api_data
+  obracontrol_postgres_data:
+    name: obracontrol_postgres_data

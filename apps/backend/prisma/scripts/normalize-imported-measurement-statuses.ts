@@ -5,7 +5,7 @@ import { createLocalPrisma } from "../../src/lib/prisma-local";
 const prisma = createLocalPrisma();
 
 /**
- * Keeps the local db setup aligned with the production SQLite migration.
+ * Keeps local setup aligned with the PostgreSQL data conversion.
  * The update is intentionally idempotent and only touches the legacy
  * imported-measurement status; work operational statuses are not involved.
  */
