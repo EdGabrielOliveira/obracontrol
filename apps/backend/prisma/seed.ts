@@ -199,7 +199,7 @@ const SUPPLIERS = [
 
 async function clearDatabase() {
 	const tables = await prisma.$queryRaw<Array<{ name: string }>>`
-		SELECT tablename AS name
+		SELECT tablename::text AS name
 		FROM pg_catalog.pg_tables
 		WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
 	`;
