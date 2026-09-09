@@ -43,15 +43,16 @@ export async function resolveActiveImportId(
 	ownerId: string,
 	workId: string,
 	activeImportId: string | null,
+	db: Pick<typeof prisma, "constructionImport"> = prisma,
 ): Promise<string | null> {
 	if (activeImportId) {
-		const imp = await prisma.constructionImport.findFirst({
+		const imp = await db.constructionImport.findFirst({
 			where: { id: activeImportId, ownerId, workId },
 			select: { id: true },
 		});
 		if (imp) return imp.id;
 	}
-	const latest = await prisma.constructionImport.findFirst({
+	const latest = await db.constructionImport.findFirst({
 		where: { ownerId, workId },
 		orderBy: { createdAt: "desc" },
 		select: { id: true },

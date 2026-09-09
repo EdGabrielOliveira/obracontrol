@@ -147,26 +147,26 @@ export async function getOrCreateBaselineVersion(
 	});
 	if (existing) return existing.id;
 
-	return prisma.$transaction(async (tx) => {
-		const again = await tx.budgetVersion.findFirst({
-			where: {
-				workId,
-				OR: [{ versionNumber: 1 }, { label: BASELINE_VERSION_LABEL }],
-			},
-			select: { id: true },
-		});
-		if (again) return again.id;
+	try {
+		return await prisma.$transaction(async (tx) => {
+			const again = await tx.budgetVersion.findFirst({
+				where: {
+					workId,
+					OR: [{ versionNumber: 1 }, { label: BASELINE_VERSION_LABEL }],
+				},
+				select: { id: true },
+			});
+			if (again) return again.id;
 
-		const work = await tx.constructionWork.findFirst({
-			where: { id: workId },
-			select: { ownerId: true, activeImportId: true },
-		});
-		if (!work) {
-			throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
-		}
+			const work = await tx.constructionWork.findFirst({
+				where: { id: workId },
+				select: { ownerId: true, activeImportId: true },
+			});
+			if (!work) {
+				throw new ConstructionError("NOT_FOUND", "Obra nao encontrada", 404);
+			}
 
-		let versionId: string;
-		try {
+			let versionId: string;
 			const version = await tx.budgetVersion.create({
 				data: {
 					ownerId: work.ownerId,
@@ -178,99 +178,99 @@ export async function getOrCreateBaselineVersion(
 				},
 			});
 			versionId = version.id;
-		} catch (error) {
-			// Corrida entre conexoes: outra transacao criou a baseline primeiro.
-			// A transacao corrente foi abortada pelo P2002, entao a consulta de
-			// retorno usa o cliente global (a baseline da outra conexao ja
-			// commitou antes de liberar o lock de unique).
-			if (!isUniqueViolation(error)) throw error;
-			const concurrent = await prisma.budgetVersion.findFirst({
+
+			// Somente os itens do import ativo compoem a baseline: itens orfaos de
+			// imports anteriores possuem os mesmos indices e violariam a unicidade
+			// de budgetItemIdentity(workId, index) — a mesma regra de "orcamento
+			// vigente" usada na arvore da obra (works.repository).
+			const activeImportId = await resolveActiveImportId(
+				work.ownerId,
+				workId,
+				work.activeImportId,
+				tx,
+			);
+			const items = await tx.constructionBudgetItem.findMany({
 				where: {
 					workId,
-					OR: [{ versionNumber: 1 }, { label: BASELINE_VERSION_LABEL }],
+					importId: activeImportId ?? "__NO_ACTIVE_IMPORT__",
 				},
-				select: { id: true },
+				orderBy: [{ sortOrder: "asc" }, { index: "asc" }],
+				select: {
+					id: true,
+					parentId: true,
+					index: true,
+					type: true,
+					description: true,
+					unit: true,
+					quantity: true,
+					unitCost: true,
+					totalCost: true,
+					sortOrder: true,
+				},
 			});
-			if (concurrent) return concurrent.id;
-			throw error;
-		}
-		// Somente os itens do import ativo compoem a baseline: itens orfaos de
-		// imports anteriores possuem os mesmos indices e violariam a unicidade
-		// de budgetItemIdentity(workId, index) — a mesma regra de "orcamento
-		// vigente" usada na arvore da obra (works.repository).
-		const activeImportId = await resolveActiveImportId(
-			work.ownerId,
-			workId,
-			work.activeImportId,
-		);
-		const items = await tx.constructionBudgetItem.findMany({
+
+			const identityByIndex = new Map<string, string>();
+			for (const item of items) {
+				const identity = await tx.budgetItemIdentity.upsert({
+					where: { workId_index: { workId, index: item.index } },
+					create: { ownerId: work.ownerId, workId, index: item.index },
+					update: {},
+					select: { id: true },
+				});
+				identityByIndex.set(item.index, identity.id);
+			}
+
+			const versionItemByItemId = new Map<string, string>();
+			for (const item of items) {
+				const identityId = identityByIndex.get(item.index);
+				if (!identityId) continue;
+				const versionItem = await tx.budgetVersionItem.create({
+					data: {
+						versionId,
+						identityId,
+						parentVersionId: null,
+						index: item.index,
+						type: item.type,
+						description: item.description,
+						unit: item.unit,
+						quantity: item.quantity,
+						unitCost: item.unitCost,
+						totalCost: item.totalCost,
+						sortOrder: item.sortOrder,
+					},
+					select: { id: true },
+				});
+				versionItemByItemId.set(item.id, versionItem.id);
+			}
+
+			// Vincula parentVersionId pela relacao pai/filho dos itens originais.
+			for (const item of items) {
+				if (!item.parentId) continue;
+				const parentVersionItemId = versionItemByItemId.get(item.parentId);
+				const currentId = versionItemByItemId.get(item.id);
+				if (!parentVersionItemId || !currentId) continue;
+				await tx.budgetVersionItem.update({
+					where: { id: currentId },
+					data: { parentVersionId: parentVersionItemId },
+				});
+			}
+
+			return versionId;
+		});
+	} catch (error) {
+		// A unique violation aborts the interactive transaction. Only query the
+		// concurrent baseline after Prisma has rolled that transaction back.
+		if (!isUniqueViolation(error)) throw error;
+		const concurrent = await prisma.budgetVersion.findFirst({
 			where: {
 				workId,
-				importId: activeImportId ?? "__NO_ACTIVE_IMPORT__",
+				OR: [{ versionNumber: 1 }, { label: BASELINE_VERSION_LABEL }],
 			},
-			orderBy: [{ sortOrder: "asc" }, { index: "asc" }],
-			select: {
-				id: true,
-				parentId: true,
-				index: true,
-				type: true,
-				description: true,
-				unit: true,
-				quantity: true,
-				unitCost: true,
-				totalCost: true,
-				sortOrder: true,
-			},
+			select: { id: true },
 		});
-
-		const identityByIndex = new Map<string, string>();
-		for (const item of items) {
-			const identity = await tx.budgetItemIdentity.upsert({
-				where: { workId_index: { workId, index: item.index } },
-				create: { ownerId: work.ownerId, workId, index: item.index },
-				update: {},
-				select: { id: true },
-			});
-			identityByIndex.set(item.index, identity.id);
-		}
-
-		const versionItemByItemId = new Map<string, string>();
-		for (const item of items) {
-			const identityId = identityByIndex.get(item.index);
-			if (!identityId) continue;
-			const versionItem = await tx.budgetVersionItem.create({
-				data: {
-					versionId,
-					identityId,
-					parentVersionId: null,
-					index: item.index,
-					type: item.type,
-					description: item.description,
-					unit: item.unit,
-					quantity: item.quantity,
-					unitCost: item.unitCost,
-					totalCost: item.totalCost,
-					sortOrder: item.sortOrder,
-				},
-				select: { id: true },
-			});
-			versionItemByItemId.set(item.id, versionItem.id);
-		}
-
-		// Vincula parentVersionId pela relacao pai/filho dos itens originais.
-		for (const item of items) {
-			if (!item.parentId) continue;
-			const parentVersionItemId = versionItemByItemId.get(item.parentId);
-			const currentId = versionItemByItemId.get(item.id);
-			if (!parentVersionItemId || !currentId) continue;
-			await tx.budgetVersionItem.update({
-				where: { id: currentId },
-				data: { parentVersionId: parentVersionItemId },
-			});
-		}
-
-		return versionId;
-	});
+		if (concurrent) return concurrent.id;
+		throw error;
+	}
 }
 
 export async function resolveBudgetAnalysisVersion(

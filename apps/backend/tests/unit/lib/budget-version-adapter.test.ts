@@ -271,6 +271,21 @@ describe("budget version adapter", () => {
 		expect(budgetVersionCreate).not.toHaveBeenCalled();
 	});
 
+	it("consulta a baseline concorrente somente depois do rollback da transacao", async () => {
+		budgetVersionFindFirst
+			.mockResolvedValueOnce(null)
+			.mockResolvedValueOnce({ id: "version-concurrent" });
+		transactionMock.mockImplementationOnce(async () => {
+			throw { code: "P2002" };
+		});
+
+		const { getOrCreateBaselineVersion } = await importAdapter();
+		const versionId = await getOrCreateBaselineVersion("user-1", "work-1");
+
+		expect(versionId).toBe("version-concurrent");
+		expect(budgetVersionFindFirst).toHaveBeenCalledTimes(2);
+	});
+
 	it("resolve a versao vigente no modo EFFECTIVE", async () => {
 		budgetVersionFindFirst.mockResolvedValue({ id: "version-active" });
 		const { resolveBudgetAnalysisVersion } = await importAdapter();
