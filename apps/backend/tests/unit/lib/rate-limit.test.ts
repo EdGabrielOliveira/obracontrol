@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { Elysia } from "elysia";
-import { rateLimitApi } from "../../../src/lib/rate-limit";
+import { rateLimitApi, resolveClientIp } from "../../../src/lib/rate-limit";
 
 let trustedProxy: string | undefined;
 
@@ -82,6 +82,16 @@ describe("rateLimitApi", () => {
 
 		expect(first.status).toBe(200);
 		expect(second.status).toBe(200);
+	});
+
+	it("falls back to the server IP when a trusted proxy omits its headers", () => {
+		trustedProxy = "10.0.0.1";
+		const request = new Request("http://localhost/");
+		const server = {
+			requestIP: () => ({ address: "192.0.2.10" }),
+		};
+
+		expect(resolveClientIp(request, server)).toBe("192.0.2.10");
 	});
 
 	it("returns 429 with Retry-After when the limit is exceeded", async () => {

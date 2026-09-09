@@ -72,7 +72,6 @@ COPY --chown=bun:bun apps/backend/prisma/seed.ts /app/prisma/seed.ts
 COPY --chown=bun:bun apps/backend/src /app/src
 COPY --chown=bun:bun apps/backend/scripts/convert-docx-to-pdf.py /app/scripts/convert-docx-to-pdf.py
 COPY --chown=bun:bun apps/backend/scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
-COPY --chown=bun:bun apps/backend/scripts/migrate-sqlite-to-postgres.ts /app/scripts/migrate-sqlite-to-postgres.ts
 
 RUN chmod 755 /app/docker-entrypoint.sh
 

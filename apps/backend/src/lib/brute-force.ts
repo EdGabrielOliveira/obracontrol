@@ -1,6 +1,7 @@
 import { logger } from "./logger";
 import {
 	checkLoginBruteForce,
+	clearLoginAttempts,
 	hashLoginEmail,
 	recordLoginFailure,
 } from "./password-policy";
@@ -61,7 +62,9 @@ export async function bruteForceAfter(request: Request, response: Response) {
 		const email = (body?.email as string) ?? "";
 		if (!email) return;
 
-		if (status === 401 || status === 400) {
+		if (status >= 200 && status < 300) {
+			await clearLoginAttempts(email);
+		} else if (status === 401 || status === 400) {
 			await recordLoginFailure(email);
 		}
 	} catch {

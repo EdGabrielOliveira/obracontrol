@@ -68,7 +68,9 @@ docker compose -f docker-compose.yml up -d --build
 ```
 
 O backend e o frontend sobem juntos com o Compose da raiz. O banco atual é
-SQLite persistido no volume `obracontrol_api_data`; ele não possui porta TCP.
+PostgreSQL no serviço `postgres`, persistido no volume
+`obracontrol_postgres_data`; os anexos ficam no volume
+`obracontrol_api_data`.
 
 O Compose da raiz roda o frontend pelo Vite dentro do Docker, com hot reload
 para arquivos do workspace:
@@ -80,10 +82,8 @@ bun run dev:docker
 Esse modo expõe o Vite na porta `7000`, encaminha a API para o serviço
 `backend` e ativa polling de arquivos para compatibilidade com Docker Desktop.
 
-Em produção, o frontend é publicado via Docker no Dokploy; o Nginx encaminha
-as rotas da API para o backend `obracontrol-api` na mesma rede. O backend usa
-SQLite em volume; não há origem Prisma ou banco externo configurado no
-frontend.
+Em produção, o frontend é publicado via Docker; o Nginx encaminha as rotas da
+API para o backend na mesma rede. O backend usa exclusivamente PostgreSQL.
 
 ## Comandos
 

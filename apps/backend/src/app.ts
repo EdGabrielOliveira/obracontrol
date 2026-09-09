@@ -179,7 +179,7 @@ export function createApp(options?: {
 
 			const response = await auth.handler(request);
 
-			bruteForceAfter(request, response as Response);
+			await bruteForceAfter(request, response as Response);
 			return expireLegacyAuthCookies(request, response as Response);
 		})
 		.get("/health", async ({ set }) => {

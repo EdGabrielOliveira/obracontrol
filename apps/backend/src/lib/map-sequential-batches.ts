@@ -1,7 +1,7 @@
 /**
  * Applies an operation to fixed-size batches, in order, without overlapping
- * database requests. SQLite has a low bound on bound query parameters, so
- * callers should use this for large `IN` filters.
+ * database requests. Callers should use this for large `IN` filters to keep
+ * database parameter counts and query payloads bounded.
  */
 export async function mapSequentialBatches<T, R>(
 	values: readonly T[],

@@ -103,6 +103,7 @@ export const auth = betterAuth({
 	trustedOrigins: authTrustedOrigins,
 	advanced: {
 		ipAddress: {
+			ipAddressHeaders: ["x-real-ip"],
 			// Only values explicitly configured as trusted reverse proxies may
 			// influence the client IP used by Better Auth rate limiting.
 			trustedProxies: env.TRUSTED_PROXY ?? undefined,

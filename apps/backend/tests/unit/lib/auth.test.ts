@@ -81,6 +81,12 @@ describe("auth cookie namespace", () => {
 		});
 	});
 
+	it("uses the reverse proxy client IP header for rate limiting", () => {
+		expect(auth.options.advanced?.ipAddress?.ipAddressHeaders).toEqual([
+			"x-real-ip",
+		]);
+	});
+
 	it("expires legacy cookies, including session-data chunks, without replacing the response", () => {
 		const response = expireLegacyAuthCookies(
 			new Request("http://localhost:7000/api/auth/get-session", {

@@ -98,29 +98,6 @@ services:
       postgres:
         condition: service_healthy
 
-  sqlite-import:
-    profiles: ["migration"]
-    build:
-      context: .
-      dockerfile: apps/backend/Dockerfile
-      target: production
-    environment:
-      DATABASE_URL: ${DATABASE_URL:?Defina DATABASE_URL no arquivo .env}
-      RUN_DATABASE_MIGRATIONS: "true"
-      WORKSPACE_BACKFILL_ON_BOOT: "false"
-      SQLITE_PATH: /legacy-data/obracontrol.db
-    volumes:
-      - obracontrol_api_data:/legacy-data:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    init: true
-    command: ["bun", "/app/scripts/migrate-sqlite-to-postgres.ts"]
-
   frontend:
     build:
       context: .

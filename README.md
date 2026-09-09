@@ -98,30 +98,19 @@ git pull --ff-only origin main
 docker compose up -d --build
 ```
 
-Na primeira publicação desta versão, faça a conversão do banco SQLite legado
-antes de liberar o domínio:
-
-```bash
-bash ops/migrate-sqlite-to-postgres.sh
-docker compose ps
-docker compose logs --tail=200 backend postgres
-```
-
-Depois da conversão, as atualizações normais continuam exatamente no fluxo
-existente. O backend aplica automaticamente as migrations pendentes com
+As atualizações usam exclusivamente PostgreSQL. O backend aplica automaticamente as migrations pendentes com
 `prisma migrate deploy`.
 
 O script `ops/update-vps.sh` automatiza o `git pull` e o deploy normal, exige
 que a VPS esteja na branch `main` com working tree limpo e cria o backup antes
-de subir os containers. A conversão SQLite é uma operação única e explícita;
-para reconstruir sem atualizar o Git, use `bash ops/deploy.sh`.
+de subir os containers. Para reconstruir sem atualizar o Git, use
+`bash ops/deploy.sh`.
 
 Comandos de operação:
 
 ```bash
 docker compose ps
 docker compose logs -f --tail=200
-bash ops/backup-sqlite.sh
 bash ops/backup-postgres.sh
 docker compose down
 ```

@@ -132,6 +132,19 @@ describe("brute-force guard (integracao)", () => {
 		expect(await checkLoginBruteForce(email)).toBe(true);
 	});
 
+	test("login bem-sucedido limpa falhas anteriores do email", async () => {
+		const email = "recuperado@exemplo.com";
+		for (let i = 0; i < 4; i++) await recordLoginFailure(email);
+
+		await bruteForceAfter(
+			loginRequest(email),
+			new Response("ok", { status: 200 }),
+		);
+
+		for (let i = 0; i < 4; i++) await recordLoginFailure(email);
+		expect(await checkLoginBruteForce(email)).toBe(true);
+	});
+
 	test("metodo nao-POST ou rota fora de auth nao e bloqueada", async () => {
 		expect(
 			await bruteForceGuard(

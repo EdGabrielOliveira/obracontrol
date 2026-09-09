@@ -100,7 +100,7 @@ function makeDatabase(itemCount: number) {
 	return { database, items, calls };
 }
 
-describe("budget control SQLite batching", () => {
+describe("budget control database batching", () => {
 	it("resolves more than 1,000 references in sequential batches", async () => {
 		const { database, items, calls } = makeDatabase(1_001);
 		const result = await getBudgetItemReferences(

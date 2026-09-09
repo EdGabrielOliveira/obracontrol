@@ -7,7 +7,6 @@ compose_file="${COMPOSE_FILE:-$repo_dir/docker-compose.yml}"
 cd "$repo_dir"
 docker compose -f "$compose_file" config --quiet
 
-bash "$repo_dir/ops/backup-sqlite.sh"
 bash "$repo_dir/ops/backup-postgres.sh"
 docker compose -f "$compose_file" up -d --build --remove-orphans
 docker compose -f "$compose_file" ps

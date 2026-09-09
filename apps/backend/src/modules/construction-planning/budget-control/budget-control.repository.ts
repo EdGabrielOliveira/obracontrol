@@ -16,7 +16,7 @@ export type BudgetImpactKey = {
 };
 
 const IMPACT_STATUS_PENDING = "PENDING";
-const SQLITE_BATCH_SIZE = 200;
+const BATCH_SIZE = 200;
 
 export async function getBudgetItemReferences(
 	ownerId: string,
@@ -37,7 +37,7 @@ export async function getBudgetItemReferences(
 	if (!version) {
 		const operationalIds = new Set(
 			(
-				await mapSequentialBatches(ids, SQLITE_BATCH_SIZE, (chunk) =>
+				await mapSequentialBatches(ids, BATCH_SIZE, (chunk) =>
 					db.constructionBudgetItem.findMany({
 						where: { id: { in: chunk }, ownerId, workId },
 						select: { id: true },
@@ -53,123 +53,118 @@ export async function getBudgetItemReferences(
 		};
 	}
 
-	const chunks = await mapSequentialBatches(
-		ids,
-		SQLITE_BATCH_SIZE,
-		async (chunk) => {
-			const items = await db.constructionBudgetItem.findMany({
-				where: { id: { in: chunk }, ownerId, workId },
-				select: { id: true, index: true },
-			});
-			const indexes = items.map((item) => item.index).filter(Boolean);
-			const scopedIdentities = indexes.length
-				? await db.budgetItemIdentity.findMany({
-						where: { workId, index: { in: indexes }, ownerId },
-						select: { id: true, index: true },
-					})
-				: [];
-			const versionItems = await db.budgetVersionItem.findMany({
-				where: {
-					versionId: version.id,
-					OR: [
-						{ id: { in: chunk } },
-						{ identityId: { in: scopedIdentities.map((i) => i.id) } },
-					],
-				},
-				select: {
-					id: true,
-					index: true,
-					identityId: true,
-					quantity: true,
-					unitCost: true,
-				},
-			});
-			const operationalCandidates = await db.constructionBudgetItem.findMany({
-				where: {
-					ownerId,
-					workId,
-					...(work?.activeImportId ? { importId: work.activeImportId } : {}),
-					OR: [
-						{ id: { in: chunk } },
-						...(versionItems.length > 0
-							? [
-									{
-										identityId: {
-											in: versionItems.map((item) => item.identityId),
-										},
+	const chunks = await mapSequentialBatches(ids, BATCH_SIZE, async (chunk) => {
+		const items = await db.constructionBudgetItem.findMany({
+			where: { id: { in: chunk }, ownerId, workId },
+			select: { id: true, index: true },
+		});
+		const indexes = items.map((item) => item.index).filter(Boolean);
+		const scopedIdentities = indexes.length
+			? await db.budgetItemIdentity.findMany({
+					where: { workId, index: { in: indexes }, ownerId },
+					select: { id: true, index: true },
+				})
+			: [];
+		const versionItems = await db.budgetVersionItem.findMany({
+			where: {
+				versionId: version.id,
+				OR: [
+					{ id: { in: chunk } },
+					{ identityId: { in: scopedIdentities.map((i) => i.id) } },
+				],
+			},
+			select: {
+				id: true,
+				index: true,
+				identityId: true,
+				quantity: true,
+				unitCost: true,
+			},
+		});
+		const operationalCandidates = await db.constructionBudgetItem.findMany({
+			where: {
+				ownerId,
+				workId,
+				...(work?.activeImportId ? { importId: work.activeImportId } : {}),
+				OR: [
+					{ id: { in: chunk } },
+					...(versionItems.length > 0
+						? [
+								{
+									identityId: {
+										in: versionItems.map((item) => item.identityId),
 									},
-									{ index: { in: versionItems.map((item) => item.index) } },
-								]
-							: []),
-					],
-				},
-				select: { id: true, index: true, identityId: true },
+								},
+								{ index: { in: versionItems.map((item) => item.index) } },
+							]
+						: []),
+				],
+			},
+			select: { id: true, index: true, identityId: true },
+		});
+		const operationalByIdentity = new Map(
+			operationalCandidates
+				.filter((item) => item.identityId)
+				.map((item) => [item.identityId as string, item.id]),
+		);
+		const operationalByIndex = new Map(
+			operationalCandidates.map((item) => [item.index, item.id]),
+		);
+		const operationalById = new Map(
+			operationalCandidates.map((item) => [item.id, item.id]),
+		);
+		const versionItemById = new Map(
+			versionItems.map((item) => [item.id, item]),
+		);
+		const versionItemByIdentity = new Map(
+			versionItems.map((item) => [item.identityId, item]),
+		);
+		const identityByIndex = new Map(
+			scopedIdentities.map((identity) => [identity.index, identity]),
+		);
+		const found = new Map<string, BudgetItemReferenceRow>();
+		for (const id of chunk) {
+			const versionItem = versionItemById.get(id);
+			if (!versionItem) continue;
+			found.set(id, {
+				budgetItemId: id,
+				operationalBudgetItemId:
+					operationalByIdentity.get(versionItem.identityId) ??
+					operationalByIndex.get(versionItem.index) ??
+					null,
+				index: versionItem.index,
+				identityId: versionItem.identityId,
+				versionItemId: versionItem.id,
+				quantity: versionItem.quantity,
+				unitCost: versionItem.unitCost,
 			});
-			const operationalByIdentity = new Map(
-				operationalCandidates
-					.filter((item) => item.identityId)
-					.map((item) => [item.identityId as string, item.id]),
-			);
-			const operationalByIndex = new Map(
-				operationalCandidates.map((item) => [item.index, item.id]),
-			);
-			const operationalById = new Map(
-				operationalCandidates.map((item) => [item.id, item.id]),
-			);
-			const versionItemById = new Map(
-				versionItems.map((item) => [item.id, item]),
-			);
-			const versionItemByIdentity = new Map(
-				versionItems.map((item) => [item.identityId, item]),
-			);
-			const identityByIndex = new Map(
-				scopedIdentities.map((identity) => [identity.index, identity]),
-			);
-			const found = new Map<string, BudgetItemReferenceRow>();
-			for (const id of chunk) {
-				const versionItem = versionItemById.get(id);
-				if (!versionItem) continue;
-				found.set(id, {
-					budgetItemId: id,
-					operationalBudgetItemId:
-						operationalByIdentity.get(versionItem.identityId) ??
-						operationalByIndex.get(versionItem.index) ??
-						null,
-					index: versionItem.index,
-					identityId: versionItem.identityId,
-					versionItemId: versionItem.id,
-					quantity: versionItem.quantity,
-					unitCost: versionItem.unitCost,
-				});
-			}
-			for (const item of items) {
-				if (versionItemById.has(item.id)) continue;
-				const identity = identityByIndex.get(item.index);
-				const versionItem = identity
-					? versionItemByIdentity.get(identity.id)
-					: undefined;
-				if (!identity || !versionItem) continue;
-				found.set(item.id, {
-					budgetItemId: item.id,
-					operationalBudgetItemId: operationalById.get(item.id) ?? item.id,
-					index: item.index,
-					identityId: identity.id,
-					versionItemId: versionItem.id,
-					quantity: versionItem.quantity,
-					unitCost: versionItem.unitCost,
-				});
-			}
-			const foundVersionItemIds = new Set(versionItems.map((item) => item.id));
-			return {
-				found,
-				missing: chunk.filter(
-					(id) =>
-						!items.some((item) => item.id === id) &&
-						!foundVersionItemIds.has(id),
-				),
-			};
-		},
-	);
+		}
+		for (const item of items) {
+			if (versionItemById.has(item.id)) continue;
+			const identity = identityByIndex.get(item.index);
+			const versionItem = identity
+				? versionItemByIdentity.get(identity.id)
+				: undefined;
+			if (!identity || !versionItem) continue;
+			found.set(item.id, {
+				budgetItemId: item.id,
+				operationalBudgetItemId: operationalById.get(item.id) ?? item.id,
+				index: item.index,
+				identityId: identity.id,
+				versionItemId: versionItem.id,
+				quantity: versionItem.quantity,
+				unitCost: versionItem.unitCost,
+			});
+		}
+		const foundVersionItemIds = new Set(versionItems.map((item) => item.id));
+		return {
+			found,
+			missing: chunk.filter(
+				(id) =>
+					!items.some((item) => item.id === id) && !foundVersionItemIds.has(id),
+			),
+		};
+	});
 	const foundById = new Map(
 		chunks.flatMap((chunk) => [...chunk.found.entries()]),
 	);
@@ -192,7 +187,7 @@ export async function getBalanceRows(
 	const db = tx ?? prisma;
 	const result = await mapSequentialBatches(
 		references,
-		SQLITE_BATCH_SIZE,
+		BATCH_SIZE,
 		async (batch) => {
 			const identityIds = [...new Set(batch.map((ref) => ref.identityId))];
 			const [ledgerRows, pendingRows] = await Promise.all([

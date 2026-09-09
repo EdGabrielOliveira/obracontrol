@@ -21,7 +21,7 @@ function resolveStore(): Promise<RateLimitStore> {
 	return Promise.resolve(store);
 }
 
-function clientIp(
+export function resolveClientIp(
 	request: Request,
 	server: { requestIP(request: Request): { address: string } | null } | null,
 ): string | null {
@@ -33,14 +33,18 @@ function clientIp(
 		return server?.requestIP(request)?.address ?? null;
 	}
 
+	const realIp = request.headers.get("x-real-ip");
+	if (realIp) return realIp.trim();
 	const forwarded = request.headers.get("x-forwarded-for");
 	if (forwarded) {
 		const first = forwarded.split(",")[0]?.trim();
 		if (first) return first;
 	}
-	const realIp = request.headers.get("x-real-ip");
-	if (realIp) return realIp.trim();
-	return null;
+	// A configured proxy is not guaranteed to add the headers on every
+	// request (local development and health checks are common examples).
+	// Keep the server-observed address as a safe fallback instead of merging
+	// unrelated clients into the shared "anonymous" bucket.
+	return server?.requestIP(request)?.address ?? null;
 }
 
 export function rateLimitApi(options: RateLimitOptions) {
@@ -57,7 +61,7 @@ export function rateLimitApi(options: RateLimitOptions) {
 			const clientId =
 				user?.id ??
 				requestContext.getUserId() ??
-				clientIp(request, server) ??
+				resolveClientIp(request, server) ??
 				"anonymous";
 
 			const result = await (await resolveStore()).check(scopeKey, clientId, {
