@@ -601,7 +601,16 @@ export class ConstructionManualEntryService {
 					tx,
 				);
 			}
-			return this.repository.deleteCost(ownerId, workId, costId, tx);
+			const deleted = await this.repository.deleteCost(
+				ownerId,
+				workId,
+				costId,
+				tx,
+			);
+			if (!deleted) {
+				throw new ConstructionError("NOT_FOUND", "Custo nao encontrado", 404);
+			}
+			return cost;
 		});
 	}
 

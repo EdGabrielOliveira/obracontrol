@@ -317,12 +317,7 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 	.delete(
 		"/:workId/costs/:id",
 		async ({ params, user, scope }) => {
-			const old = await constructionManualEntryService.getCost(
-				scope.resourceOwnerId,
-				params.workId,
-				params.id,
-			);
-			await constructionManualEntryService.deleteCost(
+			const old = await constructionManualEntryService.deleteCost(
 				scope.resourceOwnerId,
 				params.workId,
 				params.id,
