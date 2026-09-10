@@ -574,6 +574,7 @@ export class ConstructionImportService {
 				scheduleRevisions: resolved.acceptedRevisions,
 				measurements: resolved.acceptedMeasurements,
 				actualCosts: resolved.acceptedActualCosts,
+				title: options.title ?? null,
 				measurementsAsWorkMeasurements: kind === "medicao-obra",
 				rowCount: resolved.importedCount,
 				reprocessOfId: options.reprocessOfId ?? null,

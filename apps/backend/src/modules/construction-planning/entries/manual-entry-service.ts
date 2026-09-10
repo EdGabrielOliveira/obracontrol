@@ -2,22 +2,13 @@ import type { Prisma } from "@prisma/client";
 import Decimal from "decimal.js";
 import { ConstructionError } from "../../../lib/errors";
 import { prisma } from "../../../lib/prisma";
-import { resolveResourceScope } from "../../../lib/resource-scope";
 import { withSerializableRetry } from "../../../lib/transaction-retry";
 import { normalizeCostAllocations } from "../budget-control/budget-control.calculator";
-import { findActiveImpactsBySource } from "../budget-control/budget-control.repository";
 import { budgetControlService } from "../budget-control/budget-control.service";
 import {
 	constructionGovernanceGuard,
 	type GovernanceMutationGuard,
 } from "../governance-guard";
-import {
-	buildGeneralCostEvents,
-	competenceOf,
-	GENERAL_COST_SOURCE_TYPE,
-	resolveLedgerItemRef,
-} from "../ledger/ledger.integration";
-import { appendLedgerEvent } from "../ledger/ledger.service";
 import type * as constructionRepository from "../repository";
 import * as constructionRepositoryModule from "../repository";
 import type {
@@ -26,8 +17,15 @@ import type {
 	CreateMeasurementInput,
 	ImportActualCostRow,
 	UpdateActualCostInput,
+	UpdateCostInput,
 } from "../schema";
 import { normalizeWorkOperationalStatus } from "../works/work-operational-status";
+import {
+	applyGeneralCostImpact,
+	assertSourceDocumentUnique,
+	emitGeneralCostEvents,
+	revokeGeneralCostImpacts,
+} from "./cost-effects";
 
 function assertFutureCostPaymentStatus(
 	costType: string | undefined,
@@ -71,6 +69,7 @@ type ManualEntryRepository = Pick<
 	| "listCosts"
 	| "getActualCostById"
 	| "getCostById"
+	| "updateCostTitle"
 	| "updateActualCost"
 	| "deleteActualCost"
 	| "deleteCost"
@@ -162,6 +161,87 @@ export class ConstructionManualEntryService {
 				},
 			],
 		};
+	}
+
+	private async normalizeCostItems(
+		ownerId: string,
+		workId: string,
+		items: CreateCostInput["items"],
+	) {
+		return Promise.all(
+			items.map(async (item) => {
+				assertFutureCostPaymentStatus(item.costType, item.paymentStatus);
+				assertOtherCategoryDetail(item.category, item.categoryDetail);
+				if (!item.description?.trim()) {
+					throw new ConstructionError(
+						"INVALID_INPUT",
+						"Descricao do item de custo obrigatoria",
+						422,
+					);
+				}
+				const effective = await this.normalizeCostItem(ownerId, workId, item);
+				if (effective.supplierId) {
+					await this.supplierScope.assertLinkedToWork(
+						ownerId,
+						workId,
+						effective.supplierId,
+					);
+				}
+				return {
+					input: effective,
+					normalized: normalizeCostAllocations(
+						new Decimal(effective.amount),
+						effective.allocations,
+					),
+				};
+			}),
+		);
+	}
+
+	private async persistCostItems(
+		ownerId: string,
+		workId: string,
+		importId: string | null,
+		costId: string,
+		normalizedItems: Awaited<ReturnType<typeof this.normalizeCostItems>>,
+		tx: Prisma.TransactionClient,
+	) {
+		for (const item of normalizedItems) {
+			if (item.input.sourceDocument) {
+				await assertSourceDocumentUnique(
+					ownerId,
+					workId,
+					item.input.sourceDocument,
+					tx,
+				);
+			}
+			const createdItem = await this.repository.createActualCost(
+				ownerId,
+				workId,
+				importId,
+				item.input,
+				tx,
+				item.normalized,
+				costId,
+			);
+			await applyGeneralCostImpact(
+				this.budgetControl,
+				ownerId,
+				workId,
+				createdItem.id,
+				item.input,
+				item.normalized,
+				tx,
+			);
+			await emitGeneralCostEvents(
+				ownerId,
+				workId,
+				createdItem,
+				tx,
+				createdItem.id,
+				item.normalized,
+			);
+		}
 	}
 
 	async createMeasurement(
@@ -265,7 +345,7 @@ export class ConstructionManualEntryService {
 		);
 		const created = await withSerializableRetry(async (tx) => {
 			if (effectiveInput.sourceDocument) {
-				await this.assertSourceDocumentUnique(
+				await assertSourceDocumentUnique(
 					ownerId,
 					workId,
 					effectiveInput.sourceDocument,
@@ -280,7 +360,8 @@ export class ConstructionManualEntryService {
 				tx,
 				normalized,
 			);
-			await this.applyGeneralCostImpact(
+			await applyGeneralCostImpact(
+				this.budgetControl,
 				ownerId,
 				workId,
 				created.id,
@@ -288,12 +369,13 @@ export class ConstructionManualEntryService {
 				normalized,
 				tx,
 			);
-			await this.emitGeneralCostEvents(
+			await emitGeneralCostEvents(
 				ownerId,
 				workId,
 				created,
 				tx,
-				effectiveInput.allocations?.[0]?.budgetItemId ?? null,
+				created.id,
+				normalized,
 			);
 			return created;
 		});
@@ -320,105 +402,6 @@ export class ConstructionManualEntryService {
 		return created;
 	}
 
-	private async applyGeneralCostImpact(
-		ownerId: string,
-		workId: string,
-		sourceId: string,
-		input: {
-			amount: number;
-			costDate: string;
-			allocations: CreateActualCostInput["allocations"];
-		},
-		normalized: ReturnType<typeof normalizeCostAllocations>,
-		tx: Prisma.TransactionClient,
-	) {
-		const occurredAt = new Date(input.costDate);
-		await this.budgetControl.apply(
-			ownerId,
-			workId,
-			{
-				workId,
-				allocations: normalized.map((row) => ({
-					budgetItemId: row.budgetItemId,
-					amount: Number(row.value),
-				})),
-				impactType: "CONSUMPTION",
-				sourceType: GENERAL_COST_SOURCE_TYPE,
-				sourceId,
-				competence: competenceOf(occurredAt),
-				occurredAt,
-			},
-			{ userId: ownerId },
-			tx,
-		);
-	}
-
-	private async assertSourceDocumentUnique(
-		ownerId: string,
-		workId: string,
-		sourceDocument: string,
-		tx: Prisma.TransactionClient,
-	) {
-		const [dupCost, dupPayment] = await Promise.all([
-			tx.constructionActualCost.findFirst({
-				where: { ownerId, workId, sourceDocument },
-				select: { id: true },
-			}),
-			tx.contractPayment.findFirst({
-				where: {
-					description: sourceDocument,
-					contract: { ownerId, workId },
-				},
-				select: { id: true },
-			}),
-		]);
-		if (dupCost || dupPayment) {
-			throw new ConstructionError(
-				"DUPLICATE_CONTRACT_ORIGIN",
-				"Ja existe custo manual ou pagamento de contrato com este documento de origem",
-				422,
-			);
-		}
-	}
-
-	private async emitGeneralCostEvents(
-		ownerId: string,
-		workId: string,
-		created: {
-			id: string;
-			costDate: Date | null;
-			amount: Prisma.Decimal;
-			paymentStatus: string;
-		},
-		tx: Prisma.TransactionClient,
-		firstAllocationBudgetItemId: string | null,
-	) {
-		const occurredAt = created.costDate ?? new Date();
-		const ref = firstAllocationBudgetItemId
-			? await resolveLedgerItemRef(ownerId, workId, firstAllocationBudgetItemId)
-			: null;
-		if (!ref) return;
-		const base = {
-			scope: await resolveResourceScope(ownerId, { workId }),
-			workId,
-			budgetItemIdentityId: ref.identityId,
-			budgetVersionItemId: ref.versionItemId,
-			sourceType: GENERAL_COST_SOURCE_TYPE,
-			sourceId: created.id,
-			competence: competenceOf(occurredAt),
-			occurredAt,
-			approvalDecisionId: null,
-		};
-		for (const event of buildGeneralCostEvents(
-			base,
-			new Decimal(created.amount),
-			created.paymentStatus === "PAID",
-		)) {
-			if (event.eventType === "INCURRED_CREATE") continue;
-			await appendLedgerEvent(event, tx);
-		}
-	}
-
 	async importActualCosts(
 		ownerId: string,
 		workId: string,
@@ -438,33 +421,10 @@ export class ConstructionManualEntryService {
 	) {
 		await this.getWorkOrThrow(ownerId, workId);
 		await this.assertWritable(ownerId, workId, "WORK_COSTS");
-		const normalizedItems = await Promise.all(
-			input.items.map(async (item) => {
-				assertFutureCostPaymentStatus(item.costType, item.paymentStatus);
-				assertOtherCategoryDetail(item.category, item.categoryDetail);
-				if (!item.description?.trim()) {
-					throw new ConstructionError(
-						"INVALID_INPUT",
-						"Descricao do item de custo obrigatoria",
-						422,
-					);
-				}
-				const effective = await this.normalizeCostItem(ownerId, workId, item);
-				if (effective.supplierId) {
-					await this.supplierScope.assertLinkedToWork(
-						ownerId,
-						workId,
-						effective.supplierId,
-					);
-				}
-				return {
-					input: effective,
-					normalized: normalizeCostAllocations(
-						new Decimal(effective.amount),
-						effective.allocations,
-					),
-				};
-			}),
+		const normalizedItems = await this.normalizeCostItems(
+			ownerId,
+			workId,
+			input.items,
 		);
 
 		const created = await withSerializableRetry(async (tx) => {
@@ -475,40 +435,14 @@ export class ConstructionManualEntryService {
 				null,
 				tx,
 			);
-			for (const item of normalizedItems) {
-				if (item.input.sourceDocument) {
-					await this.assertSourceDocumentUnique(
-						ownerId,
-						workId,
-						item.input.sourceDocument,
-						tx,
-					);
-				}
-				const createdItem = await this.repository.createActualCost(
-					ownerId,
-					workId,
-					null,
-					item.input,
-					tx,
-					item.normalized,
-					cost.id,
-				);
-				await this.applyGeneralCostImpact(
-					ownerId,
-					workId,
-					createdItem.id,
-					item.input,
-					item.normalized,
-					tx,
-				);
-				await this.emitGeneralCostEvents(
-					ownerId,
-					workId,
-					createdItem,
-					tx,
-					item.input.allocations?.[0]?.budgetItemId ?? null,
-				);
-			}
+			await this.persistCostItems(
+				ownerId,
+				workId,
+				null,
+				cost.id,
+				normalizedItems,
+				tx,
+			);
 			return this.repository.getCostById(ownerId, workId, cost.id, tx);
 		});
 		if (!created) {
@@ -538,6 +472,103 @@ export class ConstructionManualEntryService {
 		return created;
 	}
 
+	async updateCost(
+		ownerId: string,
+		workId: string,
+		costId: string,
+		input: UpdateCostInput,
+		ctx?: { userId: string },
+	) {
+		await this.getWorkOrThrow(ownerId, workId);
+		await this.assertWritable(ownerId, workId, "WORK_COSTS");
+		const current = await this.getCost(ownerId, workId, costId);
+		for (const item of current.items) {
+			await this.governance.assertWritable(ownerId, "COST_STATUS", item.id);
+		}
+		const normalizedItems = await this.normalizeCostItems(
+			ownerId,
+			workId,
+			input.items,
+		);
+		const previousItemsByVersionId = new Map(
+			current.items
+				.filter((item) => item.budgetVersionItem?.id)
+				.map((item) => [item.budgetVersionItem?.id, item]),
+		);
+		for (const item of normalizedItems) {
+			const previous = previousItemsByVersionId.get(
+				item.input.budgetVersionItemId,
+			);
+			if (!previous) continue;
+			item.input.sourceDocument ??= previous.sourceDocument ?? undefined;
+			item.input.costGroup ??= previous.costGroup ?? undefined;
+			if (item.input.supplierId === previous.supplierId) {
+				item.input.supplierName ??= previous.supplierName ?? undefined;
+			}
+		}
+
+		const updated = await withSerializableRetry(async (tx) => {
+			for (const item of current.items) {
+				await revokeGeneralCostImpacts(
+					this.budgetControl,
+					ownerId,
+					workId,
+					item.id,
+					tx,
+				);
+				await this.repository.deleteActualCost(ownerId, workId, item.id, tx);
+			}
+			const cost = await this.repository.updateCostTitle(
+				ownerId,
+				workId,
+				costId,
+				input.title,
+				tx,
+			);
+			if (!cost) {
+				throw new ConstructionError("NOT_FOUND", "Custo nao encontrado", 404);
+			}
+			await this.persistCostItems(
+				ownerId,
+				workId,
+				current.importId,
+				costId,
+				normalizedItems,
+				tx,
+			);
+			return this.repository.getCostById(ownerId, workId, costId, tx);
+		});
+		if (!updated) {
+			throw new ConstructionError(
+				"INTERNAL_ERROR",
+				"Custo nao atualizado",
+				500,
+			);
+		}
+
+		if (ctx) {
+			const { submitApproval } = await import(
+				"../../governance/approval.service"
+			);
+			for (const item of updated.items) {
+				await submitApproval({
+					actorId: ctx.userId,
+					resourceType: "ACTUAL_COST",
+					resourceId: item.id,
+					effectAction: "COST_APPROVE",
+					payload: {
+						workId,
+						actualCostId: item.id,
+						description: item.description ?? null,
+					},
+					expectedVersion: 1,
+					idempotencyKey: `actual-cost-revision-${item.id}`,
+				});
+			}
+		}
+		return updated;
+	}
+
 	listCosts(
 		ownerId: string,
 		workId: string,
@@ -562,7 +593,13 @@ export class ConstructionManualEntryService {
 		}
 		return withSerializableRetry(async (tx) => {
 			for (const item of cost.items) {
-				await this.revokeGeneralCostImpacts(ownerId, workId, item.id, tx);
+				await revokeGeneralCostImpacts(
+					this.budgetControl,
+					ownerId,
+					workId,
+					item.id,
+					tx,
+				);
 			}
 			return this.repository.deleteCost(ownerId, workId, costId, tx);
 		});
@@ -627,7 +664,11 @@ export class ConstructionManualEntryService {
 		const financialChange =
 			input.amount !== undefined ||
 			input.allocations !== undefined ||
-			input.budgetIndex !== undefined;
+			input.budgetIndex !== undefined ||
+			input.budgetVersionItemId !== undefined ||
+			input.costDate !== undefined ||
+			input.costType !== undefined ||
+			input.paymentStatus !== undefined;
 		return withSerializableRetry(async (tx) => {
 			const existing = await this.repository.getActualCostById(
 				ownerId,
@@ -646,6 +687,29 @@ export class ConstructionManualEntryService {
 				input.category ?? existing.category,
 				input.categoryDetail ?? existing.categoryDetail ?? undefined,
 			);
+			if (
+				input.budgetVersionItemId !== undefined &&
+				input.budgetVersionItemId !== existing.budgetVersionItemId &&
+				input.allocations === undefined
+			) {
+				throw new ConstructionError(
+					"BUDGET_ITEM_REQUIRED",
+					"Ao alterar o item do orçamento, informe a nova alocação",
+					422,
+				);
+			}
+			if (
+				input.sourceDocument !== undefined &&
+				input.sourceDocument !== existing.sourceDocument
+			) {
+				await assertSourceDocumentUnique(
+					ownerId,
+					workId,
+					input.sourceDocument,
+					tx,
+					costId,
+				);
+			}
 			const finalAmount = new Decimal(input.amount ?? Number(existing.amount));
 			const normalized = this.normalizeUpdateAllocations(
 				finalAmount,
@@ -653,7 +717,13 @@ export class ConstructionManualEntryService {
 				existing,
 			);
 			if (financialChange) {
-				await this.revokeGeneralCostImpacts(ownerId, workId, costId, tx);
+				await revokeGeneralCostImpacts(
+					this.budgetControl,
+					ownerId,
+					workId,
+					costId,
+					tx,
+				);
 			}
 			const updated = await this.repository.updateActualCost(
 				ownerId,
@@ -666,14 +736,27 @@ export class ConstructionManualEntryService {
 			if (!updated) {
 				throw new ConstructionError("NOT_FOUND", "Custo nao encontrado", 404);
 			}
-			if (financialChange) {
-				await this.replanGeneralCost(
+			if (financialChange && normalized) {
+				const effectSourceId = `${costId}#${crypto.randomUUID()}`;
+				await applyGeneralCostImpact(
+					this.budgetControl,
 					ownerId,
 					workId,
-					costId,
-					updated,
+					effectSourceId,
+					{
+						amount: updated.amount,
+						costDate: updated.costDate,
+					},
 					normalized,
 					tx,
+				);
+				await emitGeneralCostEvents(
+					ownerId,
+					workId,
+					updated,
+					tx,
+					effectSourceId,
+					normalized,
 				);
 			}
 			if (rejectedApproval && ctx) {
@@ -712,10 +795,7 @@ export class ConstructionManualEntryService {
 		if (input.allocations !== undefined && input.allocations.length > 0) {
 			return normalizeCostAllocations(finalAmount, input.allocations);
 		}
-		if (
-			input.amount !== undefined &&
-			(existing?.allocations ?? []).length > 0
-		) {
+		if ((existing?.allocations ?? []).length > 0) {
 			const oldAmount = Number(existing?.amount ?? 1);
 			const scaled = existing?.allocations?.map((allocation) =>
 				allocation.percentage !== null
@@ -725,13 +805,13 @@ export class ConstructionManualEntryService {
 						}
 					: {
 							budgetItemId: allocation.budgetItemId,
-							percentage: Math.round(
-								((Number(allocation.value ?? 0) /
-									(oldAmount !== 0 ? oldAmount : 1)) *
-									100 *
-									100) /
-									100,
-							),
+							percentage:
+								Math.round(
+									(Number(allocation.value ?? 0) /
+										(oldAmount !== 0 ? oldAmount : 1)) *
+										100 *
+										100,
+								) / 100,
 						},
 			);
 			if (scaled && scaled.length > 0) {
@@ -739,70 +819,6 @@ export class ConstructionManualEntryService {
 			}
 		}
 		return undefined;
-	}
-
-	private async revokeGeneralCostImpacts(
-		ownerId: string,
-		workId: string,
-		costId: string,
-		tx: Prisma.TransactionClient,
-	) {
-		const impacts = await findActiveImpactsBySource(
-			tx,
-			ownerId,
-			workId,
-			GENERAL_COST_SOURCE_TYPE,
-			costId,
-		);
-		for (const impact of impacts) {
-			if (impact.status === "APPROVED") {
-				await this.budgetControl.reverse(
-					ownerId,
-					impact.id,
-					{ userId: ownerId },
-					tx,
-				);
-			} else {
-				await this.budgetControl.reject(
-					ownerId,
-					impact.id,
-					{ userId: ownerId },
-					tx,
-				);
-			}
-		}
-	}
-
-	private async replanGeneralCost(
-		ownerId: string,
-		workId: string,
-		costId: string,
-		updated: Awaited<
-			ReturnType<typeof constructionRepositoryModule.updateActualCost>
-		>,
-		normalized: ReturnType<typeof normalizeCostAllocations> | undefined,
-		tx: Prisma.TransactionClient,
-	) {
-		if (!updated || !normalized) return;
-		const occurredAt = new Date(updated.costDate ?? new Date());
-		await this.budgetControl.apply(
-			ownerId,
-			workId,
-			{
-				workId,
-				allocations: normalized.map((row) => ({
-					budgetItemId: row.budgetItemId,
-					amount: Number(row.value),
-				})),
-				impactType: "CONSUMPTION",
-				sourceType: GENERAL_COST_SOURCE_TYPE,
-				sourceId: costId,
-				competence: competenceOf(occurredAt),
-				occurredAt,
-			},
-			{ userId: ownerId },
-			tx,
-		);
 	}
 
 	async deleteActualCost(ownerId: string, workId: string, costId: string) {
@@ -818,7 +834,13 @@ export class ConstructionManualEntryService {
 			if (!existing) {
 				throw new ConstructionError("NOT_FOUND", "Custo nao encontrado", 404);
 			}
-			await this.revokeGeneralCostImpacts(ownerId, workId, costId, tx);
+			await revokeGeneralCostImpacts(
+				this.budgetControl,
+				ownerId,
+				workId,
+				costId,
+				tx,
+			);
 			const result = await this.repository.deleteActualCost(
 				ownerId,
 				workId,

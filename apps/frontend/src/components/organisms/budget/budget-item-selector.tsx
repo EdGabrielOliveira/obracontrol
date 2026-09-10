@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Search, X } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronRight,
+	ChevronsDownUp,
+	ChevronsUpDown,
+	Search,
+	SlidersHorizontal,
+	X,
+} from "lucide-react";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
 import { getCurrentCostBudgetItems } from "@/api/budget";
 import { workKeys } from "@/api/query-keys";
@@ -7,6 +16,7 @@ import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { BudgetTreeItem } from "@/types/budget";
 import type { CostBudgetItemSelectorResponse } from "@/types/measurements";
 import { formatCurrency, formatQuantity } from "@/utils/format";
@@ -25,16 +35,44 @@ export type FlatBudgetNode = BudgetTreeItem & {
 	parentIds: string[];
 };
 
+export type BudgetItemSelectorFilter = {
+	id: string;
+	label: string;
+	predicate: (item: FlatBudgetNode) => boolean;
+};
+
+export type BudgetItemSelectorItemContext = {
+	item: FlatBudgetNode;
+	selected: boolean;
+	disabled: boolean;
+	selection?: BudgetItemSelection;
+	availableQuantity: number | null;
+	toggle: () => void;
+};
+
+export type BudgetItemSelectorColumn = {
+	key: string;
+	label: string;
+	headerClassName?: string;
+	cellClassName?: string;
+	render: (context: BudgetItemSelectorItemContext) => ReactNode;
+};
+
 export interface BudgetItemSelectorProps {
-	workId: string;
+	workId?: string;
 	selectedItems: BudgetItemSelection[];
 	onChange: (items: BudgetItemSelection[]) => void;
 	budgetItems?: BudgetTreeItem[];
-
 	effectiveBudgetItems?: CostBudgetItemSelectorResponse;
 	disabled?: boolean;
 	disabledItemIds?: ReadonlySet<string>;
 	availableQuantities?: Record<string, number>;
+	selectionMode?: "multiple" | "single" | "browse";
+	columns?: BudgetItemSelectorColumn[];
+	columnsGridClassName?: string;
+	itemSearchText?: (item: BudgetTreeItem) => string;
+	filters?: BudgetItemSelectorFilter[];
+	showQuantity?: boolean;
 	showUnitPrice?: boolean;
 	editableUnitPrice?: boolean;
 	quantityLabel?: string;
@@ -42,6 +80,18 @@ export interface BudgetItemSelectorProps {
 	percentageLabel?: string;
 	title?: string;
 	description?: string;
+	hideTitle?: boolean;
+	className?: string;
+	emptyMessage?: string;
+	onItemClick?: (item: FlatBudgetNode) => void;
+	renderItem?: (context: BudgetItemSelectorItemContext) => ReactNode;
+	renderSelectedItemDetails?: (
+		context: BudgetItemSelectorItemContext & { selectionIndex: number },
+	) => ReactNode;
+	renderFooter?: (context: {
+		filteredItems: FlatBudgetNode[];
+		allItems: FlatBudgetNode[];
+	}) => ReactNode;
 }
 
 export function effectiveItemsToTree(
@@ -93,6 +143,7 @@ export function effectiveItemsToTree(
 			stages.set(option.stage.displayIndex, stage);
 			roots.push(stage);
 		}
+		item.parentId = stage.id;
 		item.sortOrder = stage.children.length;
 		stage.children.push(item);
 	}
@@ -122,9 +173,12 @@ export function filterBudgetSelectorItems(
 	query: string,
 	depth = 0,
 	parentIds: string[] = [],
+	itemSearchText?: (item: BudgetTreeItem) => string,
 ): FlatBudgetNode[] {
 	return items.flatMap((item) => {
-		const matches = `${item.index} ${item.description}`
+		const matches = (
+			itemSearchText?.(item) ?? `${item.index} ${item.description}`
+		)
 			.toLocaleLowerCase()
 			.includes(query);
 		if (matches) {
@@ -141,6 +195,7 @@ export function filterBudgetSelectorItems(
 			query,
 			depth + 1,
 			[...parentIds, item.id],
+			itemSearchText,
 		);
 		return childRows.length > 0
 			? [{ ...item, depth, leaf: false, parentIds }, ...childRows]
@@ -210,6 +265,12 @@ export function BudgetItemSelector({
 	disabled,
 	disabledItemIds,
 	availableQuantities,
+	selectionMode = "multiple",
+	columns = [],
+	columnsGridClassName = "grid-cols-[1.5rem_minmax(0,1fr)_6rem_6rem_8rem]",
+	itemSearchText,
+	filters = [],
+	showQuantity = true,
 	showUnitPrice = true,
 	editableUnitPrice = true,
 	quantityLabel = "Quantidade",
@@ -217,21 +278,38 @@ export function BudgetItemSelector({
 	percentageLabel = "% medido",
 	title = "Atividades do orçamento",
 	description = "Escolha as atividades que farão parte deste lançamento.",
+	hideTitle = false,
+	className,
+	emptyMessage = "Nenhuma etapa ou item disponível no orçamento.",
+	onItemClick,
+	renderItem,
+	renderSelectedItemDetails,
+	renderFooter,
 }: BudgetItemSelectorProps) {
 	const [search, setSearch] = useState("");
+	const [activeFilterIds, setActiveFilterIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [expandedIds, setExpandedIds] = useState<Set<string> | null>(new Set());
 	const { data, isLoading, error, refetch } = useQuery({
-		queryKey: workKeys.costBudgetItems(workId),
-		queryFn: () => getCurrentCostBudgetItems(workId),
-		enabled: injectedItems === undefined && effectiveBudgetItems === undefined,
+		queryKey: workKeys.costBudgetItems(workId ?? ""),
+		queryFn: () => getCurrentCostBudgetItems(workId ?? ""),
+		enabled:
+			Boolean(workId) &&
+			injectedItems === undefined &&
+			effectiveBudgetItems === undefined,
 	});
 	const items =
 		injectedItems ?? effectiveItemsToTree(effectiveBudgetItems ?? data) ?? [];
-	const selectedIds = new Set(selectedItems.map((entry) => entry.budgetItemId));
-	const selectionById = new Map(
-		selectedItems.map((entry) => [entry.budgetItemId, entry]),
+	const selectedIds = useMemo(
+		() => new Set(selectedItems.map((entry) => entry.budgetItemId)),
+		[selectedItems],
 	);
-	const rows = flattenBudgetSelectorItems(items);
+	const selectionById = useMemo(
+		() => new Map(selectedItems.map((entry) => [entry.budgetItemId, entry])),
+		[selectedItems],
+	);
+	const rows = useMemo(() => flattenBudgetSelectorItems(items), [items]);
 	const selectedBranchIds = useMemo(() => {
 		const ids = new Set(selectedIds);
 		for (const row of rows) {
@@ -241,14 +319,31 @@ export function BudgetItemSelector({
 		}
 		return ids;
 	}, [rows, selectedIds]);
-	const normalizedSearch = search.trim().toLocaleLowerCase();
-	const filteredRows = useMemo(
-		() =>
-			normalizedSearch
-				? filterBudgetSelectorItems(items, normalizedSearch)
-				: rows,
-		[items, normalizedSearch, rows],
-	);
+	const normalizedSearch = search.trim().toLocaleLowerCase("pt-BR");
+	const filteredRows = useMemo(() => {
+		const searchRows = normalizedSearch
+			? filterBudgetSelectorItems(
+					items,
+					normalizedSearch,
+					0,
+					[],
+					itemSearchText,
+				)
+			: rows;
+		const activeFilters = filters.filter((filter) =>
+			activeFilterIds.has(filter.id),
+		);
+		if (activeFilters.length === 0) return searchRows;
+		const matchingIds = new Set(
+			searchRows
+				.filter(
+					(row) =>
+						row.leaf && activeFilters.every((filter) => filter.predicate(row)),
+				)
+				.flatMap((row) => [row.id, ...row.parentIds]),
+		);
+		return searchRows.filter((row) => matchingIds.has(row.id));
+	}, [activeFilterIds, filters, itemSearchText, items, normalizedSearch, rows]);
 	const visibleRows = useMemo(
 		() =>
 			filteredRows.filter(
@@ -262,6 +357,11 @@ export function BudgetItemSelector({
 		[expandedIds, filteredRows, normalizedSearch, selectedBranchIds],
 	);
 	const leafCount = rows.filter((item) => item.leaf).length;
+	const filteredLeafRows = filteredRows.filter((item) => item.leaf);
+	const nonLeafIds = useMemo(
+		() => rows.filter((row) => !row.leaf).map((row) => row.id),
+		[rows],
+	);
 
 	if (
 		injectedItems === undefined &&
@@ -273,12 +373,10 @@ export function BudgetItemSelector({
 	}
 	if (rows.length === 0) {
 		return (
-			<div className="rounded-lg border border-dashed p-6 text-center">
-				<p className="text-sm font-medium">
-					Nenhuma etapa ou item disponível no orçamento.
-				</p>
+			<div className="rounded-xl border border-dashed border-border p-6 text-center">
+				<p className="text-sm font-medium">{emptyMessage}</p>
 				<p className="mt-1 text-xs text-muted-foreground">
-					Adicione itens ao orçamento antes de fazer a seleção.
+					Adicione itens ao orçamento antes de continuar.
 				</p>
 			</div>
 		);
@@ -295,39 +393,76 @@ export function BudgetItemSelector({
 			return next;
 		});
 	};
+	const expandAll = () => setExpandedIds(null);
+	const collapseAll = () => setExpandedIds(new Set());
 
 	return (
-		<div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+		<div
+			className={cn(
+				"min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm",
+				className,
+			)}
+		>
 			<div className="space-y-3 border-b border-border bg-muted/20 p-3">
-				<div className="flex flex-wrap items-center justify-between gap-2">
-					<div>
-						<p className="text-sm font-semibold">{title}</p>
-						<p className="text-xs text-muted-foreground">{description}</p>
-					</div>
-					<div className="flex items-center gap-2">
-						<span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-							{selectedItems.length} de {leafCount} selecionada(s)
-						</span>
-						{selectedItems.length > 0 && (
+				<div
+					className={cn(
+						"flex flex-wrap items-start justify-between gap-3",
+						hideTitle && "justify-end",
+					)}
+				>
+					{!hideTitle && (
+						<div className="min-w-0">
+							<p className="text-sm font-semibold">{title}</p>
+							<p className="text-xs text-muted-foreground">{description}</p>
+						</div>
+					)}
+					<div className="flex flex-wrap items-center justify-end gap-2">
+						{selectionMode !== "browse" && (
+							<span className="rounded-xl border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+								{selectedItems.length} de {leafCount} selecionada(s)
+							</span>
+						)}
+						<button
+							type="button"
+							className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+							onClick={expandAll}
+							disabled={disabled || nonLeafIds.length === 0}
+							title="Abrir todas as etapas"
+						>
+							<ChevronsDownUp className="size-4" />
+							<span className="hidden sm:inline">Abrir tudo</span>
+						</button>
+						<button
+							type="button"
+							className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+							onClick={collapseAll}
+							disabled={disabled || nonLeafIds.length === 0}
+							title="Recolher todas as etapas"
+						>
+							<ChevronsUpDown className="size-4" />
+							<span className="hidden sm:inline">Recolher tudo</span>
+						</button>
+						{selectedItems.length > 0 && selectionMode !== "browse" && (
 							<button
 								type="button"
-								className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+								className="min-h-9 rounded-xl px-2.5 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
 								onClick={clearSelection}
 								disabled={disabled}
 							>
-								Limpar
+								Limpar seleção
 							</button>
 						)}
 					</div>
 				</div>
 				<div className="relative">
-					<Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+					<Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 					<Input
 						value={search}
 						onChange={(event) => setSearch(event.target.value)}
 						placeholder="Buscar por código ou descrição..."
-						className="h-9 bg-background pl-9 pr-9 text-sm"
+						className="h-10 rounded-xl bg-background pl-9 pr-9 text-sm"
 						disabled={disabled}
+						aria-label="Buscar itens do orçamento"
 					/>
 					{search && (
 						<button
@@ -340,21 +475,75 @@ export function BudgetItemSelector({
 						</button>
 					)}
 				</div>
+				{filters.length > 0 && (
+					<fieldset
+						className="flex flex-wrap items-center gap-2"
+						aria-label="Filtros"
+					>
+						<span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+							<SlidersHorizontal className="size-3.5" /> Filtros
+						</span>
+						{filters.map((filter) => {
+							const active = activeFilterIds.has(filter.id);
+							return (
+								<button
+									key={filter.id}
+									type="button"
+									className={cn(
+										"min-h-8 rounded-xl border px-2.5 text-xs font-semibold transition-colors",
+										active
+											? "border-primary/30 bg-primary/10 text-primary"
+											: "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+									)}
+									onClick={() =>
+										setActiveFilterIds((current) => {
+											const next = new Set(current);
+											if (active) next.delete(filter.id);
+											else next.add(filter.id);
+											return next;
+										})
+									}
+									aria-pressed={active}
+								>
+									{filter.label}
+								</button>
+							);
+						})}
+					</fieldset>
+				)}
 			</div>
 
-			<div className="min-w-0 max-h-[55vh] overflow-x-hidden overflow-y-auto sm:max-h-[30rem]">
-				<div className="sticky top-0 z-10 hidden grid-cols-[1.5rem_minmax(0,1fr)_6rem_6rem_8rem] gap-3 border-b border-border bg-background/95 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur sm:grid">
+			<div className="min-w-0 max-h-[55vh] overflow-x-hidden overflow-y-auto sm:max-h-[34rem]">
+				<div
+					className={cn(
+						"sticky top-0 z-10 hidden gap-3 border-b border-border bg-background/95 px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground backdrop-blur sm:grid",
+						columnsGridClassName,
+					)}
+				>
 					<span />
-					<span>Atividade</span>
-					<span className="text-right">Total</span>
-					<span className="text-right">Disponível</span>
-					<span className="text-right">
-						{showUnitPrice ? "Unidade / base" : "Unidade"}
-					</span>
+					<span>{columns.length > 0 ? "Item" : "Atividade"}</span>
+					{columns.length > 0
+						? columns.map((column) => (
+								<span key={column.key} className={column.headerClassName}>
+									{column.label}
+								</span>
+							))
+						: [
+								<span key="total" className="text-right">
+									Total
+								</span>,
+								<span key="available" className="text-right">
+									Disponível
+								</span>,
+								<span key="unit" className="text-right">
+									{showUnitPrice ? "Unidade / base" : "Unidade"}
+								</span>,
+							]}
 				</div>
 				{visibleRows.length === 0 ? (
 					<div className="p-8 text-center text-sm text-muted-foreground">
-						Nenhuma atividade encontrada para “{search}”.
+						Nenhum item encontrado
+						{search ? ` para “${search}”` : " com estes filtros"}.
 					</div>
 				) : (
 					visibleRows.map((item) => {
@@ -369,14 +558,15 @@ export function BudgetItemSelector({
 									style={{ paddingLeft: `${12 + item.depth * 20}px` }}
 									onClick={() => toggleStage(item.id)}
 									disabled={disabled}
+									aria-expanded={expanded}
 								>
 									{expanded ? (
 										<ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
 									) : (
 										<ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
 									)}
-									<span className="text-muted-foreground">{item.index}</span>{" "}
-									{item.description}
+									<span className="text-muted-foreground">{item.index}</span>
+									<span className="truncate">{item.description}</span>
 								</button>
 							);
 						}
@@ -391,9 +581,9 @@ export function BudgetItemSelector({
 								? Math.min(100, (available / item.quantity) * 100)
 								: 100;
 						const toggle = () => {
-							if (itemDisabled) return;
+							if (itemDisabled || selectionMode === "browse") return;
 							const next = toggleBudgetItemSelection(
-								selectedItems,
+								selectionMode === "single" ? [] : selectedItems,
 								item,
 								available,
 							);
@@ -407,25 +597,58 @@ export function BudgetItemSelector({
 								);
 							} else onChange(next);
 						};
+						const context: BudgetItemSelectorItemContext = {
+							item,
+							selected,
+							disabled: itemDisabled,
+							selection,
+							availableQuantity: available,
+							toggle,
+						};
+						const handleItemClick = () => {
+							onItemClick?.(item);
+							if (!onItemClick || !selected) toggle();
+						};
+						if (renderItem) {
+							return (
+								<div key={item.id} data-slot="budget-leaf">
+									{renderItem(context)}
+								</div>
+							);
+						}
 						return (
 							<div
 								key={item.id}
 								data-slot="budget-leaf"
-								className={`border-b px-3 py-2 transition-colors last:border-b-0 border-border ${selected ? "bg-primary/[0.045]" : "hover:bg-muted/20"}`}
+								className={cn(
+									"border-b border-border px-3 py-2 transition-colors last:border-b-0",
+									selected ? "bg-primary/[0.045]" : "hover:bg-muted/20",
+								)}
 								style={{ paddingLeft: `${12 + item.depth * 20}px` }}
 							>
-								<div className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[1.5rem_minmax(0,1fr)_6rem_6rem_8rem]">
-									<Checkbox
-										checked={selected}
-										disabled={itemDisabled}
-										onCheckedChange={toggle}
-										aria-label={`Selecionar ${item.index} - ${item.description}`}
-									/>
+								<div
+									className={cn(
+										"grid items-center gap-3",
+										columns.length > 0
+											? columnsGridClassName
+											: "grid-cols-[1.5rem_minmax(0,1fr)] sm:grid-cols-[1.5rem_minmax(0,1fr)_6rem_6rem_8rem]",
+									)}
+								>
+									{selectionMode === "browse" ? (
+										<span />
+									) : (
+										<Checkbox
+											checked={selected}
+											disabled={itemDisabled}
+											onCheckedChange={handleItemClick}
+											aria-label={`Selecionar ${item.index} - ${item.description}`}
+										/>
+									)}
 									<button
 										type="button"
 										className="min-w-0 text-left"
-										onClick={toggle}
-										disabled={itemDisabled}
+										onClick={handleItemClick}
+										disabled={itemDisabled || selectionMode === "browse"}
 									>
 										<span className="block truncate text-sm font-medium">
 											<span className="mr-1.5 font-mono text-xs text-muted-foreground">
@@ -442,68 +665,77 @@ export function BudgetItemSelector({
 											{available == null ? "-" : formatQuantity(available)}
 										</span>
 									</button>
-									<span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
-										{item.quantity == null
-											? "-"
-											: formatQuantity(item.quantity)}
-									</span>
-									<span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
-										{available == null ? "-" : formatQuantity(available)}
-									</span>
-									<span className="hidden text-right text-xs text-muted-foreground sm:block">
-										<span className="block">{item.unit ?? "-"}</span>
-										{showUnitPrice && (
-											<span>
-												{item.unitCost == null
-													? "-"
-													: formatCurrency(item.unitCost)}
+									{columns.length > 0 ? (
+										columns.map((column) => (
+											<span key={column.key} className={column.cellClassName}>
+												{column.render(context)}
 											</span>
-										)}
-									</span>
+										))
+									) : (
+										<>
+											<span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+												{showQuantity && item.quantity != null
+													? formatQuantity(item.quantity)
+													: "-"}
+											</span>
+											<span className="hidden text-right text-xs tabular-nums text-muted-foreground sm:block">
+												{showQuantity && available != null
+													? formatQuantity(available)
+													: "-"}
+											</span>
+											<span className="hidden text-right text-xs text-muted-foreground sm:block">
+												<span className="block">{item.unit ?? "-"}</span>
+												{showUnitPrice &&
+													(item.unitCost == null
+														? "-"
+														: formatCurrency(item.unitCost))}
+											</span>
+										</>
+									)}
 								</div>
-
-								{selected && (
-									<div className="mt-2 grid min-w-0 items-end gap-2 rounded-lg border border-primary/20 bg-background/80 p-2 sm:ml-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
-										<label
-											htmlFor={`quantity-${item.id}`}
-											className="space-y-1 text-xs font-medium text-muted-foreground"
-										>
-											<span>{quantityLabel}</span>
-											<Input
-												data-slot="budget-quantity"
-												id={`quantity-${item.id}`}
-												className="h-9 bg-background text-sm"
-												type="number"
-												min="0"
-												max={maxQuantity}
-												step="any"
-												value={selection?.quantity ?? 1}
-												disabled={itemDisabled}
-												onChange={(event) => {
-													const quantity = Math.min(
-														maxQuantity ?? Number.POSITIVE_INFINITY,
-														Math.max(0, Number(event.target.value)),
-													);
-													let next = updateSelectionQuantity(
-														selectedItems,
-														item.id,
-														quantity,
-													);
-													if (
-														showMeasurementPercentage &&
-														(item.quantity ?? 0) > 0
-													) {
-														next = updateSelectionPercentage(
-															next,
-															item.id,
-															(quantity / (item.quantity ?? 1)) * 100,
+								{selected && selectionMode !== "browse" && (
+									<div className="mt-2 grid min-w-0 items-end gap-2 rounded-xl border border-primary/20 bg-background/80 p-2 sm:ml-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+										{showQuantity && (
+											<label
+												htmlFor={`quantity-${item.id}`}
+												className="space-y-1 text-xs font-medium text-muted-foreground"
+											>
+												<span>{quantityLabel}</span>
+												<Input
+													data-slot="budget-quantity"
+													id={`quantity-${item.id}`}
+													className="h-10 rounded-xl bg-background text-sm"
+													type="number"
+													min="0"
+													max={maxQuantity}
+													step="any"
+													value={selection?.quantity ?? 1}
+													disabled={itemDisabled}
+													onChange={(event) => {
+														const quantity = Math.min(
+															maxQuantity ?? Number.POSITIVE_INFINITY,
+															Math.max(0, Number(event.target.value)),
 														);
-													}
-													onChange(next);
-												}}
-												aria-label={`${quantityLabel} de ${item.description}`}
-											/>
-										</label>
+														let next = updateSelectionQuantity(
+															selectedItems,
+															item.id,
+															quantity,
+														);
+														if (
+															showMeasurementPercentage &&
+															(item.quantity ?? 0) > 0
+														)
+															next = updateSelectionPercentage(
+																next,
+																item.id,
+																(quantity / (item.quantity ?? 1)) * 100,
+															);
+														onChange(next);
+													}}
+													aria-label={`${quantityLabel} de ${item.description}`}
+												/>
+											</label>
+										)}
 										{showMeasurementPercentage && (
 											<label
 												htmlFor={`measurement-percentage-${item.id}`}
@@ -513,7 +745,7 @@ export function BudgetItemSelector({
 												<Input
 													data-slot="budget-measurement-percentage"
 													id={`measurement-percentage-${item.id}`}
-													className="h-9 bg-background text-sm"
+													className="h-10 rounded-xl bg-background text-sm"
 													type="number"
 													min="0"
 													max={maxPercentage}
@@ -559,7 +791,7 @@ export function BudgetItemSelector({
 												<Input
 													data-slot="budget-unit-price"
 													id={`unit-price-${item.id}`}
-													className="h-9 bg-background text-sm"
+													className="h-10 rounded-xl bg-background text-sm"
 													type="number"
 													min="0"
 													step="0.01"
@@ -579,7 +811,7 @@ export function BudgetItemSelector({
 											</label>
 										)}
 										{showUnitPrice && (
-											<div className="rounded-md bg-muted/50 px-3 py-2 text-right">
+											<div className="rounded-xl bg-muted/50 px-3 py-2 text-right">
 												<span className="block text-xs font-medium text-muted-foreground">
 													Total estimado
 												</span>
@@ -591,6 +823,16 @@ export function BudgetItemSelector({
 												</strong>
 											</div>
 										)}
+										{renderSelectedItemDetails && (
+											<div className="sm:col-span-2 lg:col-span-4">
+												{renderSelectedItemDetails({
+													...context,
+													selectionIndex: selectedItems.findIndex(
+														(entry) => entry.budgetItemId === item.id,
+													),
+												})}
+											</div>
+										)}
 									</div>
 								)}
 							</div>
@@ -598,6 +840,10 @@ export function BudgetItemSelector({
 					})
 				)}
 			</div>
+			{renderFooter?.({
+				filteredItems: filteredLeafRows,
+				allItems: rows.filter((item) => item.leaf),
+			})}
 		</div>
 	);
 }

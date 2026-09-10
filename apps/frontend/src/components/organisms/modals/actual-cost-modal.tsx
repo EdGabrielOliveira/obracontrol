@@ -24,6 +24,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import {
+	COST_CATEGORY_OPTIONS,
 	COST_PAYMENT_STATUS_OPTIONS,
 	COST_TYPE_OPTIONS,
 } from "@/constants/status-options";
@@ -41,15 +42,6 @@ import type { WorkSupplier } from "@/types/suppliers";
 import { getErrorMessage } from "@/utils/api-error";
 import { parseCurrencyToNumber } from "@/utils/currency";
 import { toDateInputValue } from "@/utils/format";
-
-const CATEGORY_OPTIONS = [
-	{ id: "MATERIAL", value: "MATERIAL", label: "Material" },
-	{ id: "MAO_DE_OBRA", value: "MAO_DE_OBRA", label: "Mão de Obra" },
-	{ id: "EQUIPAMENTO", value: "EQUIPAMENTO", label: "Equipamento" },
-	{ id: "TRANSPORTE", value: "TRANSPORTE", label: "Transporte" },
-	{ id: "SERVICO", value: "SERVICO", label: "Serviço" },
-	{ id: "OUTROS", value: "OUTROS", label: "Outros" },
-];
 
 function todayInputValue(): string {
 	return new Date().toISOString().slice(0, 10);
@@ -366,7 +358,7 @@ export function ActualCostModal({
 								<SelectFormField
 									label="Categoria"
 									placeholder="Selecione..."
-									options={CATEGORY_OPTIONS}
+									options={COST_CATEGORY_OPTIONS}
 									field={field}
 									fieldState={fieldState}
 								/>

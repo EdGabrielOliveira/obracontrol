@@ -7,7 +7,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { getBudgetItems, getCurrentCostBudgetItems } from "@/api/budget";
-import { createCost } from "@/api/costs";
+import { createCost, toCostInput } from "@/api/costs";
 import { workKeys, workSupplierKeys } from "@/api/query-keys";
 import { listWorkSuppliers } from "@/api/work-suppliers";
 import { ErrorFeedback } from "@/atoms/error-feedback";
@@ -19,7 +19,6 @@ import { useCreationConfirmation } from "@/components/providers/creation-confirm
 import { queryClient } from "@/lib/query-client";
 import type { CostFormValues } from "@/schemas/costs";
 import { getErrorMessage } from "@/utils/api-error";
-import { parseCurrencyToNumber } from "@/utils/currency";
 
 export const Route = createFileRoute("/app/obras/$workId/custos/new")({
 	loader: ({ params }) => {
@@ -68,20 +67,7 @@ function RouteComponent() {
 	});
 	const mutation = useMutation({
 		mutationFn: (values: CostFormValues) =>
-			createCost(workId, {
-				title: values.title,
-				items: values.items.map((item) => ({
-					budgetVersionItemId: item.budgetVersionItemId,
-					costDate: item.costDate,
-					category: item.category,
-					categoryDetail: item.categoryDetail,
-					description: item.description,
-					amount: parseCurrencyToNumber(item.amount) ?? 0,
-					costType: item.costType,
-					supplierId: item.supplierId || null,
-					paymentStatus: item.paymentStatus,
-				})),
-			}),
+			createCost(workId, toCostInput(values)),
 		onSuccess: () => {
 			toast.success("Custo criado com sucesso!");
 			// The costs page keeps its result fresh for two minutes. Invalidate it

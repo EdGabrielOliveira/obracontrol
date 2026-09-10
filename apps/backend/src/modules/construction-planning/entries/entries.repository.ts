@@ -684,6 +684,7 @@ const actualCostInclude = {
 } satisfies Prisma.ConstructionActualCostInclude;
 
 const costAggregateInclude = {
+	import: { select: { title: true } },
 	items: {
 		orderBy: [{ costDate: "asc" }, { createdAt: "asc" }],
 		include: {
@@ -715,8 +716,14 @@ type CostAggregate = Prisma.ConstructionCostGetPayload<{
 }>;
 
 function toCostAggregateView(cost: CostAggregate) {
+	const title =
+		cost.title === "Custos importados"
+			? cost.import?.title?.trim() || cost.title
+			: cost.title;
+
 	return {
 		...cost,
+		title,
 		itemCount: cost.items.length,
 		amount: cost.items.reduce((sum, item) => sum + Number(item.amount), 0),
 		categories: [...new Set(cost.items.map((item) => item.category))],
@@ -809,6 +816,24 @@ export async function getCostById(
 		include: costAggregateInclude,
 	});
 	return cost ? toCostAggregateView(cost) : null;
+}
+
+export async function updateCostTitle(
+	ownerId: string,
+	workId: string,
+	costId: string,
+	title: string,
+	client: Pick<Prisma.TransactionClient, "constructionCost"> = prisma,
+) {
+	const cost = await client.constructionCost.findFirst({
+		where: { id: costId, ownerId, workId },
+		select: { id: true },
+	});
+	if (!cost) return null;
+	return client.constructionCost.update({
+		where: { id: cost.id },
+		data: { title: title.trim() },
+	});
 }
 
 export async function deleteCost(

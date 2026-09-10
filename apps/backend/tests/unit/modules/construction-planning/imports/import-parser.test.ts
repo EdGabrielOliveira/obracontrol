@@ -6,6 +6,7 @@ import {
 	type ImportMemoryBudget,
 	type MemoryChecker,
 } from "../../../../../src/modules/construction-planning/imports/import-parser";
+import { parseWorkbookByKind } from "../../../../../src/modules/construction-planning/imports/parser";
 
 function workbookBytes(sheets: Record<string, unknown[][]>): Uint8Array {
 	const wb = XLSX.utils.book_new();
@@ -24,6 +25,44 @@ const DEFAULT_LIMITS: ImportMemoryBudget = {
 };
 
 describe("import-parser", () => {
+	it("converte datas Excel seriais dos custos para a data correta", () => {
+		const bytes = workbookBytes({
+			Guia: [["Modelo de Importação - ObraControl"]],
+			"Custos Realizados": [
+				[
+					"Data do lançamento",
+					"Índice apropriado",
+					"Categoria",
+					"Descrição",
+					"Valor realizado",
+					"Tipo",
+					"Data de competência",
+					"Data de vencimento",
+					"Data de pagamento",
+				],
+				[
+					46253,
+					"1.1",
+					"MATERIAL",
+					"Cimento",
+					100,
+					"Atual",
+					46253,
+					46254,
+					46255,
+				],
+			],
+		});
+
+		const parsed = parseWorkbookByKind(bytes, "custos.xlsx", "custos");
+
+		expect(parsed.actualCostRows).toHaveLength(1);
+		expect(parsed.actualCostRows[0]?.costDate).toBe(46253);
+		expect(parsed.actualCostRows[0]?.competenceDate).toBe("2026-08-19");
+		expect(parsed.actualCostRows[0]?.dueDate).toBe("2026-08-20");
+		expect(parsed.actualCostRows[0]?.paymentDate).toBe("2026-08-21");
+	});
+
 	it("emite linhas por planilha, na ordem das planilhas e com rowNumber 1-based", async () => {
 		const storage = createImportStorage({ directory: undefined });
 		void storage;

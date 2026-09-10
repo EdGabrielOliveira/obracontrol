@@ -1,6 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowLeft,
+	CheckCircle2,
+	Download,
+	FileSpreadsheet,
+	Info,
+	Loader2,
+	Rows3,
+	ShieldCheck,
+	UploadCloud,
+	XCircle,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -39,6 +51,7 @@ import {
 } from "@/lib/import-preview";
 import type {
 	ConstructionTemplateKind,
+	ImportPreviewPage,
 	ImportPreviewRow,
 } from "@/types/import";
 import {
@@ -49,6 +62,47 @@ import {
 import { createIdempotencyKey } from "@/utils/idempotency-key";
 
 const PREVIEW_PAGE_SIZE = 100;
+
+const IMPORT_MODEL_DETAILS: Record<
+	ConstructionTemplateKind,
+	{ label: string; description: string; hint: string }
+> = {
+	custos: {
+		label: "Custos realizados",
+		description: "Registre despesas, pagamentos e apropriações desta obra.",
+		hint: "Lançamentos financeiros e documentos de origem",
+	},
+	"medicao-obra": {
+		label: "Medições da obra",
+		description: "Atualize o avanço físico dos itens do orçamento.",
+		hint: "Quantidades e percentuais medidos",
+	},
+	"medicao-contrato": {
+		label: "Medições de contrato",
+		description: "Importe medições vinculadas aos serviços contratados.",
+		hint: "Serviços, quantidades e valores medidos",
+	},
+	orcamento: {
+		label: "Orçamento",
+		description: "Crie uma nova versão de orçamento a partir da planilha.",
+		hint: "Composição, unidades, quantidades e custos",
+	},
+	"orcamento-aditivo": {
+		label: "Aditivo de orçamento",
+		description: "Adicione itens ou ajustes a uma versão de orçamento.",
+		hint: "Itens, quantidades e impacto financeiro",
+	},
+	cronograma: {
+		label: "Cronograma",
+		description: "Planeje ou replaneje as atividades da obra.",
+		hint: "Atividades, datas e pesos planejados",
+	},
+	cotacao: {
+		label: "Mapa de cotação",
+		description: "Compare propostas de fornecedores com os dados da planilha.",
+		hint: "Fornecedores, preços e condições comerciais",
+	},
+};
 
 type ImportBatchModalProps = {
 	open: boolean;
@@ -64,6 +118,7 @@ export function ImportBatchModal({
 	model,
 }: ImportBatchModalProps) {
 	const isCostImport = model === "custos";
+	const modelDetails = IMPORT_MODEL_DETAILS[model];
 	const queryClient = useQueryClient();
 	const [file, setFile] = useState<File | null>(null);
 	const [title, setTitle] = useState("");
@@ -266,37 +321,83 @@ export function ImportBatchModal({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] min-w-0 overflow-hidden sm:max-w-6xl">
-				<DialogHeader>
-					<DialogTitle>Importação de planilha</DialogTitle>
-					<DialogDescription>
-						Envio seguro com preview: nada é aplicado antes da sua confirmação.
-					</DialogDescription>
-				</DialogHeader>
+			<DialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] min-w-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
+				<div className="border-b border-border bg-muted/20 px-6 pb-5 pt-6">
+					<DialogHeader className="gap-4">
+						<div className="flex items-start gap-3 pr-8">
+							<div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+								<UploadCloud className="size-5" aria-hidden="true" />
+							</div>
+							<div className="min-w-0">
+								<DialogTitle className="text-lg font-semibold">
+									Importar {modelDetails.label.toLowerCase()}
+								</DialogTitle>
+								<DialogDescription className="mt-1 max-w-2xl">
+									Envie a planilha e revise os dados antes de confirmar.
+								</DialogDescription>
+							</div>
+						</div>
+						<div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground">
+							<div className="flex items-center gap-2 text-primary">
+								<span className="flex size-6 items-center justify-center rounded-xl bg-primary text-xs text-primary-foreground">
+									1
+								</span>
+								Enviar arquivo
+							</div>
+							<span className="h-px w-8 bg-border" aria-hidden="true" />
+							<div
+								className={
+									batchId
+										? "flex items-center gap-2 text-primary"
+										: "flex items-center gap-2"
+								}
+							>
+								<span
+									className={
+										batchId
+											? "flex size-6 items-center justify-center rounded-xl bg-primary text-xs text-primary-foreground"
+											: "flex size-6 items-center justify-center rounded-xl border border-border bg-background text-xs"
+									}
+								>
+									2
+								</span>
+								Revisar e confirmar
+							</div>
+						</div>
+					</DialogHeader>
+				</div>
 
 				{confirmation ? (
-					<div className="flex flex-col items-center gap-4 py-6 text-center">
+					<div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
 						{confirmation.status === "APPROVED" ? (
 							<>
-								<CheckCircle2 className="h-12 w-12 text-success" />
-								<p className="text-base font-medium">Importação confirmada!</p>
-								<p className="text-sm text-muted-foreground">
+								<div className="flex size-16 items-center justify-center rounded-xl bg-success/10 text-success">
+									<CheckCircle2 className="size-9" aria-hidden="true" />
+								</div>
+								<p className="mt-5 text-lg font-semibold text-foreground">
+									Importação confirmada
+								</p>
+								<p className="mt-1 max-w-md text-sm text-muted-foreground">
 									Os dados da planilha foram aplicados à obra.
 								</p>
 								{previewQuery.data?.title && (
-									<p className="text-sm font-medium text-foreground">
+									<p className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium text-foreground">
 										{previewQuery.data.title}
 									</p>
 								)}
-								<p className="text-sm text-muted-foreground">
-									A listagem de custos foi atualizada.
+								<p className="mt-4 text-xs text-muted-foreground">
+									Você já pode consultar os dados na obra.
 								</p>
 							</>
 						) : (
 							<>
-								<Loader2 className="h-12 w-12 animate-spin text-warning" />
-								<p className="text-base font-medium">Aguardando aprovação</p>
-								<p className="text-sm text-muted-foreground">
+								<div className="flex size-16 items-center justify-center rounded-xl bg-warning/10 text-warning">
+									<Loader2 className="size-8 animate-spin" aria-hidden="true" />
+								</div>
+								<p className="mt-5 text-lg font-semibold text-foreground">
+									Aguardando aprovação
+								</p>
+								<p className="mt-1 max-w-md text-sm text-muted-foreground">
 									A importação foi enviada para aprovação e será aplicada após a
 									decisão.
 								</p>
@@ -304,137 +405,254 @@ export function ImportBatchModal({
 						)}
 					</div>
 				) : !batchId ? (
-					<div className="space-y-4 py-2">
-						{isCostImport && (
-							<div className="space-y-2">
-								<label
-									htmlFor="cost-import-title"
-									className="text-sm font-medium text-foreground"
-								>
-									Título da importação
-								</label>
-								<Input
-									id="cost-import-title"
-									value={title}
-									onChange={(event) => setTitle(event.target.value)}
-									placeholder="Ex: Custos da fundação — janeiro"
-									maxLength={200}
-									aria-describedby="cost-import-title-help"
+					<div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+						<div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(19rem,0.85fr)]">
+							<div className="min-w-0 space-y-5">
+								{isCostImport && (
+									<div className="space-y-2">
+										<label
+											htmlFor="cost-import-title"
+											className="text-sm font-semibold text-foreground"
+										>
+											Título da importação
+										</label>
+										<Input
+											id="cost-import-title"
+											value={title}
+											onChange={(event) => setTitle(event.target.value)}
+											placeholder="Ex: Custos da fundação — janeiro"
+											maxLength={200}
+											aria-describedby="cost-import-title-help"
+											className="mt-1 h-11 rounded-xl bg-background"
+										/>
+										<p
+											id="cost-import-title-help"
+											className="text-xs text-muted-foreground"
+										>
+											Esse nome será aplicado ao lote importado.
+										</p>
+									</div>
+								)}
+								<FileDropzone
+									accept=".xlsx"
+									disabled={uploadMutation.isPending}
+									onFileReject={(message) => toast.error(message)}
+									onFileSelect={(selectedFile) => {
+										if (isCostImport && !title.trim()) {
+											toast.error(
+												"Informe o título da importação antes de enviar.",
+											);
+											return;
+										}
+										setFile(selectedFile);
+										uploadMutation.mutate(selectedFile);
+									}}
 								/>
-								<p
-									id="cost-import-title-help"
-									className="text-xs text-muted-foreground"
-								>
-									Todos os itens da planilha serão registrados sob este título.
-								</p>
+								{file && uploadMutation.isPending && (
+									<div
+										className="flex items-center gap-3 rounded-xl border border-info/25 bg-info/10 p-3 text-sm text-foreground"
+										role="status"
+									>
+										<Loader2
+											className="size-4 shrink-0 animate-spin text-info"
+											aria-hidden="true"
+										/>
+										<span className="min-w-0 truncate">
+											<strong>{file.name}</strong> está sendo analisada...
+										</span>
+									</div>
+								)}
+								{file && uploadMutation.isError && (
+									<div
+										className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm"
+										role="alert"
+									>
+										<AlertCircle
+											className="mt-0.5 size-4 shrink-0 text-destructive"
+											aria-hidden="true"
+										/>
+										<span>
+											<strong>Não foi possível analisar {file.name}.</strong>{" "}
+											Corrija o arquivo e tente novamente.
+										</span>
+									</div>
+								)}
 							</div>
-						)}
-						<div className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-							<div>
-								<p className="font-medium">
-									Modelo: <span className="font-mono text-xs">{model}</span>
-								</p>
-								<p className="text-xs text-muted-foreground">
-									Baixe o modelo guiado com a aba Guia (colunas, tipos e
-									exemplos) antes de enviar o arquivo.
-								</p>
+							<aside className="space-y-4">
+								<div className="rounded-xl border border-border bg-background p-4">
+									<div className="flex items-center gap-3">
+										<div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+											<Rows3 className="size-5" aria-hidden="true" />
+										</div>
+										<div className="min-w-0">
+											<p className="text-xs font-medium text-muted-foreground">
+												Tipo de importação
+											</p>
+											<p className="mt-1 truncate text-sm font-semibold text-foreground">
+												{modelDetails.label}
+											</p>
+										</div>
+									</div>
+									<p className="mt-4 text-sm leading-6 text-muted-foreground">
+										{modelDetails.description}
+									</p>
+									<div className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-xs leading-5 text-muted-foreground">
+										<Info
+											className="mt-0.5 size-4 shrink-0 text-info"
+											aria-hidden="true"
+										/>
+										{modelDetails.hint}
+									</div>
+								</div>
+								<div className="rounded-xl border-l-2 border-primary/40 bg-primary/5 p-4">
+									<div className="flex items-start gap-3">
+										<ShieldCheck
+											className="mt-0.5 size-5 shrink-0 text-primary"
+											aria-hidden="true"
+										/>
+										<div>
+											<p className="text-sm font-semibold text-foreground">
+												Use o modelo oficial
+											</p>
+											<p className="mt-1 text-xs leading-5 text-muted-foreground">
+												Baixe a planilha com as colunas e exemplos corretos.
+											</p>
+										</div>
+									</div>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="mt-4 w-full bg-background"
+										onClick={handleDownloadTemplate}
+										disabled={downloadingTemplate}
+									>
+										<Download className="size-4" aria-hidden="true" />
+										{downloadingTemplate
+											? "Baixando modelo..."
+											: "Baixar modelo .xlsx"}
+									</Button>
+								</div>
+							</aside>
+						</div>
+					</div>
+				) : (
+					<div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6">
+						<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-background p-4 shadow-sm">
+							<div className="flex min-w-0 items-center gap-3">
+								<div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+									<FileSpreadsheet className="size-5" aria-hidden="true" />
+								</div>
+								<div className="min-w-0">
+									<p className="truncate text-sm font-semibold text-foreground">
+										{file?.name ?? "Planilha"}
+									</p>
+									<p className="mt-0.5 text-xs text-muted-foreground">
+										{modelDetails.label} · dados ainda não aplicados
+									</p>
+								</div>
 							</div>
 							<Button
 								type="button"
 								variant="outline"
 								size="sm"
-								onClick={handleDownloadTemplate}
-								disabled={downloadingTemplate}
+								onClick={returnToUpload}
 							>
-								<Download className="h-4 w-4" />
-								{downloadingTemplate ? "Baixando..." : "Baixar modelo"}
+								<ArrowLeft className="size-4" aria-hidden="true" />
+								Trocar arquivo
 							</Button>
 						</div>
-						<FileDropzone
-							onFileSelect={(selectedFile) => {
-								if (isCostImport && !title.trim()) {
-									toast.error(
-										"Informe o título da importação antes de enviar.",
-									);
-									return;
-								}
-								setFile(selectedFile);
-								uploadMutation.mutate(selectedFile);
-							}}
-						/>
-						{file && uploadMutation.isPending && (
-							<p className="text-sm text-muted-foreground">
-								{file.name} — analisando a planilha...
-							</p>
-						)}
-						{file && uploadMutation.isError && (
-							<p className="text-sm text-destructive">
-								Não foi possível analisar {file.name}. Corrija o arquivo e tente
-								novamente.
-							</p>
-						)}
-					</div>
-				) : (
-					<div className="min-w-0 space-y-4">
-						<div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-							<p className="text-muted-foreground">
-								{file?.name ?? "Planilha"} —{" "}
-								{summary ? (
-									<>
-										<span className="font-medium text-foreground">
-											{summary.valid}
-										</span>{" "}
-										válidas,{" "}
-										<span className="font-medium text-foreground">
-											{summary.invalid}
-										</span>{" "}
-										inválidas,{" "}
-										<span className="font-medium text-foreground">
-											{summary.warnings}
-										</span>{" "}
-										com aviso
-										{modelInvalid && (
-											<span className="ml-2 font-medium text-destructive">
-												modelo rejeitado
-											</span>
-										)}
-									</>
-								) : (
-									"carregando preview..."
-								)}
-							</p>
-							{summary && summary.invalid > 0 && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => rejectedMutation.mutate()}
-									disabled={rejectedMutation.isPending}
-								>
-									<Download className="h-4 w-4" />
-									Baixar rejeitadas
-								</Button>
-							)}
-						</div>
 
-						{previewQuery.isLoading ? (
-							<p className="py-6 text-center text-sm text-muted-foreground">
-								Carregando preview...
-							</p>
-						) : (
-							<PreviewTable
-								rows={rows}
-								selectedRowIds={selectedRowIds}
-								onToggleRow={toggleRow}
+						{summary && (
+							<ImportStats
+								summary={summary}
+								impact={previewQuery.data?.impact}
 							/>
 						)}
 
+						{previewQuery.isLoading ? (
+							<div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-muted/20 py-12 text-sm text-muted-foreground">
+								<Loader2
+									className="size-4 animate-spin text-primary"
+									aria-hidden="true"
+								/>
+								Carregando preview...
+							</div>
+						) : previewQuery.isError ? (
+							<div
+								className="flex items-start gap-3 rounded-xl border border-destructive/25 bg-destructive/10 p-4 text-sm"
+								role="alert"
+							>
+								<AlertCircle
+									className="mt-0.5 size-5 shrink-0 text-destructive"
+									aria-hidden="true"
+								/>
+								<div>
+									<p className="font-semibold text-foreground">
+										Não foi possível carregar o preview
+									</p>
+									<p className="mt-1 text-muted-foreground">
+										{getErrorMessage(
+											previewQuery.error,
+											"Tente novamente em instantes.",
+										)}
+									</p>
+								</div>
+							</div>
+						) : (
+							<>
+								<div className="flex flex-wrap items-center justify-between gap-2">
+									<div>
+										<p className="text-sm font-semibold text-foreground">
+											Revisão dos dados
+										</p>
+										<p className="mt-0.5 text-xs text-muted-foreground">
+											Selecione as linhas válidas que deseja aplicar.
+										</p>
+									</div>
+									{summary && summary.invalid > 0 && (
+										<Button
+											variant="outline"
+											size="sm"
+											onClick={() => rejectedMutation.mutate()}
+											disabled={rejectedMutation.isPending}
+										>
+											<Download className="size-4" aria-hidden="true" />
+											{rejectedMutation.isPending
+												? "Gerando..."
+												: "Baixar rejeitadas"}
+										</Button>
+									)}
+								</div>
+								<PreviewTable
+									rows={rows}
+									selectedRowIds={selectedRowIds}
+									onToggleRow={toggleRow}
+								/>
+							</>
+						)}
+
 						{(validationErrors.length > 0 || validationWarnings.length > 0) && (
-							<div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+							<div
+								className="space-y-3 rounded-xl border border-warning/25 bg-warning/10 p-4 text-sm"
+								role="alert"
+							>
+								<div className="flex items-center gap-2 font-semibold text-foreground">
+									<AlertCircle
+										className="size-4 text-warning"
+										aria-hidden="true"
+									/>
+									Pendências encontradas
+								</div>
 								{validationErrors.map((issue) => (
 									<p
 										key={`error-${issue.sheet ?? ""}-${issue.row ?? ""}-${issue.field ?? ""}-${issue.code}-${issue.message}`}
-										className="text-destructive"
+										className="flex items-start gap-2 text-destructive"
 									>
+										<XCircle
+											className="mt-0.5 size-4 shrink-0"
+											aria-hidden="true"
+										/>
 										{issue.sheet
 											? `${normalizePortugueseText(issue.sheet)}: `
 											: ""}
@@ -445,8 +663,12 @@ export function ImportBatchModal({
 								{validationWarnings.map((issue) => (
 									<p
 										key={`warning-${issue.sheet ?? ""}-${issue.row ?? ""}-${issue.field ?? ""}-${issue.code}-${issue.message}`}
-										className="text-warning"
+										className="flex items-start gap-2 text-foreground"
 									>
+										<Info
+											className="mt-0.5 size-4 shrink-0 text-warning"
+											aria-hidden="true"
+										/>
 										{issue.sheet
 											? `${normalizePortugueseText(issue.sheet)}: `
 											: ""}
@@ -461,7 +683,7 @@ export function ImportBatchModal({
 					</div>
 				)}
 
-				<DialogFooter>
+				<DialogFooter className="border-t border-border bg-background px-6 py-4">
 					<Button variant="outline" onClick={() => handleOpenChange(false)}>
 						{confirmation ? "Fechar" : "Cancelar"}
 					</Button>
@@ -478,7 +700,7 @@ export function ImportBatchModal({
 							{confirmMutation.isPending ? (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							) : (
-								<CheckCircle2 className="h-4 w-4" />
+								<CheckCircle2 className="size-4" />
 							)}
 							Confirmar importação ({selectedRowIds.size})
 						</Button>
@@ -486,6 +708,82 @@ export function ImportBatchModal({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+export function ImportStats({
+	summary,
+	impact,
+}: {
+	summary: ImportPreviewPage["summary"];
+	impact?: ImportPreviewPage["impact"];
+}) {
+	const amount = impact?.amount ? Number(impact.amount) : Number.NaN;
+	const formattedAmount = Number.isFinite(amount)
+		? amount.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+		: "—";
+
+	const stats = [
+		{ label: "Total de linhas", value: summary.total, tone: "neutral" },
+		{ label: "Prontas para importar", value: summary.valid, tone: "success" },
+		{ label: "Com aviso", value: summary.warnings, tone: "warning" },
+		{ label: "Com erro", value: summary.invalid, tone: "danger" },
+	] as const;
+
+	return (
+		<div className="space-y-3">
+			<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+				{stats.map((stat) => (
+					<div
+						key={stat.label}
+						className="rounded-xl border border-border bg-background p-3 shadow-sm"
+					>
+						<div className="flex items-center justify-between gap-2">
+							<p className="text-xs text-muted-foreground">{stat.label}</p>
+							<span
+								className={[
+									"size-2 rounded-xl",
+									stat.tone === "success" && "bg-success",
+									stat.tone === "warning" && "bg-warning",
+									stat.tone === "danger" && "bg-destructive",
+									stat.tone === "neutral" && "bg-muted-foreground/40",
+								]
+									.filter(Boolean)
+									.join(" ")}
+								aria-hidden="true"
+							/>
+						</div>
+						<p className="mt-1 text-xl font-semibold text-foreground">
+							{stat.value.toLocaleString("pt-BR")}
+						</p>
+					</div>
+				))}
+			</div>
+			{impact && (
+				<div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border px-1 py-3 text-xs">
+					<div className="flex items-center gap-2 font-semibold text-foreground">
+						Impacto estimado
+					</div>
+					<span className="text-muted-foreground">
+						<strong className="text-foreground">{impact.create}</strong> novos
+					</span>
+					<span className="text-muted-foreground">
+						<strong className="text-foreground">{impact.update}</strong>{" "}
+						atualizações
+					</span>
+					<span className="text-muted-foreground">
+						<strong className="text-foreground">{impact.reject}</strong>{" "}
+						rejeições
+					</span>
+					{impact.amount && (
+						<span className="text-muted-foreground">
+							<strong className="text-foreground">{formattedAmount}</strong> em
+							valores
+						</span>
+					)}
+				</div>
+			)}
+		</div>
 	);
 }
 
@@ -500,63 +798,84 @@ export function PreviewTable({
 }) {
 	if (rows.length === 0) {
 		return (
-			<p className="py-6 text-center text-sm text-muted-foreground">
-				Nenhuma linha nesta página.
-			</p>
+			<div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 py-12 text-center">
+				<Rows3 className="size-8 text-muted-foreground/50" aria-hidden="true" />
+				<p className="mt-3 text-sm font-semibold text-foreground">
+					Nenhuma linha nesta página
+				</p>
+				<p className="mt-1 text-xs text-muted-foreground">
+					Tente navegar para outra página do preview.
+				</p>
+			</div>
 		);
 	}
 	const fields = previewFieldKeys(rows);
 	return (
-		<div className="max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto rounded-lg border">
+		<div className="max-h-[28rem] w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto rounded-xl border border-border bg-background shadow-sm">
 			<table className="w-max min-w-full text-left text-sm">
-				<thead className="sticky top-0 bg-muted">
+				<thead className="sticky top-0 z-10 bg-muted/95 text-xs text-muted-foreground backdrop-blur">
 					<tr>
-						<th className="whitespace-nowrap px-3 py-2 font-medium">Sel.</th>
+						<th className="whitespace-nowrap px-4 py-3 font-semibold">
+							Selecionar
+						</th>
 						{fields.map((field) => (
 							<th
 								key={field}
-								className="whitespace-nowrap px-3 py-2 font-medium"
+								className="whitespace-nowrap px-4 py-3 font-semibold"
 							>
 								{previewFieldLabel(field)}
 							</th>
 						))}
-						<th className="min-w-[18rem] whitespace-nowrap px-3 py-2 font-medium">
+						<th className="min-w-[18rem] whitespace-nowrap px-4 py-3 font-semibold">
 							Validação
 						</th>
 					</tr>
 				</thead>
-				<tbody className="divide-y">
+				<tbody className="divide-y divide-border">
 					{rows.map((row) => {
 						const invalid = row.status === "INVALID";
 						return (
 							<tr
 								key={row.id}
-								className={invalid ? "bg-destructive/5" : undefined}
+								className={[
+									"transition-colors hover:bg-muted/30",
+									invalid && "bg-destructive/5 hover:bg-destructive/10",
+								]
+									.filter(Boolean)
+									.join(" ")}
 							>
-								<td className="px-3 py-2">
+								<td className="px-4 py-3 align-top">
 									{invalid ? (
-										<XCircle className="h-4 w-4 text-destructive" />
+										<XCircle
+											className="size-4 text-destructive"
+											aria-label="Linha inválida"
+										/>
 									) : (
 										<input
 											type="checkbox"
+											aria-label={`Selecionar linha ${row.rowNumber}`}
 											checked={selectedRowIds.has(row.id)}
+											className="size-4 rounded border-border accent-primary"
 											onChange={() => onToggleRow(row.id, row.status)}
 										/>
 									)}
 								</td>
 								{fields.map((field) => (
-									<td key={field} className="max-w-[14rem] truncate px-3 py-2">
+									<td
+										key={field}
+										className="max-w-[14rem] truncate px-4 py-3 align-top text-sm text-foreground"
+									>
 										{previewFieldValue(field, row.values?.[field])}
 									</td>
 								))}
-								<td className="px-3 py-2 align-top">
+								<td className="px-4 py-3 align-top">
 									<div className="space-y-1.5">
 										<StatusBadge
 											status={row.status}
 											map={IMPORT_PREVIEW_STATUS_MAP}
 										/>
 										{row.issues.length > 0 ? (
-											<ul className="space-y-1 text-xs text-muted-foreground">
+											<ul className="max-w-sm space-y-1 text-xs leading-5 text-muted-foreground">
 												{row.issues.map((issue) => (
 													<li
 														key={`${issue.column ?? ""}-${issue.code}-${issue.message}-${issue.value ?? ""}`}

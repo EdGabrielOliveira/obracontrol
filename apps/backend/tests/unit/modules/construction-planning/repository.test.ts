@@ -74,6 +74,7 @@ const actualCostFindMany = mock(async (): Promise<unknown[]> => []);
 const actualCostCount = mock(async (): Promise<number> => 0);
 const actualCostFindFirst = mock(async (): Promise<unknown | null> => null);
 const actualCostDelete = mock(async (): Promise<unknown> => ({ id: "cost-1" }));
+const costCreate = mock(async (): Promise<unknown> => ({ id: "cost-1" }));
 const userFindUnique = mock(async (): Promise<unknown | null> => null);
 const workMembershipFindMany = mock(async (): Promise<unknown[]> => []);
 const costCenterMembershipFindMany = mock(async (): Promise<unknown[]> => []);
@@ -156,6 +157,7 @@ const tx = {
 		findFirst: actualCostFindFirst,
 		delete: actualCostDelete,
 	},
+	constructionCost: { create: costCreate },
 };
 
 mock.module("../../../../src/lib/prisma", () => ({
@@ -192,6 +194,7 @@ mock.module("../../../../src/lib/prisma", () => ({
 			findFirst: budgetItemFindFirst,
 			count: budgetItemCount,
 		},
+		constructionCost: { create: costCreate },
 		budgetVersion: {
 			count: budgetVersionCount,
 		},

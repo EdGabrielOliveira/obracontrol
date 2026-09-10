@@ -4,33 +4,31 @@ import {
 	useNavigate,
 	useParams,
 } from "@tanstack/react-router";
-import { useState } from "react";
 import { toast } from "sonner";
-import { getBudgetItems, getCurrentCostBudgetItems } from "@/api/budget";
-import { getActualCost, updateActualCost } from "@/api/costs";
+import { getCurrentCostBudgetItems } from "@/api/budget";
+import {
+	type Cost,
+	getCost,
+	toCostUpdateItem,
+	type UpdateActualCostInput,
+	updateCost,
+} from "@/api/costs";
 import { workKeys, workSupplierKeys } from "@/api/query-keys";
 import { listWorkSuppliers } from "@/api/work-suppliers";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
-import { PageContainer } from "@/components/atoms/page-container";
+import { PageContainer } from "@/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
-import { ActualCostForm } from "@/components/organisms/costs/actual-cost-form";
+import { CostEditItems } from "@/components/organisms/costs/cost-edit-items";
 import { queryClient } from "@/lib/query-client";
-import type { ActualCostFormValues } from "@/schemas/costs";
 import { getErrorMessage } from "@/utils/api-error";
-import { parseCurrencyToNumber } from "@/utils/currency";
 
 export const Route = createFileRoute("/app/obras/$workId/custos/$costId/edit")({
 	loader: ({ params }) => {
 		void Promise.all([
 			queryClient.prefetchQuery({
-				queryKey: workKeys.costDetail(params.workId, params.costId),
-				queryFn: () => getActualCost(params.workId, params.costId),
-			}),
-			queryClient.prefetchQuery({
-				queryKey: workKeys.budget(params.workId),
-				queryFn: () =>
-					getBudgetItems(params.workId, { includePhysicalFinancial: false }),
+				queryKey: workKeys.groupedCostDetail(params.workId, params.costId),
+				queryFn: () => getCost(params.workId, params.costId),
 			}),
 			queryClient.prefetchQuery({
 				queryKey: workKeys.costBudgetItems(params.workId),
@@ -58,15 +56,9 @@ function RouteComponent() {
 	});
 	const navigate = useNavigate();
 	const client = useQueryClient();
-	const [submitting, setSubmitting] = useState(false);
-
 	const costQuery = useQuery({
-		queryKey: workKeys.costDetail(workId, costId),
-		queryFn: () => getActualCost(workId, costId),
-	});
-	const budgetQuery = useQuery({
-		queryKey: workKeys.budget(workId),
-		queryFn: () => getBudgetItems(workId, { includePhysicalFinancial: false }),
+		queryKey: workKeys.groupedCostDetail(workId, costId),
+		queryFn: () => getCost(workId, costId),
 	});
 	const costBudgetQuery = useQuery({
 		queryKey: workKeys.costBudgetItems(workId),
@@ -76,74 +68,90 @@ function RouteComponent() {
 		queryKey: workSupplierKeys.list(workId),
 		queryFn: () => listWorkSuppliers(workId),
 	});
-
 	const mutation = useMutation({
-		mutationFn: (values: ActualCostFormValues) =>
-			updateActualCost(workId, costId, {
-				title: values.title,
-				budgetVersionItemId: values.budgetVersionItemId,
-				costDate: values.costDate,
-				category: values.category,
-				categoryDetail: values.categoryDetail,
-				description: values.description,
-				amount: parseCurrencyToNumber(values.amount) ?? 0,
-				costType: values.costType,
-				supplierId: values.supplierId || null,
-				paymentStatus: values.paymentStatus,
-			}),
-		onSuccess: () => {
-			toast.success("Custo atualizado com sucesso!");
-			client.invalidateQueries({
-				queryKey: workKeys.costDetail(workId, costId),
-			});
-			client.invalidateQueries({ queryKey: workKeys.costs(workId) });
-			client.invalidateQueries({ queryKey: workKeys.costsList(workId) });
-			navigate({
-				to: "/app/obras/$workId/custos/$costId",
-				params: { workId, costId },
+		mutationFn: ({
+			itemId,
+			patch,
+		}: {
+			itemId: string;
+			patch: UpdateActualCostInput;
+		}) => {
+			const current = client.getQueryData<Cost>(
+				workKeys.groupedCostDetail(workId, costId),
+			);
+			if (!current) throw new Error("Custo não carregado");
+			return updateCost(workId, costId, {
+				title: current.title,
+				items: current.items.map((item) =>
+					toCostUpdateItem(item, item.id === itemId ? patch : {}),
+				),
 			});
 		},
-		onError: (error) =>
-			toast.error(getErrorMessage(error, "Erro ao atualizar custo.")),
-		onSettled: () => setSubmitting(false),
+		onSuccess: (updated) => {
+			client.setQueryData<Cost>(
+				workKeys.groupedCostDetail(workId, costId),
+				updated,
+			);
+			client.invalidateQueries({ queryKey: workKeys.costs(workId) });
+			client.invalidateQueries({ queryKey: workKeys.costsList(workId) });
+			client.invalidateQueries({ queryKey: workKeys.bi(workId) });
+			client.invalidateQueries({ queryKey: workKeys.management(workId) });
+			client.invalidateQueries({ queryKey: workKeys.reports(workId) });
+			client.invalidateQueries({
+				queryKey: workKeys.groupedCostDetail(workId, costId),
+			});
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error, "Erro ao salvar os dados do item."));
+			client.invalidateQueries({
+				queryKey: workKeys.groupedCostDetail(workId, costId),
+			});
+		},
 	});
 
 	if (
 		costQuery.isLoading ||
-		budgetQuery.isLoading ||
 		costBudgetQuery.isLoading ||
 		suppliersQuery.isLoading
 	)
 		return <LoadingSpinner title="Carregando custo..." />;
-	if (costQuery.error || !costQuery.data) return <ErrorFeedback />;
-
+	if (
+		costQuery.error ||
+		!costQuery.data ||
+		!costBudgetQuery.data ||
+		suppliersQuery.error ||
+		!suppliersQuery.data
+	)
+		return <ErrorFeedback />;
 	return (
 		<PageContainer>
 			<PageHeader
 				eyebrow="Custos realizados"
 				title="Editar custo"
-				description={
-					costQuery.data.description || "Atualize os dados do custo."
-				}
+				description={`Edite categoria, pagamento, tipo, observação e valor de “${costQuery.data.title}” diretamente na listagem. As alterações são salvas automaticamente.`}
 			/>
-			<ActualCostForm
-				workId={workId}
-				cost={costQuery.data}
-				budgetItems={budgetQuery.data?.items}
-				costBudgetItems={costBudgetQuery.data}
+			<CostEditItems
+				items={costQuery.data.items}
+				budgetItems={costBudgetQuery.data.items}
 				suppliers={suppliersQuery.data}
-				submitting={submitting}
-				onSubmit={(values) => {
-					setSubmitting(true);
-					mutation.mutate(values);
-				}}
-				onCancel={() =>
+				savingItemId={
+					mutation.isPending ? mutation.variables?.itemId : undefined
+				}
+				disabled={mutation.isPending}
+				onItemPatch={(itemId, patch) => mutation.mutate({ itemId, patch })}
+			/>
+			<button
+				type="button"
+				className="w-fit text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+				onClick={() =>
 					navigate({
 						to: "/app/obras/$workId/custos/$costId",
 						params: { workId, costId },
 					})
 				}
-			/>
+			>
+				Voltar para o custo
+			</button>
 		</PageContainer>
 	);
 }

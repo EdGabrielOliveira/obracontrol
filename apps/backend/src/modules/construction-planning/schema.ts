@@ -284,6 +284,9 @@ export const createCostSchema = z.object({
 
 export type CreateCostInput = z.infer<typeof createCostSchema>;
 
+export const updateCostSchema = createCostSchema;
+export type UpdateCostInput = z.infer<typeof updateCostSchema>;
+
 export type ImportActualCostRow = Omit<CreateActualCostInput, "allocations"> & {
 	allocations?: ActualCostAllocationInput[];
 };

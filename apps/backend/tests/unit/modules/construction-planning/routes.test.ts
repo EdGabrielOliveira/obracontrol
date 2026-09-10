@@ -1847,6 +1847,7 @@ describe("constructionPlanningController", () => {
 					amount: 200,
 				}),
 			]),
+			"custos.xlsx",
 		);
 	});
 

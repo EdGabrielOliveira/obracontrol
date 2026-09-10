@@ -28,3 +28,12 @@ export const COST_TYPE_OPTIONS = [
 	{ id: "CURRENT", value: "CURRENT", label: "Atual" },
 	{ id: "FUTURE", value: "FUTURE", label: "Futuro" },
 ] as const;
+
+export const COST_CATEGORY_OPTIONS = [
+	{ id: "MATERIAL", value: "MATERIAL", label: "Material" },
+	{ id: "MAO_DE_OBRA", value: "MAO_DE_OBRA", label: "Mão de obra" },
+	{ id: "EQUIPAMENTO", value: "EQUIPAMENTO", label: "Equipamento" },
+	{ id: "TRANSPORTE", value: "TRANSPORTE", label: "Transporte" },
+	{ id: "SERVICO", value: "SERVICO", label: "Serviço" },
+	{ id: "OUTROS", value: "OUTROS", label: "Outros" },
+] as const;

@@ -70,6 +70,8 @@ export const workKeys = {
 	costDetailBase: (workId: string) => ["actual-cost", workId] as const,
 	costDetail: (workId: string, costId: string) =>
 		["actual-cost", workId, costId] as const,
+	groupedCostDetail: (workId: string, costId: string) =>
+		["costs", workId, costId] as const,
 	contracts: (workId: string) => ["contracts", workId] as const,
 	contractsSummary: (workId: string) => ["contracts-summary", workId] as const,
 	contractsList: (workId: string, filters?: Record<string, unknown>) =>

@@ -70,6 +70,15 @@ function dateOnly(value: unknown): string | null {
 	if (typeof value === "string") {
 		const trimmed = value.trim();
 		if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+		if (/^\d{4,6}(?:\.\d+)?$/.test(trimmed)) {
+			const parsedSerial = parseDate(Number(trimmed));
+			if (parsedSerial) {
+				const year = parsedSerial.getFullYear();
+				const month = String(parsedSerial.getMonth() + 1).padStart(2, "0");
+				const day = String(parsedSerial.getDate()).padStart(2, "0");
+				return `${year}-${month}-${day}`;
+			}
+		}
 	}
 
 	const parsed = parseDate(value);
@@ -304,19 +313,17 @@ function parseActualCostRows(sheet: XLSX.WorkSheet): ParsedActualCostRow[] {
 				cell(row, headers, ["Situacao do pagamento", "Situacao pagamento"]),
 			),
 			competenceDate: dateOnly(
-				textValue(
-					cell(row, headers, [
-						"Data de competencia",
-						"Data de competência",
-						"Competencia",
-					]),
-				),
+				cell(row, headers, [
+					"Data de competencia",
+					"Data de competência",
+					"Competencia",
+				]),
 			),
 			dueDate: dateOnly(
-				textValue(cell(row, headers, ["Data de vencimento", "Vencimento"])),
+				cell(row, headers, ["Data de vencimento", "Vencimento"]),
 			),
 			paymentDate: dateOnly(
-				textValue(cell(row, headers, ["Data de pagamento", "Pagamento em"])),
+				cell(row, headers, ["Data de pagamento", "Pagamento em"]),
 			),
 			documentNumber: textValue(
 				cell(row, headers, [

@@ -54,6 +54,7 @@ mock.module(
 	"../../../../src/modules/construction-planning/budget-control/budget-control.repository",
 	() => ({
 		findActiveImpactsBySource: mock(async () => []),
+		findActiveImpactsBySourcePrefix: mock(async () => []),
 		createImpact: mock(async () => ({ id: "impact-1" })),
 		findImpactById: mock(async () => null),
 		findImpactByKey: mock(async () => null),
@@ -69,7 +70,15 @@ mock.module(
 		buildGeneralCostEvents: mock(() => []),
 		competenceOf: mock(() => "2026-01"),
 		GENERAL_COST_SOURCE_TYPE: "GENERAL_COST",
+		reverseLedgerEvents: mock(() => []),
 		resolveLedgerItemRef: mock(async () => null),
+	}),
+);
+
+mock.module(
+	"../../../../src/modules/construction-planning/ledger/ledger.repository",
+	() => ({
+		findLedgerEventsBySource: mock(async () => []),
 	}),
 );
 
@@ -1721,6 +1730,199 @@ describe("construction works and manual entries services", () => {
 		);
 	});
 
+	it("replaces the items of a manual grouped cost on update", async () => {
+		const current = {
+			id: "cost-group-1",
+			workId: "work-1",
+			importId: null,
+			title: "Custo antigo",
+			items: [{ id: "old-item-1" }],
+		};
+		const updated = {
+			...current,
+			title: "Custo revisado",
+			items: [{ id: "new-item-1" }],
+		};
+		let costReads = 0;
+		const repository = {
+			getWorkById: mock(async () => ({
+				id: "work-1",
+				ownerId: "owner-1",
+				activeImportId: null,
+			})),
+			getCostById: mock(async () => {
+				costReads += 1;
+				return costReads === 1 ? current : updated;
+			}),
+			updateCostTitle: mock(async () => ({ id: "cost-group-1" })),
+			deleteActualCost: mock(async () => ({ id: "old-item-1" })),
+			createActualCost: mock(async () => ({
+				id: "new-item-1",
+				costDate: new Date("2026-01-20"),
+				amount: 250,
+				paymentStatus: "OPEN",
+			})),
+		};
+		const { ConstructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const service = new ConstructionManualEntryService(
+			repository as never,
+			{
+				assertWritable: mock(async () => undefined),
+				isWritableBlocked: mock(async () => false),
+			},
+			{
+				apply: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reverse: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reject: mock(async () => undefined),
+			},
+		);
+
+		await expect(
+			service.updateCost("owner-1", "work-1", "cost-group-1", {
+				title: "Custo revisado",
+				items: [
+					{
+						budgetVersionItemId: "version-item-1",
+						costDate: "2026-01-20",
+						category: "MATERIAL",
+						description: "Materiais revisados",
+						amount: 250,
+						costType: "CURRENT",
+						paymentStatus: "OPEN",
+						allocations: [{ budgetItemId: "budget-item-1", percentage: 100 }],
+					},
+				],
+			}) as Promise<unknown>,
+		).resolves.toMatchObject({ id: "cost-group-1", title: "Custo revisado" });
+
+		expect(repository.deleteActualCost).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			"old-item-1",
+			expect.anything(),
+		);
+		expect(repository.updateCostTitle).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			"cost-group-1",
+			"Custo revisado",
+			expect.anything(),
+		);
+		expect(repository.createActualCost).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			null,
+			expect.objectContaining({ description: "Materiais revisados" }),
+			expect.anything(),
+			expect.anything(),
+			"cost-group-1",
+		);
+	});
+
+	it("keeps the import association when editing an imported grouped cost", async () => {
+		let costReads = 0;
+		const repository = {
+			getWorkById: mock(async () => ({ id: "work-1", ownerId: "owner-1" })),
+			getCostById: mock(async () => {
+				costReads += 1;
+				return costReads === 1
+					? { id: "imported-cost", importId: "import-1", items: [] }
+					: {
+							id: "imported-cost",
+							importId: "import-1",
+							title: "Custo revisado",
+							items: [{ id: "new-item-1" }],
+						};
+			}),
+			updateCostTitle: mock(async () => ({ id: "imported-cost" })),
+			createActualCost: mock(async () => ({
+				id: "new-item-1",
+				costDate: new Date("2026-01-20"),
+				amount: 250,
+				paymentStatus: "OPEN",
+			})),
+		};
+		const { ConstructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const service = new ConstructionManualEntryService(
+			repository as never,
+			{
+				assertWritable: mock(async () => undefined),
+				isWritableBlocked: mock(async () => false),
+			},
+			{
+				apply: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reverse: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reject: mock(async () => undefined),
+			},
+		);
+
+		await expect(
+			service.updateCost("owner-1", "work-1", "imported-cost", {
+				title: "Custo revisado",
+				items: [
+					{
+						budgetVersionItemId: "version-item-1",
+						costDate: "2026-01-20",
+						category: "MATERIAL",
+						description: "Materiais revisados",
+						amount: 250,
+						costType: "CURRENT",
+						paymentStatus: "OPEN",
+						allocations: [{ budgetItemId: "budget-item-1", percentage: 100 }],
+					},
+				],
+			}) as Promise<unknown>,
+		).resolves.toMatchObject({
+			id: "imported-cost",
+			importId: "import-1",
+		});
+		expect(repository.createActualCost).toHaveBeenCalledWith(
+			"owner-1",
+			"work-1",
+			"import-1",
+			expect.anything(),
+			expect.anything(),
+			expect.anything(),
+			"imported-cost",
+		);
+	});
+
 	it("normalizes the rateio on update and passes closed values to the repository", async () => {
 		const repository = {
 			getActualCostById: mock(async () => ({
@@ -1791,6 +1993,208 @@ describe("construction works and manual entries services", () => {
 		expect(normalized).toHaveLength(2);
 		expect(Number(normalized[0].value)).toBe(100);
 		expect(Number(normalized[1].value)).toBe(100);
+	});
+
+	it("preserves decimal proportions from legacy value rateio on amount changes", async () => {
+		const repository = {
+			getActualCostById: mock(async () => ({
+				id: "cost-1",
+				ownerId: "owner-1",
+				workId: "work-1",
+				amount: 100,
+				allocations: [
+					{ budgetItemId: "item-1", percentage: null, value: 33.33 },
+					{ budgetItemId: "item-2", percentage: null, value: 66.67 },
+				],
+			})),
+			updateActualCost: mock(async () => ({ id: "cost-1" })),
+		};
+		const { ConstructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const service = new ConstructionManualEntryService(
+			repository as never,
+			{
+				assertWritable: mock(async () => undefined),
+				isWritableBlocked: mock(async () => false),
+			},
+			{
+				apply: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reverse: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reject: mock(async () => undefined),
+			},
+		);
+
+		await service.updateActualCost("owner-1", "work-1", "cost-1", {
+			amount: 300,
+		});
+
+		const calls = repository.updateActualCost.mock.calls as unknown[][];
+		const normalized = calls[calls.length - 1]?.[5] as Array<{
+			percentage: number;
+			value: unknown;
+		}>;
+		expect(normalized.map((row) => row.percentage)).toEqual([33.33, 66.67]);
+		expect(normalized.map((row) => Number(row.value))).toEqual([99.99, 200.01]);
+	});
+
+	it("versions the financial effect source when an actual cost is revised", async () => {
+		const repository = {
+			getActualCostById: mock(async () => ({
+				id: "cost-1",
+				ownerId: "owner-1",
+				workId: "work-1",
+				amount: 100,
+				costDate: new Date("2026-01-20"),
+				costType: "CURRENT",
+				paymentStatus: "OPEN",
+				allocations: [
+					{
+						id: "alloc-1",
+						budgetItemId: "item-1",
+						percentage: 100,
+						value: 100,
+					},
+				],
+			})),
+			updateActualCost: mock(async () => ({
+				id: "cost-1",
+				amount: 200,
+				costDate: new Date("2026-01-20"),
+				costType: "CURRENT",
+				paymentStatus: "OPEN",
+				allocations: [{ budgetItemId: "item-1", percentage: 100, value: 200 }],
+			})),
+		};
+		const { ConstructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const apply = mock(
+			async (): Promise<BudgetMutationResult> => ({
+				status: "APPROVED",
+				requiresApproval: false,
+				availableBalance: 0,
+				projectedBalance: 0,
+				allocations: [],
+			}),
+		);
+		const service = new ConstructionManualEntryService(
+			repository as never,
+			{
+				assertWritable: mock(async () => undefined),
+				isWritableBlocked: mock(async () => false),
+			},
+			{
+				apply,
+				reverse: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reject: mock(async () => undefined),
+			},
+		);
+
+		await service.updateActualCost("owner-1", "work-1", "cost-1", {
+			amount: 200,
+		});
+
+		const effectInput = (
+			apply.mock.calls[apply.mock.calls.length - 1] as unknown as unknown[]
+		)?.[2] as {
+			sourceId: string;
+			competence: string;
+		};
+		expect(effectInput.sourceId).toMatch(/^cost-1#/);
+		expect(effectInput.competence).toBe("2026-01");
+	});
+
+	it("replans an actual cost when its payment metadata changes", async () => {
+		const repository = {
+			getActualCostById: mock(async () => ({
+				id: "cost-1",
+				ownerId: "owner-1",
+				workId: "work-1",
+				amount: 100,
+				costDate: new Date("2026-01-20"),
+				costType: "CURRENT",
+				paymentStatus: "OPEN",
+				allocations: [
+					{
+						id: "alloc-1",
+						budgetItemId: "item-1",
+						percentage: 100,
+						value: 100,
+					},
+				],
+			})),
+			updateActualCost: mock(async () => ({
+				id: "cost-1",
+				amount: 100,
+				costDate: new Date("2026-01-20"),
+				costType: "CURRENT",
+				paymentStatus: "PAID",
+				allocations: [{ budgetItemId: "item-1", percentage: 100, value: 100 }],
+			})),
+		};
+		const { ConstructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const apply = mock(
+			async (): Promise<BudgetMutationResult> => ({
+				status: "APPROVED",
+				requiresApproval: false,
+				availableBalance: 0,
+				projectedBalance: 0,
+				allocations: [],
+			}),
+		);
+		const service = new ConstructionManualEntryService(
+			repository as never,
+			{
+				assertWritable: mock(async () => undefined),
+				isWritableBlocked: mock(async () => false),
+			},
+			{
+				apply,
+				reverse: mock(
+					async (): Promise<BudgetMutationResult> => ({
+						status: "APPROVED",
+						requiresApproval: false,
+						availableBalance: 0,
+						projectedBalance: 0,
+						allocations: [],
+					}),
+				),
+				reject: mock(async () => undefined),
+			},
+		);
+
+		await service.updateActualCost("owner-1", "work-1", "cost-1", {
+			paymentStatus: "PAID",
+		});
+
+		expect(apply).toHaveBeenCalledTimes(1);
 	});
 
 	it("rejects update when value rateio does not close the cost total", async () => {

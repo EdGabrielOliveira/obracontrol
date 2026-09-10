@@ -32,6 +32,7 @@ import {
 	createActualCostSchema,
 	createCostSchema,
 	updateActualCostSchema,
+	updateCostSchema,
 } from "../schema";
 import {
 	constructionWorkService,
@@ -65,6 +66,60 @@ const workOperationalStatusSchema = t.Union([
 	t.Literal("SUSPENDED"),
 	t.Literal("IGNORED"),
 ]);
+
+const costInputBody = t.Object({
+	title: t.String({ minLength: 1, maxLength: 200 }),
+	items: t.Array(
+		t.Object({
+			costDate: t.String({ minLength: 1 }),
+			budgetVersionItemId: t.Optional(t.String({ minLength: 1 })),
+			budgetIndex: t.Optional(t.String()),
+			category: t.Union([
+				t.Literal("MATERIAL"),
+				t.Literal("MAO_DE_OBRA"),
+				t.Literal("EQUIPAMENTO"),
+				t.Literal("TRANSPORTE"),
+				t.Literal("SERVICO"),
+				t.Literal("OUTROS"),
+				t.Literal("material"),
+				t.Literal("mao de obra"),
+				t.Literal("mão de obra"),
+				t.Literal("equipamento"),
+				t.Literal("transporte"),
+				t.Literal("servico"),
+				t.Literal("serviço"),
+				t.Literal("outros"),
+			]),
+			categoryDetail: t.Optional(t.String()),
+			description: t.String({ minLength: 1 }),
+			amount: t.Number(),
+			costType: t.Union([
+				t.Literal("CURRENT"),
+				t.Literal("FUTURE"),
+				t.Literal("ATUAL"),
+				t.Literal("FUTURO"),
+			]),
+			sourceDocument: t.Optional(t.String()),
+			supplierId: t.Optional(t.Nullable(t.String())),
+			supplierName: t.Optional(t.String()),
+			costGroup: t.Optional(t.String()),
+			paymentStatus: t.Optional(
+				t.Union([t.Literal("PAID"), t.Literal("OPEN")]),
+			),
+			allocations: t.Optional(
+				t.Array(
+					t.Object({
+						budgetItemId: t.String({ minLength: 1 }),
+						percentage: t.Optional(t.Number({ minimum: 0, maximum: 100 })),
+						value: t.Optional(t.Number({ minimum: 0 })),
+					}),
+					{ minItems: 1 },
+				),
+			),
+		}),
+		{ minItems: 1 },
+	),
+});
 
 function assertStructuralRole(role: string | null | undefined): void {
 	if (normalizeRole(role) === "SUPERVISOR") {
@@ -221,40 +276,42 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			return result;
 		},
 		{
-			body: t.Object({
-				title: t.String({ minLength: 1, maxLength: 200 }),
-				items: t.Array(
-					t.Object({
-						costDate: t.String(),
-						budgetVersionItemId: t.Optional(t.String({ minLength: 1 })),
-						budgetIndex: t.Optional(t.String()),
-						category: t.String(),
-						categoryDetail: t.Optional(t.String()),
-						description: t.String({ minLength: 1 }),
-						amount: t.Number(),
-						costType: t.String(),
-						sourceDocument: t.Optional(t.String()),
-						supplierId: t.Optional(t.Nullable(t.String())),
-						supplierName: t.Optional(t.String()),
-						costGroup: t.Optional(t.String()),
-						paymentStatus: t.Optional(t.String()),
-						allocations: t.Optional(
-							t.Array(
-								t.Object({
-									budgetItemId: t.String({ minLength: 1 }),
-									percentage: t.Optional(
-										t.Number({ minimum: 0, maximum: 100 }),
-									),
-									value: t.Optional(t.Number({ minimum: 0 })),
-								}),
-								{ minItems: 1 },
-							),
-						),
-					}),
-					{ minItems: 1 },
-				),
-			}),
+			body: costInputBody,
 			detail: { tags: ["Works"], summary: "Criar custo com itens" },
+		},
+	)
+	.patch(
+		"/:workId/costs/:id",
+		async ({ params, body, user, scope }) => {
+			const parsed = updateCostSchema.safeParse(body);
+			if (!parsed.success) throwInvalidInput(parsed.error);
+			const previous = await constructionManualEntryService.getCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+			);
+			const result = await constructionManualEntryService.updateCost(
+				scope.resourceOwnerId,
+				params.workId,
+				params.id,
+				parsed.data,
+				{ userId: user.id },
+			);
+			auditService.log({
+				userId: user.id,
+				ownerId: scope.resourceOwnerId,
+				action: "UPDATE",
+				entityType: "COST",
+				entityId: params.id,
+				entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
+				previousState: previous as unknown as Record<string, unknown>,
+				newState: result as unknown as Record<string, unknown>,
+			});
+			return result;
+		},
+		{
+			body: costInputBody,
+			detail: { tags: ["Works"], summary: "Editar custo com itens" },
 		},
 	)
 	.delete(

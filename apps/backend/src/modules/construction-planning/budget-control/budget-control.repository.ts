@@ -329,6 +329,26 @@ export async function findActiveImpactsBySource(
 	});
 }
 
+export async function findActiveImpactsBySourcePrefix(
+	tx: Prisma.TransactionClient,
+	ownerId: string,
+	workId: string,
+	sourceType: string,
+	sourceIdPrefix: string,
+): Promise<BudgetImpactRow[]> {
+	return tx.constructionBudgetImpact.findMany({
+		where: {
+			ownerId,
+			workId,
+			sourceType,
+			sourceId: { startsWith: sourceIdPrefix },
+			reversedAt: null,
+			status: { not: "REJECTED" },
+		},
+		orderBy: { createdAt: "asc" },
+	});
+}
+
 export async function createImpact(
 	tx: Prisma.TransactionClient,
 	data: {

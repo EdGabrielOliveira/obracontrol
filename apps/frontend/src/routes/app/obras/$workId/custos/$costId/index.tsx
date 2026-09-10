@@ -1,12 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-	ArrowLeft,
-	CalendarDays,
-	CircleDollarSign,
-	Info,
-	Trash2,
-} from "lucide-react";
+import { CircleDollarSign, Info, ListTree, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { deleteCost, getCost } from "@/api/costs";
@@ -48,7 +42,7 @@ function InfoItem({
 export const Route = createFileRoute("/app/obras/$workId/custos/$costId/")({
 	loader: ({ params }) => {
 		void queryClient.prefetchQuery({
-			queryKey: workKeys.costDetail(params.workId, params.costId),
+			queryKey: workKeys.groupedCostDetail(params.workId, params.costId),
 			queryFn: () => getCost(params.workId, params.costId),
 		});
 	},
@@ -62,7 +56,7 @@ function RouteComponent() {
 	const client = useQueryClient();
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const costQuery = useQuery({
-		queryKey: workKeys.costDetail(workId, costId),
+		queryKey: workKeys.groupedCostDetail(workId, costId),
 		queryFn: () => getCost(workId, costId),
 	});
 	const deleteMutation = useMutation({
@@ -111,13 +105,20 @@ function RouteComponent() {
 				description={`${items.length} item(ns) · ${formatCurrency(totalAmount)}`}
 				actions={
 					<>
-						<Link to="/app/obras/$workId/custos" params={{ workId }}>
-							<Button variant="outline">
-								<ArrowLeft className="mr-2 size-4" />
-								Voltar
+						<Link
+							to="/app/obras/$workId/custos/$costId/edit"
+							params={{ workId, costId }}
+						>
+							<Button size="sm">
+								<Pencil className="mr-2 size-4" />
+								Editar custo
 							</Button>
 						</Link>
-						<Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+						<Button
+							size="sm"
+							variant="destructive"
+							onClick={() => setDeleteOpen(true)}
+						>
 							<Trash2 className="mr-2 size-4" />
 							Excluir
 						</Button>
@@ -142,7 +143,7 @@ function RouteComponent() {
 				/>
 			</KpiGrid>
 
-			<div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(20rem,0.6fr)]">
+			<div className="mt-4 flex flex-col gap-4">
 				<Card className="gap-4 py-5">
 					<CardHeaderWithIcon
 						icon={Info}
@@ -179,16 +180,6 @@ function RouteComponent() {
 							</div>
 						</InfoItem>
 					</CardContent>
-					<div className="mx-6 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-						<span className="inline-flex items-center gap-1.5">
-							<CalendarDays className="size-3.5" />
-							Criado em {formatDate(cost.createdAt)}
-						</span>
-						<span className="inline-flex items-center gap-1.5">
-							<CalendarDays className="size-3.5" />
-							Atualizado em {formatDate(cost.updatedAt)}
-						</span>
-					</div>
 				</Card>
 
 				<Card className="gap-4 py-5">
@@ -241,7 +232,16 @@ function RouteComponent() {
 				</Card>
 			</div>
 
-			<CostDetailItems items={items} totalAmount={totalAmount} />
+			<Card className="mt-4 gap-4 py-5">
+				<CardHeaderWithIcon
+					icon={ListTree}
+					title={`Itens de custo (${items.length})`}
+					description="Consulte os lançamentos agrupados por etapa e filtre pelos principais campos financeiros."
+				/>
+				<CardContent className="min-w-0">
+					<CostDetailItems items={items} totalAmount={totalAmount} />
+				</CardContent>
+			</Card>
 
 			<ConfirmDialog
 				open={deleteOpen}

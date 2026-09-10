@@ -1,4 +1,6 @@
+import type { CostFormValues } from "@/schemas/costs";
 import type { LegacyActualCost } from "@/types/measurements";
+import { parseCurrencyToNumber } from "@/utils/currency";
 import { sanitizeQueryParams } from "@/utils/sanitizeQueryParams";
 import type { BackendPaginated } from "./api";
 import { api, normalizePagination } from "./api";
@@ -82,6 +84,7 @@ export async function deleteActualCost(workId: string, actualCostId: string) {
 }
 
 export type CostItem = Omit<LegacyActualCost, "title"> & {
+	costGroup?: string | null;
 	budgetItem?: {
 		id: string;
 		index: string;
@@ -111,20 +114,80 @@ export type Cost = {
 	categories: string[];
 };
 
-export type CreateCostInput = {
-	title: string;
-	items: Array<{
-		budgetVersionItemId: string;
-		costDate: string;
-		category: string;
-		categoryDetail?: string;
-		description: string;
-		amount: number;
-		costType: string;
-		supplierId?: string | null;
-		paymentStatus: string;
+type CostPayloadItem = {
+	budgetVersionItemId?: string;
+	costDate: string;
+	category: string;
+	categoryDetail?: string;
+	description: string;
+	amount: number;
+	costType: string;
+	budgetIndex?: string;
+	sourceDocument?: string;
+	supplierId?: string | null;
+	supplierName?: string;
+	costGroup?: string;
+	paymentStatus: string;
+	allocations?: Array<{
+		budgetItemId: string;
+		percentage?: number;
+		value?: number;
 	}>;
 };
+
+export type CreateCostInput = {
+	title: string;
+	items: Array<CostPayloadItem & { budgetVersionItemId: string }>;
+};
+
+export type UpdateCostInput = {
+	title: string;
+	items: CostPayloadItem[];
+};
+
+export function toCostUpdateItem(
+	item: CostItem,
+	patch: UpdateActualCostInput = {},
+): UpdateCostInput["items"][number] {
+	const merged = { ...item, ...patch };
+	return {
+		budgetVersionItemId: item.budgetVersionItem?.id ?? undefined,
+		budgetIndex: merged.budgetIndex ?? undefined,
+		costDate: merged.costDate ?? new Date().toISOString().slice(0, 10),
+		category: merged.category,
+		categoryDetail: merged.categoryDetail ?? undefined,
+		description: merged.description ?? "",
+		amount: Number(merged.amount),
+		costType: merged.costType,
+		sourceDocument: merged.sourceDocument ?? undefined,
+		supplierId: merged.supplierId ?? null,
+		supplierName: merged.supplierName ?? undefined,
+		costGroup: merged.costGroup ?? undefined,
+		paymentStatus: merged.paymentStatus ?? "OPEN",
+		allocations: merged.allocations?.map((allocation) => ({
+			budgetItemId: allocation.budgetItemId,
+			percentage: allocation.percentage ?? undefined,
+			value: allocation.value ?? undefined,
+		})),
+	};
+}
+
+export function toCostInput(values: CostFormValues): CreateCostInput {
+	return {
+		title: values.title,
+		items: values.items.map((item) => ({
+			budgetVersionItemId: item.budgetVersionItemId,
+			costDate: item.costDate,
+			category: item.category,
+			categoryDetail: item.categoryDetail,
+			description: item.description,
+			amount: parseCurrencyToNumber(item.amount) ?? 0,
+			costType: item.costType,
+			supplierId: item.supplierId || null,
+			paymentStatus: item.paymentStatus,
+		})),
+	};
+}
 
 export async function listCosts(
 	workId: string,
@@ -142,6 +205,18 @@ export async function listCosts(
 export async function createCost(workId: string, input: CreateCostInput) {
 	const { data } = await api.post<Cost>(
 		`/construction/works/${workId}/costs`,
+		input,
+	);
+	return data;
+}
+
+export async function updateCost(
+	workId: string,
+	costId: string,
+	input: UpdateCostInput,
+) {
+	const { data } = await api.patch<Cost>(
+		`/construction/works/${workId}/costs/${costId}`,
 		input,
 	);
 	return data;
