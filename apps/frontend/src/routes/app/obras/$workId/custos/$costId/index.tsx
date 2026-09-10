@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { queryClient } from "@/lib/query-client";
+import { getErrorMessage } from "@/utils/api-error";
 import { CATEGORY_LABEL, formatCurrency, formatDate } from "@/utils/format";
 
 function InfoItem({
@@ -68,7 +69,8 @@ function RouteComponent() {
 			client.invalidateQueries({ queryKey: workKeys.bi(workId) });
 			navigate({ to: "/app/obras/$workId/custos", params: { workId } });
 		},
-		onError: () => toast.error("Erro ao excluir custo."),
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Erro ao excluir custo.")),
 	});
 
 	if (costQuery.isLoading)

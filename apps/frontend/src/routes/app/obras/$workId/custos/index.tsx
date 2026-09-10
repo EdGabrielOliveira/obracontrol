@@ -43,6 +43,7 @@ import { downloadBlob } from "@/lib/download";
 import { queryClient } from "@/lib/query-client";
 import { paginationSchema } from "@/schemas/pagination";
 import type { PaginationMeta } from "@/types/shared";
+import { getErrorMessage } from "@/utils/api-error";
 import { CATEGORY_LABEL, formatCurrency, formatDate } from "@/utils/format";
 import { getPaginationMeta } from "@/utils/pagination";
 
@@ -98,7 +99,8 @@ function RouteComponent() {
 			client.invalidateQueries({ queryKey: workKeys.reports(workId) });
 			setDeleteId(null);
 		},
-		onError: () => toast.error("Erro ao excluir custo."),
+		onError: (error) =>
+			toast.error(getErrorMessage(error, "Erro ao excluir custo.")),
 	});
 	const goToNewCost = () =>
 		navigate({ to: "/app/obras/$workId/custos/new", params: { workId } });

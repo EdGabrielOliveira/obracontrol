@@ -193,6 +193,13 @@ export async function revokeGeneralCostImpacts(
 					event.eventType === "PAYMENT_CREATE",
 			),
 		)) {
+			const alreadyReversed = events.some(
+				(event) =>
+					event.eventType === reversal.eventType &&
+					event.componentId === reversal.componentId &&
+					event.sourceId === sourceId,
+			);
+			if (alreadyReversed) continue;
 			await appendLedgerEvent(
 				{
 					scope,
