@@ -3268,6 +3268,33 @@ describe("constructionPlanningController", () => {
 		expect(deleteActualCost).not.toHaveBeenCalled();
 	});
 
+	it("deletes grouped costs with the writable work scope", async () => {
+		const { constructionManualEntryService } = await import(
+			"../../../../src/modules/construction-planning/entries/manual-entry-service"
+		);
+		const deleteSpy = spyOn(
+			constructionManualEntryService,
+			"deleteCost",
+		).mockResolvedValueOnce({
+			id: "cost-1",
+			workId: "work-1",
+			title: "Custo teste",
+			items: [],
+		} as never);
+		const { constructionPlanningController } = await import(
+			"../../../../src/modules/construction-planning/routes"
+		);
+
+		const response = await constructionPlanningController.handle(
+			new Request("http://localhost/construction/works/work-1/costs/cost-1", {
+				method: "DELETE",
+			}),
+		);
+
+		expect(response.status).toBe(204);
+		expect(deleteSpy).toHaveBeenCalledWith("owner-1", "work-1", "cost-1");
+	});
+
 	it("returns expanded works summaries at the preserved path", async () => {
 		const worksResponse = {
 			data: [

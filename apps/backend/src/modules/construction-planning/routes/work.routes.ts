@@ -253,87 +253,94 @@ export const workRoutes = new Elysia({ prefix: "/works", name: "work-routes" })
 			),
 		{ detail: { tags: ["Works"], summary: "Detalhar custo" } },
 	)
-	.post(
-		"/:workId/costs",
-		async ({ params, body, user, scope }) => {
-			const parsed = createCostSchema.safeParse(body);
-			if (!parsed.success) throwInvalidInput(parsed.error);
-			const result = await constructionManualEntryService.createCost(
-				scope.resourceOwnerId,
-				params.workId,
-				parsed.data,
-				{ userId: user.id },
-			);
-			auditService.log({
-				userId: user.id,
-				ownerId: scope.resourceOwnerId,
-				action: "CREATE",
-				entityType: "COST",
-				entityId: result.id,
-				entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
-				newState: result as unknown as Record<string, unknown>,
-			});
-			return result;
-		},
-		{
-			body: costInputBody,
-			detail: { tags: ["Works"], summary: "Criar custo com itens" },
-		},
-	)
-	.patch(
-		"/:workId/costs/:id",
-		async ({ params, body, user, scope }) => {
-			const parsed = updateCostSchema.safeParse(body);
-			if (!parsed.success) throwInvalidInput(parsed.error);
-			const previous = await constructionManualEntryService.getCost(
-				scope.resourceOwnerId,
-				params.workId,
-				params.id,
-			);
-			const result = await constructionManualEntryService.updateCost(
-				scope.resourceOwnerId,
-				params.workId,
-				params.id,
-				parsed.data,
-				{ userId: user.id },
-			);
-			auditService.log({
-				userId: user.id,
-				ownerId: scope.resourceOwnerId,
-				action: "UPDATE",
-				entityType: "COST",
-				entityId: params.id,
-				entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
-				previousState: previous as unknown as Record<string, unknown>,
-				newState: result as unknown as Record<string, unknown>,
-			});
-			return result;
-		},
-		{
-			body: costInputBody,
-			detail: { tags: ["Works"], summary: "Editar custo com itens" },
-		},
-	)
-	.delete(
-		"/:workId/costs/:id",
-		async ({ params, user, scope }) => {
-			const old = await constructionManualEntryService.deleteCost(
-				scope.resourceOwnerId,
-				params.workId,
-				params.id,
-			);
-			auditService.log({
-				userId: user.id,
-				ownerId: scope.resourceOwnerId,
-				action: "DELETE",
-				entityType: "COST",
-				entityId: params.id,
-				entityDescription: `Custo ${old.title} (${old.items.length} itens)`,
-				previousState: old as unknown as Record<string, unknown>,
-			});
-			return new Response(null, { status: 204 });
-		},
-		{ detail: { tags: ["Works"], summary: "Excluir custo e seus itens" } },
+	// As mutações de custos dependem de `scope.resourceOwnerId`. O escopo de
+	// leitura é intencionalmente vazio para métodos que alteram dados, portanto
+	// o resolvedor de escrita fica limitado a este grupo de rotas.
+	.group("", (app) =>
+		app
+			.use(requireWorkAccess("write"))
+			.post(
+				"/:workId/costs",
+				async ({ params, body, user, scope }) => {
+					const parsed = createCostSchema.safeParse(body);
+					if (!parsed.success) throwInvalidInput(parsed.error);
+					const result = await constructionManualEntryService.createCost(
+						scope.resourceOwnerId,
+						params.workId,
+						parsed.data,
+						{ userId: user.id },
+					);
+					auditService.log({
+						userId: user.id,
+						ownerId: scope.resourceOwnerId,
+						action: "CREATE",
+						entityType: "COST",
+						entityId: result.id,
+						entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
+						newState: result as unknown as Record<string, unknown>,
+					});
+					return result;
+				},
+				{
+					body: costInputBody,
+					detail: { tags: ["Works"], summary: "Criar custo com itens" },
+				},
+			)
+			.patch(
+				"/:workId/costs/:id",
+				async ({ params, body, user, scope }) => {
+					const parsed = updateCostSchema.safeParse(body);
+					if (!parsed.success) throwInvalidInput(parsed.error);
+					const previous = await constructionManualEntryService.getCost(
+						scope.resourceOwnerId,
+						params.workId,
+						params.id,
+					);
+					const result = await constructionManualEntryService.updateCost(
+						scope.resourceOwnerId,
+						params.workId,
+						params.id,
+						parsed.data,
+						{ userId: user.id },
+					);
+					auditService.log({
+						userId: user.id,
+						ownerId: scope.resourceOwnerId,
+						action: "UPDATE",
+						entityType: "COST",
+						entityId: params.id,
+						entityDescription: `Custo ${result.title} (${result.items.length} itens)`,
+						previousState: previous as unknown as Record<string, unknown>,
+						newState: result as unknown as Record<string, unknown>,
+					});
+					return result;
+				},
+				{
+					body: costInputBody,
+					detail: { tags: ["Works"], summary: "Editar custo com itens" },
+				},
+			)
+			.delete(
+				"/:workId/costs/:id",
+				async ({ params, user, scope }) => {
+					const old = await constructionManualEntryService.deleteCost(
+						scope.resourceOwnerId,
+						params.workId,
+						params.id,
+					);
+					auditService.log({
+						userId: user.id,
+						ownerId: scope.resourceOwnerId,
+						action: "DELETE",
+						entityType: "COST",
+						entityId: params.id,
+						entityDescription: `Custo ${old.title} (${old.items.length} itens)`,
+						previousState: old as unknown as Record<string, unknown>,
+					});
+					return new Response(null, { status: 204 });
+				},
+				{ detail: { tags: ["Works"], summary: "Excluir custo e seus itens" } },
+			),
 	)
 	.get(
 		"/:workId/schedule",
