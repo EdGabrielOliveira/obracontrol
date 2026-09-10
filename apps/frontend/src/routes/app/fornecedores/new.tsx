@@ -16,6 +16,7 @@ import {
 	supplierFormSchema,
 } from "@/schemas/suppliers";
 import type { SupplierCreateInput } from "@/types/suppliers";
+import { normalizeOptionalAddress } from "@/utils/address";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/fornecedores/new")({
@@ -54,7 +55,7 @@ const EMPTY_FORM: SupplierFormValues = {
 };
 
 function toCreateInput(values: SupplierFormValues): SupplierCreateInput {
-	const address = values.structuredAddress;
+	const address = normalizeOptionalAddress(values.structuredAddress);
 	return {
 		name: values.name,
 		document: values.document ?? null,

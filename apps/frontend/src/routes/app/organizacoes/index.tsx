@@ -171,16 +171,11 @@ function RouteComponent() {
 							: "Crie seu primeiro órgão para começar."
 					}
 					actions={
-						searchParams.q
-							? undefined
-							: canManageStructure
-								? [
-										{
-											label: "Criar órgão",
-											onClick: () => navigate({ to: "/app/organizacoes/new" }),
-										},
-									]
-								: undefined
+						searchParams.q ? undefined : canManageStructure ? (
+							<Button onClick={() => navigate({ to: "/app/organizacoes/new" })}>
+								Criar órgão
+							</Button>
+						) : undefined
 					}
 				/>
 			</PageContainer>

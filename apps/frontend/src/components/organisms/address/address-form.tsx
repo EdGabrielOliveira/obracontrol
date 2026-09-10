@@ -20,9 +20,9 @@ const fieldLabels: Array<[keyof AddressValue, string, string]> = [
 	["street", "Rua (opcional)", "Rua / avenida"],
 	["district", "Bairro (opcional)", "Bairro"],
 	["number", "Número (opcional)", "Número"],
-	["city", "Cidade", "Cidade"],
-	["state", "Estado", "UF"],
-	["complement", "Complemento", "Opcional"],
+	["city", "Cidade (opcional)", "Cidade"],
+	["state", "Estado (opcional)", "UF"],
+	["complement", "Complemento (opcional)", "Complemento"],
 ];
 
 export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
@@ -65,7 +65,7 @@ export function AddressForm({ value, onChange, disabled }: AddressFormProps) {
 		<div className="space-y-4">
 			<div className="flex items-end gap-2">
 				<div className="flex-1 space-y-2">
-					<Label htmlFor="address-zip-code">CEP</Label>
+					<Label htmlFor="address-zip-code">CEP (opcional)</Label>
 					<MaskedInput
 						id="address-zip-code"
 						mask={INPUT_MASKS.cep}

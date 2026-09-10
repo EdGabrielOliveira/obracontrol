@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { supplierKeys } from "@/api/query-keys";
 import { getSupplier, getSupplierAnalytics } from "@/api/suppliers";
-import { EmptyStateCard } from "@/atoms/empty-state-card";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import {
@@ -222,8 +222,8 @@ function RouteComponent() {
 					/>
 					<CardContent className="space-y-2 text-sm">
 						{workLinks.length === 0 ? (
-							<EmptyStateCard
-								icon={BriefcaseBusiness}
+							<EmptyState
+								icon={<BriefcaseBusiness className="size-7 text-primary" />}
 								title="Nenhuma obra vinculada."
 								variant="dashed"
 							/>
@@ -255,8 +255,8 @@ function RouteComponent() {
 					/>
 					<CardContent className="space-y-2 text-sm">
 						{contracts.length === 0 ? (
-							<EmptyStateCard
-								icon={FileText}
+							<EmptyState
+								icon={<FileText className="size-7 text-primary" />}
 								title="Nenhum contrato vinculado."
 								variant="dashed"
 							/>
@@ -289,8 +289,8 @@ function RouteComponent() {
 					/>
 					<CardContent className="space-y-2 text-sm">
 						{actualCosts.length === 0 ? (
-							<EmptyStateCard
-								icon={BarChart3}
+							<EmptyState
+								icon={<BarChart3 className="size-7 text-primary" />}
 								title="Nenhum custo vinculado."
 								variant="dashed"
 							/>

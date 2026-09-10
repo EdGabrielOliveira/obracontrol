@@ -18,7 +18,7 @@ import { listWorks } from "@/api/works";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { PageHeader } from "@/components/atoms/page-header";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
 import { Button } from "@/components/ui/button";
@@ -137,18 +137,18 @@ function RouteComponent() {
 								</Button>
 							</Link>
 						) : null}
-						<Link to="/app/centros-de-custo/new">
+						<Link to="/app/obras/new" search={{ costCenterId: ccId }}>
 							<Button>
 								<Plus className="mr-2 h-4 w-4" />
-								Novo Centro
+								Nova obra
 							</Button>
 						</Link>
 					</>
 				}
 			/>
 			{!hasWorks ? (
-				<EmptyStateCard
-					icon={FileSpreadsheet}
+				<EmptyState
+					icon={<FileSpreadsheet className="size-7 text-primary" />}
 					title="Nenhuma obra ainda"
 					description="Cadastre sua primeira obra manualmente para começar."
 					variant="dashed"

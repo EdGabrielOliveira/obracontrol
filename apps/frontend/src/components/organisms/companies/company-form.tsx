@@ -22,19 +22,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type CompanyFormValues, companyFormSchema } from "@/schemas/companies";
-import type { AddressValue } from "@/types/address";
-
-const emptyAddress: AddressValue = {
-	zipCode: "",
-	street: "",
-	district: "",
-	number: "",
-	city: "",
-	state: "",
-	complement: "",
-	latitude: null,
-	longitude: null,
-};
+import { type AddressValue, EMPTY_ADDRESS } from "@/types/address";
+import { isCompleteAddress, normalizeOptionalAddress } from "@/utils/address";
 
 export interface CompanyFormProps {
 	mode?: "create" | "edit";
@@ -123,7 +112,12 @@ export function CompanyForm({
 		}
 		if (template && !template.name.toLowerCase().endsWith(".docx"))
 			return onError?.("O template deve ser DOCX.");
-		onSubmit(values, template, structuredAddress);
+		const address = normalizeOptionalAddress(structuredAddress);
+		if (address && !isCompleteAddress(address)) {
+			onError?.("Informe CEP, cidade e estado ou deixe o endereço em branco.");
+			return;
+		}
+		onSubmit(values, template, address);
 	});
 
 	return (
@@ -244,7 +238,7 @@ export function CompanyForm({
 				/>
 				<CardContent>
 					<AddressForm
-						value={structuredAddress ?? emptyAddress}
+						value={structuredAddress ?? EMPTY_ADDRESS}
 						onChange={setStructuredAddress}
 						disabled={submitting}
 					/>

@@ -172,15 +172,13 @@ function RouteComponent() {
 							: "Crie seu primeiro órgão com centros de custo para começar."
 					}
 					actions={
-						searchParams.q
-							? undefined
-							: [
-									{
-										label: "Criar centro de custo",
-										onClick: () =>
-											navigate({ to: "/app/centros-de-custo/new" }),
-									},
-								]
+						searchParams.q ? undefined : (
+							<Button
+								onClick={() => navigate({ to: "/app/centros-de-custo/new" })}
+							>
+								Criar centro de custo
+							</Button>
+						)
 					}
 				/>
 			</PageContainer>

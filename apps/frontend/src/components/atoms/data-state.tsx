@@ -13,7 +13,7 @@ interface DataStateProps {
 	emptyTitle?: string;
 	emptyDescription?: string;
 	emptyIcon?: ReactNode;
-	emptyActions?: Array<{ label: string; onClick: () => void }>;
+	emptyActions?: ReactNode;
 	children: ReactNode;
 }
 

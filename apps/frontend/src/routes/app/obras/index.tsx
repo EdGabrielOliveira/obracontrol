@@ -14,7 +14,7 @@ import { deleteWork, listWorks } from "@/api/works";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { ConfirmDialog } from "@/components/atoms/confirm-dialog";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { PageContainer } from "@/components/atoms/page-container";
 import { PageHeader } from "@/components/atoms/page-header";
 import { PaginationBar } from "@/components/molecules/pagination-bar";
@@ -138,8 +138,8 @@ function RouteComponent() {
 						)}
 					</div>
 				</div>
-				<EmptyStateCard
-					icon={HardHat}
+				<EmptyState
+					icon={<HardHat className="size-7 text-primary" />}
 					title={
 						searchParams.q
 							? "Nenhum resultado encontrado"
@@ -162,6 +162,7 @@ function RouteComponent() {
 							</Button>
 						)
 					}
+					variant="default"
 				/>
 			</PageContainer>
 		);

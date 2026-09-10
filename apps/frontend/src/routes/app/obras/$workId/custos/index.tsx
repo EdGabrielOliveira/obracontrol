@@ -31,7 +31,7 @@ import { KpiCard } from "@/atoms/kpi-card";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
 import { DataTable } from "@/components/atoms/data-table";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
@@ -202,10 +202,11 @@ function RouteComponent() {
 				}
 			/>
 			{costs.length === 0 ? (
-				<EmptyStateCard
-					icon={DollarSign}
+				<EmptyState
+					icon={<DollarSign className="size-7 text-primary" />}
 					title="Nenhum custo registrado"
-					description="Crie um custo com vários itens ou importe uma planilha completa."
+					description="Crie um custo com vários itens para começar a registrar os gastos da obra."
+					variant="default"
 					actions={
 						<Button onClick={goToNewCost}>
 							<Plus className="mr-2 size-4" />

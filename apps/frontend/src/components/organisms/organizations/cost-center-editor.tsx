@@ -13,19 +13,8 @@ import {
 	type CostCenterEditValues,
 	costCenterEditSchema,
 } from "@/schemas/organizations";
-import type { AddressValue } from "@/types/address";
-
-const emptyAddress: AddressValue = {
-	zipCode: "",
-	street: "",
-	district: "",
-	number: "",
-	city: "",
-	state: "",
-	complement: "",
-	latitude: null,
-	longitude: null,
-};
+import { EMPTY_ADDRESS } from "@/types/address";
+import { normalizeOptionalAddress } from "@/utils/address";
 
 type Option = { id: string; value: string; label: string };
 
@@ -60,7 +49,15 @@ export function CostCenterEditor({
 	});
 
 	return (
-		<form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+		<form
+			onSubmit={form.handleSubmit((data) =>
+				onSubmit({
+					...data,
+					structuredAddress: normalizeOptionalAddress(data.structuredAddress),
+				}),
+			)}
+			className="space-y-4"
+		>
 			<Card>
 				<CardHeaderWithIcon
 					icon={Building2}
@@ -120,7 +117,7 @@ export function CostCenterEditor({
 						control={form.control}
 						render={({ field }) => (
 							<AddressForm
-								value={field.value ?? emptyAddress}
+								value={field.value ?? EMPTY_ADDRESS}
 								onChange={field.onChange}
 								disabled={submitting}
 							/>

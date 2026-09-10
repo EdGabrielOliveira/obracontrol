@@ -27,6 +27,7 @@ import type {
 	SupplierPixKeyType,
 	SupplierUpdateInput,
 } from "@/types/suppliers";
+import { normalizeOptionalAddress } from "@/utils/address";
 import { getErrorMessage } from "@/utils/api-error";
 
 export const Route = createFileRoute("/app/fornecedores/$supplierId/edit")({
@@ -106,7 +107,7 @@ function toFormValues(supplier: {
 }
 
 function toUpdateInput(values: SupplierFormValues): SupplierUpdateInput {
-	const address = values.structuredAddress;
+	const address = normalizeOptionalAddress(values.structuredAddress);
 	return {
 		name: values.name,
 		document: values.document ?? null,

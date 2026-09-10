@@ -8,7 +8,7 @@ import { budgetVersionKeys, workKeys } from "@/api/query-keys";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { PageHeader } from "@/components/atoms/page-header";
 import { BudgetItemEditSelector } from "@/components/organisms/budget/budget-item-edit-selector";
 import {
@@ -147,10 +147,11 @@ function RouteComponent() {
 			)}
 
 			{items.length === 0 ? (
-				<EmptyStateCard
-					icon={ListTree}
+				<EmptyState
+					icon={<ListTree className="size-7 text-primary" />}
 					title="Nenhum item de orçamento"
 					description="Importe uma planilha de orçamento antes de editar os itens."
+					variant="default"
 				/>
 			) : (
 				<div className="grid gap-6 xl:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.5fr)]">

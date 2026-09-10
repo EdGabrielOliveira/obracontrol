@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { listAllCostCenters } from "@/api/organizations";
 import { costCenterKeys, workKeys } from "@/api/query-keys";
 import { downloadTemplate, TEMPLATE_FILENAMES } from "@/api/templates";
@@ -18,7 +19,12 @@ import type { WorkFormValues } from "@/schemas/works";
 import type { WorkCreateInput } from "@/types/works";
 import { getErrorMessage } from "@/utils/api-error";
 
+const newWorkSearchSchema = z.object({
+	costCenterId: z.string().optional(),
+});
+
 export const Route = createFileRoute("/app/obras/new")({
+	validateSearch: newWorkSearchSchema,
 	loader: () => {
 		void Promise.all([
 			queryClient.prefetchQuery({
@@ -55,6 +61,7 @@ function toCreateInput(values: WorkFormValues): WorkCreateInput {
 
 function RouteComponent() {
 	const navigate = useNavigate();
+	const { costCenterId } = Route.useSearch();
 	const { requestCreationConfirmation } = useCreationConfirmation();
 	const [downloadingTemplate, setDownloadingTemplate] = useState(false);
 	const costCentersQuery = useQuery({
@@ -153,7 +160,7 @@ function RouteComponent() {
 
 			<WorkForm
 				mode="create"
-				costCenterId=""
+				costCenterId={costCenterId ?? ""}
 				costCenterOptions={costCenterOptions}
 				managerOptions={managerOptions}
 				loading={mutation.isPending}

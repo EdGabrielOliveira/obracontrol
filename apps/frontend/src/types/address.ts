@@ -10,6 +10,18 @@ export type AddressValue = {
 	longitude?: number | null;
 };
 
+export const EMPTY_ADDRESS: AddressValue = {
+	zipCode: "",
+	street: "",
+	district: "",
+	number: "",
+	city: "",
+	state: "",
+	complement: "",
+	latitude: null,
+	longitude: null,
+};
+
 /** Response returned by the CEP lookup endpoint.
  *
  * BrasilAPI does not guarantee a street, district, city, or state for every

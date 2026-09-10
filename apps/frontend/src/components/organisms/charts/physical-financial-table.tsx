@@ -1,5 +1,5 @@
 import { FileSpreadsheet } from "lucide-react";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import {
 	Table,
 	TableBody,
@@ -29,10 +29,11 @@ export function PhysicalFinancialTable({
 }: PhysicalFinancialTableProps) {
 	if (!data?.totals || data.totals.months.length === 0) {
 		return (
-			<EmptyStateCard
-				icon={FileSpreadsheet}
+			<EmptyState
+				icon={<FileSpreadsheet className="size-7 text-primary" />}
 				title="Nenhum cronograma físico-financeiro"
 				description="Configure o cronograma base para visualizar os dados físico-financeiros."
+				variant="default"
 			/>
 		);
 	}

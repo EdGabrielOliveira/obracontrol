@@ -42,7 +42,7 @@ import {
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { PageHeader } from "@/components/atoms/page-header";
 import { BudgetVersionAccordion } from "@/components/organisms/budget/budget-version-accordion";
 import { BudgetVersionImportDialog } from "@/components/organisms/budget/budget-version-import-dialog";
@@ -453,14 +453,15 @@ function RouteComponent() {
 					title={budgetData?.work?.name ?? "Orçamento"}
 					description="Itens de orçamento"
 				/>
-				<EmptyStateCard
-					icon={FileSpreadsheet}
+				<EmptyState
+					icon={<FileSpreadsheet className="size-7 text-primary" />}
 					title="Nenhum item de orçamento"
 					description="Esta obra ainda não possui um orçamento vinculado. Importe uma planilha Excel para começar."
+					variant="default"
 					actions={
 						canWrite ? (
 							<Button
-								variant="outline"
+								variant="default"
 								size="sm"
 								onClick={() => setAditivoOpen(true)}
 							>
@@ -497,7 +498,7 @@ function RouteComponent() {
 					<>
 						{canWrite && hasItems && (
 							<Button
-								variant="outline"
+								variant="default"
 								size="sm"
 								onClick={() =>
 									navigate({
@@ -616,10 +617,11 @@ function RouteComponent() {
 								onPeriodChange={setPhysFinPeriod}
 							/>
 						) : (
-							<EmptyStateCard
-								icon={FileSpreadsheet}
+							<EmptyState
+								icon={<FileSpreadsheet className="size-7 text-primary" />}
 								title="Nenhum dado físico-financeiro"
 								description="Dados físico-financeiros serão exibidos aqui quando disponíveis."
+								variant="default"
 							/>
 						)}
 					</TabsContent>

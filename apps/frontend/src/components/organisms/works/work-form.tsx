@@ -19,19 +19,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type WorkFormValues, workFormSchema } from "@/schemas/works";
-import type { AddressValue } from "@/types/address";
-
-const emptyAddress: AddressValue = {
-	zipCode: "",
-	street: "",
-	district: "",
-	number: "",
-	city: "",
-	state: "",
-	complement: "",
-	latitude: null,
-	longitude: null,
-};
+import { EMPTY_ADDRESS } from "@/types/address";
+import { normalizeOptionalAddress } from "@/utils/address";
 
 export type FormOption = {
 	id: string;
@@ -76,7 +65,15 @@ export function WorkForm({
 		},
 	});
 
-	const handleFormSubmit = handleSubmit((data) => onSubmit(data, budgetFile));
+	const handleFormSubmit = handleSubmit((data) =>
+		onSubmit(
+			{
+				...data,
+				structuredAddress: normalizeOptionalAddress(data.structuredAddress),
+			},
+			budgetFile,
+		),
+	);
 
 	return (
 		<form onSubmit={handleFormSubmit} className="space-y-4">
@@ -316,7 +313,7 @@ export function WorkForm({
 						control={control}
 						render={({ field }) => (
 							<AddressForm
-								value={field.value ?? emptyAddress}
+								value={field.value ?? EMPTY_ADDRESS}
 								onChange={field.onChange}
 								disabled={loading}
 							/>

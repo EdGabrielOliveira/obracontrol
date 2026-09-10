@@ -39,7 +39,7 @@ import { ConfirmDialog } from "@/atoms/confirm-dialog";
 import { ErrorFeedback } from "@/atoms/error-feedback";
 import { LoadingSpinner } from "@/atoms/loading-spinner";
 import { PageContainer } from "@/atoms/page-container";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { KpiCard } from "@/components/atoms/kpi-card";
 import { KpiGrid } from "@/components/atoms/kpi-grid";
 import { PageHeader } from "@/components/atoms/page-header";
@@ -452,10 +452,11 @@ function RouteComponent() {
 				/>
 				{contractKpis}
 
-				<EmptyStateCard
-					icon={FolderOpen}
+				<EmptyState
+					icon={<FolderOpen className="size-7 text-primary" />}
 					title="Nenhum contrato"
 					description="Crie um contrato a partir de uma cotação ou cadastre diretamente um contrato já existente."
+					variant="default"
 					actions={
 						<Button variant="default" size="sm" onClick={handleNewContract}>
 							<Plus className="mr-2 h-4 w-4" />

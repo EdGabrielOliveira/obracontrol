@@ -28,16 +28,11 @@ import type {
 	CreateOrganizationInput,
 	UpdateOrganizationInput,
 } from "@/types/organizations";
+import { isCompleteAddress } from "@/utils/address";
 import { getErrorMessage } from "@/utils/api-error";
 
 function completeAddress(address: AddressValue | null | undefined) {
-	if (!address) return null;
-	const zipCode = address.zipCode.replace(/\D/g, "");
-	return zipCode.length === 8 &&
-		address.city.trim() &&
-		address.state.length === 2
-		? address
-		: null;
+	return address && isCompleteAddress(address) ? address : null;
 }
 
 export const Route = createFileRoute("/app/organizacoes/$orgId/edit")({

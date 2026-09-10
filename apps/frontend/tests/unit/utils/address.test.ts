@@ -2,7 +2,11 @@ import { describe, expect, it } from "bun:test";
 
 import { structuredAddressSchema } from "@/schemas/works";
 import type { AddressValue, CepLookup } from "@/types/address";
-import { applyCepLookup } from "@/utils/address";
+import {
+	applyCepLookup,
+	isCompleteAddress,
+	normalizeOptionalAddress,
+} from "@/utils/address";
 
 const emptyAddress: AddressValue = {
 	zipCode: "",
@@ -38,5 +42,27 @@ describe("applyCepLookup", () => {
 			state: "RN",
 		});
 		expect(structuredAddressSchema.safeParse(address).success).toBe(true);
+	});
+
+	it("normalizes an untouched address form to null", () => {
+		expect(normalizeOptionalAddress(emptyAddress)).toBeNull();
+	});
+
+	it("keeps a filled address for persistence", () => {
+		const address = {
+			...emptyAddress,
+			zipCode: "01310100",
+			city: "São Paulo",
+			state: "SP",
+		};
+
+		expect(normalizeOptionalAddress(address)).toMatchObject(address);
+		expect(isCompleteAddress(address)).toBe(true);
+	});
+
+	it("rejects a partially filled address before persistence", () => {
+		expect(
+			isCompleteAddress({ ...emptyAddress, street: "Rua sem CEP" }),
+		).toBe(false);
 	});
 });

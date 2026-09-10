@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
-import { organizationEditSchema } from "@/schemas/organizations";
+import {
+	costCenterEditSchema,
+	organizationEditSchema,
+} from "@/schemas/organizations";
+import { supplierFormSchema } from "@/schemas/suppliers";
 import { workFormSchema } from "@/schemas/works";
 
 const addressWithoutStreetFields = {
@@ -28,5 +32,34 @@ describe("structured address schemas", () => {
 		});
 
 		expect(result.success).toBe(true);
+	});
+
+	it("accepts an omitted address in every registration schema", () => {
+		expect(
+			workFormSchema.safeParse({
+				name: "Obra teste",
+				costCenterId: "cc-1",
+				structuredAddress: null,
+			}).success,
+		).toBe(true);
+		expect(
+			organizationEditSchema.safeParse({
+				name: "Organização teste",
+				structuredAddress: null,
+			}).success,
+		).toBe(true);
+		expect(
+			costCenterEditSchema.safeParse({
+				name: "Centro teste",
+				organizationId: "org-1",
+				structuredAddress: null,
+			}).success,
+		).toBe(true);
+		expect(
+			supplierFormSchema.safeParse({
+				name: "Fornecedor teste",
+				structuredAddress: null,
+			}).success,
+		).toBe(true);
 	});
 });

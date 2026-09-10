@@ -10,7 +10,7 @@ import { INPUT_MASKS } from "@/components/molecules/FormField/MaskedField";
 import { AddressForm } from "@/components/organisms/address/address-form";
 import { Card, CardContent } from "@/components/ui/card";
 import type { SupplierFormValues } from "@/schemas/suppliers";
-import type { AddressValue } from "@/types/address";
+import { EMPTY_ADDRESS } from "@/types/address";
 
 const PIX_KEY_TYPE_OPTIONS = [
 	{ id: "CPF", value: "CPF", label: "CPF" },
@@ -27,18 +27,6 @@ const BANK_ACCOUNT_TYPE_OPTIONS = [
 
 type SupplierProfileFormProps = {
 	control: Control<SupplierFormValues>;
-};
-
-const emptyAddress: AddressValue = {
-	zipCode: "",
-	street: "",
-	district: "",
-	number: "",
-	city: "",
-	state: "",
-	complement: "",
-	latitude: null,
-	longitude: null,
 };
 
 export function SupplierProfileForm({ control }: SupplierProfileFormProps) {
@@ -242,7 +230,7 @@ export function SupplierProfileForm({ control }: SupplierProfileFormProps) {
 						control={control}
 						render={({ field }) => (
 							<AddressForm
-								value={field.value ?? emptyAddress}
+								value={field.value ?? EMPTY_ADDRESS}
 								onChange={field.onChange}
 							/>
 						)}

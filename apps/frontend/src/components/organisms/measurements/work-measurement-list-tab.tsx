@@ -9,7 +9,7 @@ import {
 	Trash2,
 } from "lucide-react";
 import { DataTable } from "@/components/atoms/data-table";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import {
 	MEASUREMENT_STATUS_MAP,
 	StatusBadge,
@@ -51,10 +51,11 @@ export function WorkMeasurementListTab({
 }: WorkMeasurementListTabProps) {
 	if (measurements.length === 0) {
 		return (
-			<EmptyStateCard
-				icon={ClipboardList}
+			<EmptyState
+				icon={<ClipboardList className="size-7 text-primary" />}
 				title="Nenhuma medição encontrada"
 				description="Crie uma medição manual ou importe uma planilha."
+				variant="default"
 				actions={
 					<>
 						<Button variant="default" size="sm" onClick={onCreate}>

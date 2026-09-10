@@ -27,6 +27,7 @@ import {
 } from "@/components/organisms/charts/chart-config";
 import { ChartTooltip } from "@/components/organisms/charts/chart-tooltip";
 import { SCurveChart } from "@/components/organisms/charts/s-curve-chart";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -86,7 +87,7 @@ export function SummaryTab({
 				icon={<FileSpreadsheet className="h-10 w-10" />}
 				title="Nenhum orçamento importado"
 				description="Importe ou crie um orçamento para visualizar os indicadores de desempenho da obra."
-				actions={[{ label: "Ir para Orçamento", onClick: onGoToBudget }]}
+				actions={<Button onClick={onGoToBudget}>Ir para Orçamento</Button>}
 			/>
 		);
 	}

@@ -1,7 +1,7 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { FolderOpen } from "lucide-react";
 import { DataTable } from "@/components/atoms/data-table";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import {
 	IMPORT_BATCH_STATUS_MAP,
 	StatusBadge,
@@ -38,10 +38,11 @@ export function ImportBatchesPanel({
 			</div>
 
 			{batches.length === 0 ? (
-				<EmptyStateCard
-					icon={FolderOpen}
+				<EmptyState
+					icon={<FolderOpen className="size-7 text-primary" />}
 					title="Nenhuma importação"
 					description="Importe uma planilha para aplicar dados nesta obra com preview e confirmação."
+					variant="default"
 				/>
 			) : (
 				<DataTable

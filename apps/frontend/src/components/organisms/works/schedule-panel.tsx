@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Calendar, CalendarPlus } from "lucide-react";
 import { useState } from "react";
 import type { CreateScheduleRevisionInput } from "@/api/schedule";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { ScheduleBaselineTab } from "@/components/organisms/schedule/schedule-baseline-tab";
 import { ScheduleRevisionModal } from "@/components/organisms/schedule/schedule-revision-modal";
 import { Button } from "@/components/ui/button";
@@ -67,10 +67,11 @@ export function SchedulePanel({
 	return (
 		<>
 			{!scheduleData || scheduleFlatItems.length === 0 ? (
-				<EmptyStateCard
-					icon={Calendar}
+				<EmptyState
+					icon={<Calendar className="size-7 text-primary" />}
 					title="Nenhum cronograma registrado"
 					description="Use o botão acima para cadastrar as datas dos itens que ainda não possuem cronograma."
+					variant="default"
 				/>
 			) : (
 				<ScheduleBaselineTab

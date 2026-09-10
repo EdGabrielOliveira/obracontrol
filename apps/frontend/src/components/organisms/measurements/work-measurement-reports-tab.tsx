@@ -2,7 +2,7 @@ import { createColumnHelper } from "@tanstack/react-table";
 import { BarChart3, TrendingUp } from "lucide-react";
 import { BarChartComponent } from "@/components/atoms/bar-chart";
 import { DataTable } from "@/components/atoms/data-table";
-import { EmptyStateCard } from "@/components/atoms/empty-state-card";
+import { EmptyState } from "@/components/atoms/empty-state";
 import { CardHeaderWithIcon } from "@/components/molecules/card-header-with-icon";
 import { Card, CardContent } from "@/components/ui/card";
 import type { WorkMeasurementReportsResponse } from "@/types/measurements";
@@ -132,10 +132,11 @@ export function WorkMeasurementReportsTab({
 			)}
 
 			{measurementByStage.length === 0 && plannedVsMeasured.length === 0 && (
-				<EmptyStateCard
-					icon={BarChart3}
+				<EmptyState
+					icon={<BarChart3 className="size-7 text-primary" />}
 					title="Nenhum dado de relatório"
 					description="Crie medições para visualizar relatórios."
+					variant="default"
 				/>
 			)}
 		</div>

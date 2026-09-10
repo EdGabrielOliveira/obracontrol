@@ -13,20 +13,9 @@ import { AddressForm } from "@/components/organisms/address/address-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { organizationEditSchema } from "@/schemas/organizations";
-import type { AddressValue } from "@/types/address";
+import { EMPTY_ADDRESS } from "@/types/address";
 import type { CreateOrganizationInput } from "@/types/organizations";
-
-const emptyAddress: AddressValue = {
-	zipCode: "",
-	street: "",
-	district: "",
-	number: "",
-	city: "",
-	state: "",
-	complement: "",
-	latitude: null,
-	longitude: null,
-};
+import { normalizeOptionalAddress } from "@/utils/address";
 
 interface OrgFormProps {
 	mode?: "create" | "edit";
@@ -76,7 +65,12 @@ export function OrgForm({
 
 	return (
 		<form
-			onSubmit={handleSubmit(onSubmit)}
+			onSubmit={handleSubmit((data) =>
+				onSubmit({
+					...data,
+					structuredAddress: normalizeOptionalAddress(data.structuredAddress),
+				}),
+			)}
 			className="flex flex-col w-full space-y-4"
 		>
 			<Card>
@@ -147,7 +141,7 @@ export function OrgForm({
 						control={control}
 						render={({ field }) => (
 							<AddressForm
-								value={field.value ?? emptyAddress}
+								value={field.value ?? EMPTY_ADDRESS}
 								onChange={field.onChange}
 								disabled={loading}
 							/>
