@@ -1,6 +1,7 @@
 import type { StatusTone } from "@/components/atoms/status-badge";
 
 export type HealthTone = "good" | "attention" | "critical" | "unknown";
+export type KpiTone = "default" | "success" | "warning" | "danger";
 
 export const HEALTH_TONE: Record<
 	HealthTone,
@@ -47,6 +48,33 @@ export function classifyIndex(value: number | null | undefined): HealthTone {
 	if (value >= 1) return "good";
 	if (value >= 0.9) return "attention";
 	return "critical";
+}
+
+/**
+ * Classifica IDC/IDP para uso direto nos cards da visão geral.
+ * >= 1: positivo, >= 0,90: atenção, abaixo de 0,90: negativo.
+ */
+export function classifyKpiIndex(value: number | null | undefined): KpiTone {
+	const tone = classifyIndex(value);
+	if (tone === "good") return "success";
+	if (tone === "attention") return "warning";
+	if (tone === "critical") return "danger";
+	return "default";
+}
+
+export function classifyKpiBalance(value: number | null | undefined): KpiTone {
+	if (value == null) return "default";
+	if (value > 0) return "success";
+	if (value < 0) return "danger";
+	return "default";
+}
+
+export function classifyKpiEac(
+	eac: number | null | undefined,
+	bac: number | null | undefined,
+): KpiTone {
+	if (eac == null || bac == null) return "default";
+	return eac > bac ? "danger" : "success";
 }
 
 export function classifyBalance(value: number): "good" | "critical" {

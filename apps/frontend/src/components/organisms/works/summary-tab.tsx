@@ -41,7 +41,13 @@ import {
 import type { CostByStage, WorkBIResponse } from "@/types/bi";
 import type { ScheduleItem, ScheduleResponse } from "@/types/schedule";
 import { getErrorMessage } from "@/utils/api-error";
-import { classifyIndex, HEALTH_TONE } from "@/utils/evm-health";
+import {
+	classifyIndex,
+	classifyKpiBalance,
+	classifyKpiEac,
+	classifyKpiIndex,
+	HEALTH_TONE,
+} from "@/utils/evm-health";
 import {
 	CATEGORY_LABEL,
 	formatCurrency,
@@ -165,7 +171,11 @@ export function SummaryTab({
 							: noInformation
 					}
 					tooltip="Saldo disponível do orçamento: valor orçado menos o gasto realizado."
-					tone={summary.currentBudgetBalance >= 0 ? "success" : "danger"}
+					tone={
+						completeness.hasBudget && completeness.hasActualCosts
+							? classifyKpiBalance(summary.currentBudgetBalance)
+							: "default"
+					}
 				/>
 				<KpiCard
 					title="Orçamento consumido (%)"
@@ -194,11 +204,7 @@ export function SummaryTab({
 						summary.costPerformanceIndex != null
 							? hasCostScopeWarning
 								? "warning"
-								: classifyIndex(summary.costPerformanceIndex) === "good"
-									? "success"
-									: classifyIndex(summary.costPerformanceIndex) === "attention"
-										? "warning"
-										: "danger"
+								: classifyKpiIndex(summary.costPerformanceIndex)
 							: "default"
 					}
 					tooltip={`Índice de Desempenho de Custo: valor agregado dividido pelo gasto realizado. Acima de 1 indica desempenho de custo favorável.${costQualityTooltip}`}
@@ -208,12 +214,7 @@ export function SummaryTab({
 					value={formatIndex(summary.schedulePerformanceIndex)}
 					tone={
 						summary.schedulePerformanceIndex != null
-							? classifyIndex(summary.schedulePerformanceIndex) === "good"
-								? "success"
-								: classifyIndex(summary.schedulePerformanceIndex) ===
-										"attention"
-									? "warning"
-									: "danger"
+							? classifyKpiIndex(summary.schedulePerformanceIndex)
 							: "default"
 					}
 					tooltip="Índice de Desempenho de Prazo: valor agregado dividido pelo valor planejado. Acima de 1 indica avanço superior ao planejado."
@@ -237,9 +238,7 @@ export function SummaryTab({
 						completeness.hasActualCosts
 							? hasCostScopeWarning
 								? "warning"
-								: summary.projectedBudgetBalance >= 0
-									? "success"
-									: "danger"
+								: classifyKpiBalance(summary.projectedBudgetBalance)
 							: "default"
 					}
 				/>
@@ -247,13 +246,21 @@ export function SummaryTab({
 					title="EAC típico"
 					value={safeFormat(summary.eacTypical)}
 					tooltip={`Estimativa ao aplicar o IDC atual ao orçamento total (BAC / CPI).${costQualityTooltip}`}
-					tone={hasCostScopeWarning ? "warning" : "default"}
+					tone={
+						hasCostScopeWarning
+							? "warning"
+							: classifyKpiEac(summary.eacTypical, summary.activeBudget)
+					}
 				/>
 				<KpiCard
 					title="EAC atípico"
 					value={safeFormat(summary.eacAtypical)}
 					tooltip={`Estimativa assumindo que o custo restante seguirá o orçamento restante (AC + BAC - EV).${costQualityTooltip}`}
-					tone={hasCostScopeWarning ? "warning" : "default"}
+					tone={
+						hasCostScopeWarning
+							? "warning"
+							: classifyKpiEac(summary.eacAtypical, summary.activeBudget)
+					}
 				/>
 				{bi.financial?.budgetCostPerM2 != null && (
 					<KpiCard
