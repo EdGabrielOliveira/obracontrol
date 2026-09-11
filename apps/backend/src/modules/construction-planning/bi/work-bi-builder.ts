@@ -127,6 +127,49 @@ function buildCalculationAudit(
 	];
 }
 
+function buildOverviewCostMetrics(metrics: WorkMetricCalculationResult) {
+	const completeness = metrics.dataCompleteness;
+	const canShowUnreliableCostMetrics =
+		completeness.hasSingleActualCostCategory === true &&
+		completeness.hasMeasurements &&
+		completeness.hasActualCosts &&
+		metrics.actualCost > 0;
+
+	if (!canShowUnreliableCostMetrics) {
+		return {
+			costVariance: metrics.costVariance,
+			costPerformanceIndex: metrics.costPerformanceIndex,
+			projectedBudgetBalance: metrics.projectedBudgetBalance,
+			eacTypical: metrics.eacTypical,
+			eacAtypical: metrics.eacAtypical,
+			selectedEac: metrics.selectedEac,
+			etc: metrics.etc,
+			vac: metrics.vac,
+			tcpi: metrics.tcpi,
+		};
+	}
+
+	const costPerformanceIndex = metrics.earnedValue / metrics.actualCost;
+	const eacTypical = metrics.bac / costPerformanceIndex;
+	const eacAtypical = metrics.actualCost + (metrics.bac - metrics.earnedValue);
+	const tcpi =
+		metrics.bac - metrics.actualCost > 0
+			? (metrics.bac - metrics.earnedValue) / (metrics.bac - metrics.actualCost)
+			: null;
+
+	return {
+		costVariance: metrics.earnedValue - metrics.actualCost,
+		costPerformanceIndex,
+		projectedBudgetBalance: metrics.bac - eacTypical,
+		eacTypical,
+		eacAtypical,
+		selectedEac: eacTypical,
+		etc: eacTypical - metrics.actualCost,
+		vac: metrics.bac - eacTypical,
+		tcpi,
+	};
+}
+
 function isUnappropriatedCost(cost: DbActualCostInput): boolean {
 	return !(cost.budgetItemId || cost.budgetItemIndex || cost.budgetIndex);
 }
@@ -216,6 +259,7 @@ export function buildWorkBIFromMetrics(
 	const plannedDays = daysBetween(work.plannedStart, work.plannedEnd);
 	const elapsedDays = elapsedDaysAt(work.plannedStart, dataDate);
 	const remainingDays = remainingDaysAt(work.plannedEnd, dataDate);
+	const overviewCostMetrics = buildOverviewCostMetrics(metrics);
 	const costByStage = collectStageRollups(
 		hierarchy,
 		buildActualCostByItemKey(input.actualCosts ?? [], dataDate),
@@ -239,7 +283,7 @@ export function buildWorkBIFromMetrics(
 			plannedValue: metrics.plannedValue,
 			scheduleVariance: metrics.scheduleVariance,
 			schedulePerformanceIndex: metrics.schedulePerformanceIndex,
-			costPerformanceIndex: metrics.costPerformanceIndex,
+			costPerformanceIndex: overviewCostMetrics.costPerformanceIndex,
 			plannedPercentage: metrics.plannedPercentage,
 			measuredPercentage: metrics.measuredPercentage,
 			scheduleDifference: metrics.scheduleDifference,
@@ -251,24 +295,24 @@ export function buildWorkBIFromMetrics(
 			actualCost: metrics.actualCost,
 			futureCost: metrics.futureCost,
 			currentBudgetBalance: metrics.currentBudgetBalance,
-			projectedBudgetBalance: metrics.projectedBudgetBalance,
+			projectedBudgetBalance: overviewCostMetrics.projectedBudgetBalance,
 			balance: metrics.balance,
 			earnedValue: metrics.earnedValue,
-			costVariance: metrics.costVariance,
+			costVariance: overviewCostMetrics.costVariance,
 			lastProgressDate: latestActualProgressDate(
 				input.items,
 				input.measurements,
 				dataDate,
 			),
-			idc: metrics.idc,
+			idc: overviewCostMetrics.costPerformanceIndex,
 			idp: metrics.schedulePerformanceIndex,
 			bac: metrics.bac,
-			eacTypical: metrics.eacTypical,
-			eacAtypical: metrics.eacAtypical,
-			selectedEac: metrics.selectedEac,
-			etc: metrics.etc,
-			vac: metrics.vac,
-			tcpi: metrics.tcpi,
+			eacTypical: overviewCostMetrics.eacTypical,
+			eacAtypical: overviewCostMetrics.eacAtypical,
+			selectedEac: overviewCostMetrics.selectedEac,
+			etc: overviewCostMetrics.etc,
+			vac: overviewCostMetrics.vac,
+			tcpi: overviewCostMetrics.tcpi,
 			dataCompleteness: metrics.dataCompleteness,
 		},
 		indicators: metrics.indicators,
