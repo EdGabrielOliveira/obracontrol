@@ -20,8 +20,8 @@ interface KpiCardProps {
 }
 
 const toneClasses: Record<KpiTone, string> = {
-	default: "text-foreground",
-	success: "text-primary",
+	default: "text-primary",
+	success: "text-success",
 	danger: "text-destructive",
 	warning: "text-warning",
 };
